@@ -64,11 +64,11 @@ function ensureFirebase() {
     // giúp Firestore tự nhận ra mạng có vấn đề và chuyển sang kiểu kết nối HTTP thường (long-polling),
     // không ảnh hưởng gì nếu mạng bình thường không cần đến nó.
     _fbDb.settings({ experimentalAutoDetectLongPolling: true, useFetchStreams: false });
-    try {
-      _fbDb.enablePersistence({ synchronizeTabs: true }).catch(() => {
-        // Bỏ qua nếu trình duyệt không hỗ trợ (VD nhiều tab cùng lúc không đồng bộ tab) — vẫn hoạt động online bình thường.
-      });
-    } catch (e) { /* ignore */ }
+    // KHÔNG bật enablePersistence (cache/đồng bộ nhiều tab qua IndexedDB) nữa: cơ chế "bầu tab
+    // chính" của nó có thể bị kẹt (đặc biệt nếu có tab/service worker cũ còn giữ khoá IndexedDB
+    // từ trước), khiến MỌI lượt đọc/ghi Firestore bị treo rất lâu — xảy ra bất kể mạng nhanh hay
+    // chậm vì đây là lỗi tầng trình duyệt, không phải mạng. Bỏ đi: app vẫn hoạt động bình thường,
+    // chỉ mất khả năng cache/offline cho phần Firestore (không phải phần công cụ offline gốc).
   }
 
   return { app: _fbApp, auth: _fbAuth, db: _fbDb };
