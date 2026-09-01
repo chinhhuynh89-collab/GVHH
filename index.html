@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="description" content="Bảng tuần hoàn tương tác, công cụ tính toán hoá học và cân bằng phương trình tự động — dùng offline." />
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="TL Hoá Học" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Trợ Lý Giáo Viên Hoá Học</h1>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="logo-mark">⚗️</div>
+    <h1>Trợ Lý Giáo Viên Hoá Học</h1>
+    <p>Công cụ học &amp; dạy Hoá — hoạt động hoàn toàn offline</p>
+  </section>
+
+  <div class="section-label">Tính năng lõi</div>
+  <div class="tile-grid">
+    <a class="tile is-active" href="pages/bang-tuan-hoan.html">
+      <span class="badge free">Miễn phí</span>
+      <div class="tile-icon">🧪</div>
+      <div class="tile-title">Bảng tuần hoàn</div>
+      <div class="tile-desc">Tra cứu 118 nguyên tố, cấu hình electron, tính chất, ứng dụng</div>
+    </a>
+
+    <a class="tile is-active" href="pages/cong-cu-tinh-toan.html">
+      <span class="badge free">Miễn phí</span>
+      <div class="tile-icon">🧮</div>
+      <div class="tile-title">Công cụ tính toán</div>
+      <div class="tile-desc">Mol, nồng độ, pH, độ tan, hiệu suất phản ứng</div>
+    </a>
+
+    <a class="tile is-active" href="pages/can-bang-phuong-trinh.html">
+      <span class="badge free">Miễn phí</span>
+      <div class="tile-icon">⚖️</div>
+      <div class="tile-title">Cân bằng phương trình</div>
+      <div class="tile-desc">Nhập chất phản ứng, tự động cân bằng hệ số</div>
+    </a>
+  </div>
+
+  <div class="section-label">Học theo chương</div>
+  <div class="tile-grid">
+    <a class="tile is-active" href="pages/hoc-theo-chuong.html">
+      <span class="badge free">Miễn phí</span>
+      <div class="tile-icon">📘</div>
+      <div class="tile-title">Học theo chương</div>
+      <div class="tile-desc">Bài giảng tóm tắt, flashcard, trắc nghiệm — lớp 10</div>
+    </a>
+  </div>
+
+  <div class="card" id="examNotifyCard" style="display:none;"></div>
+
+  <div class="card" id="rolePickerCard" style="display:none;">
+    <h2><span class="icon">👋</span>Bạn là ai?</h2>
+    <p class="hint" style="margin-top:-4px;">Chọn vai trò để trang chủ chỉ hiện đúng tính năng dành cho bạn. Có thể đổi lại bất cứ lúc nào.</p>
+    <div class="btn-row">
+      <button class="btn primary" id="pickTeacherBtn" style="flex:1;">👨‍🏫 Tôi là Giáo viên</button>
+      <button class="btn primary" id="pickStudentBtn" style="flex:1;">🎓 Tôi là Học sinh</button>
+    </div>
+  </div>
+
+  <div id="teacherSection" style="display:none;">
+    <div class="section-label">
+      Khu vực Giáo viên
+      <a href="#" id="switchRoleBtnTeacher" style="float:right;text-transform:none;font-weight:600;color:var(--text-faint);">Đổi vai trò</a>
+    </div>
+    <div class="tile-grid">
+      <a class="tile is-active" href="pages/nhom-hoc-sinh.html">
+        <div class="tile-icon">👥</div>
+        <div class="tile-title">Nhóm học sinh</div>
+        <div class="tile-desc">Tạo nhóm, giao chương, tạo đề kiểm tra tự động, xem thống kê</div>
+      </a>
+
+      <a class="tile is-active" href="pages/ket-noi-dong-bo.html">
+        <div class="tile-icon">🔐</div>
+        <div class="tile-title">Đăng nhập</div>
+        <div class="tile-desc">Đăng nhập Google để dùng Nhóm, Đề kiểm tra, Thống kê</div>
+      </a>
+    </div>
+  </div>
+
+  <div id="studentSection" style="display:none;">
+    <div class="section-label">
+      Khu vực Học sinh
+      <a href="#" id="switchRoleBtnStudent" style="float:right;text-transform:none;font-weight:600;color:var(--text-faint);">Đổi vai trò</a>
+    </div>
+    <div class="tile-grid">
+      <a class="tile is-active" href="pages/vao-nhom.html">
+        <div class="tile-icon">🎓</div>
+        <div class="tile-title">Vào nhóm học tập</div>
+        <div class="tile-desc">Nhập tên + mã nhóm giáo viên cung cấp</div>
+      </a>
+
+      <a class="tile is-active" href="pages/kiem-tra.html">
+        <div class="tile-icon">📝</div>
+        <div class="tile-title">Bài kiểm tra</div>
+        <div class="tile-desc">Xem và làm bài kiểm tra giáo viên giao</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-label">Sắp ra mắt</div>
+  <div class="tile-grid">
+    <div class="tile is-locked">
+      <span class="badge">Sắp có</span>
+      <div class="tile-icon">🎮</div>
+      <div class="tile-title">Mini-game &amp; đố vui</div>
+      <div class="tile-desc">Ghép nguyên tố, xếp dãy hoạt động, đố hoá học hằng ngày</div>
+    </div>
+
+    <div class="tile is-locked">
+      <span class="badge">Sắp có</span>
+      <div class="tile-icon">🧫</div>
+      <div class="tile-title">Thí nghiệm ảo</div>
+      <div class="tile-desc">Trộn hoá chất, xem màu sắc, kết tủa, khí thoát ra</div>
+    </div>
+
+    <div class="tile is-locked">
+      <span class="badge">Sắp có</span>
+      <div class="tile-icon">🏆</div>
+      <div class="tile-title">Bảng xếp hạng lớp</div>
+      <div class="tile-desc">Điểm số, huy hiệu, streak học tập</div>
+    </div>
+
+    <div class="tile is-locked">
+      <span class="badge">Sắp có</span>
+      <div class="tile-icon">📖</div>
+      <div class="tile-title">Từ điển Hoá Việt-Anh</div>
+      <div class="tile-desc">Tra thuật ngữ hoá học song ngữ</div>
+    </div>
+
+    <div class="tile is-locked">
+      <span class="badge">Sắp có</span>
+      <div class="tile-icon">👩‍🏫</div>
+      <div class="tile-title">Trang giáo viên</div>
+      <div class="tile-desc">Giới thiệu, bài giảng &amp; mẹo học riêng của giáo viên</div>
+    </div>
+  </div>
+
+  <p class="footer-note">
+    Trợ Lý Giáo Viên Hoá Học · Bản dùng thử<br />
+    Tác giả: Huỳnh Công Chính — Trường Quân sự Quân đoàn 34
+  </p>
+</main>
+
+<script src="js/app.js"></script>
+<script src="js/features/role.js"></script>
+<script src="js/vendor/firebase/firebase-app-compat.js"></script>
+<script src="js/vendor/firebase/firebase-auth-compat.js"></script>
+<script src="js/vendor/firebase/firebase-firestore-compat.js"></script>
+<script src="js/features/firebase-init.js"></script>
+<script src="js/features/device-id.js"></script>
+<script src="js/features/join-group.js"></script>
+<script>
+(function () {
+  function renderRoleSections() {
+    const role = getRole();
+    $('#rolePickerCard').style.display = role ? 'none' : 'block';
+    $('#teacherSection').style.display = role === 'teacher' ? 'block' : 'none';
+    $('#studentSection').style.display = role === 'student' ? 'block' : 'none';
+  }
+  $('#pickTeacherBtn').addEventListener('click', () => { setRole('teacher'); renderRoleSections(); });
+  $('#pickStudentBtn').addEventListener('click', () => { setRole('student'); renderRoleSections(); });
+  $$('#switchRoleBtnTeacher, #switchRoleBtnStudent').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.preventDefault(); clearRole(); renderRoleSections(); window.scrollTo(0, 0); });
+  });
+  renderRoleSections();
+})();
+</script>
+<script>
+(async function () {
+  const membership = typeof getMembership === 'function' ? getMembership() : null;
+  if (!membership || !isFirebaseConfigured()) return;
+  try {
+    const { db } = ensureFirebase();
+    const deviceId = getDeviceId();
+    const now = new Date();
+    const snap = await db.collection('exams').where('groupCode', '==', membership.groupCode).get();
+    const candidates = snap.docs.map((d) => Object.assign({ examId: d.id }, d.data()))
+      .filter((e) => new Date(e.startTime) <= now && now <= new Date(e.endTime))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (!candidates.length) return;
+    const active = candidates[0];
+    const dupSnap = await db.collection('submissions')
+      .where('examId', '==', active.examId).where('deviceId', '==', deviceId).limit(1).get();
+    if (!dupSnap.empty) return;
+
+    const card = document.getElementById('examNotifyCard');
+    card.style.display = 'block';
+    card.innerHTML = `
+      <h2><span class="icon">🔔</span>Có bài kiểm tra mới!</h2>
+      <p class="hint">${escapeHtml(active.chapterTitle)} — ${active.questions.length} câu — ${active.durationMinutes} phút</p>
+      <a class="btn primary block" href="pages/kiem-tra.html">Vào làm bài ngay</a>
+    `;
+  } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
+})();
+</script>
+</body>
+</html>

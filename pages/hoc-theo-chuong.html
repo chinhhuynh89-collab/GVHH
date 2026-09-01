@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Học theo chương — Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" href="../icons/icon-192.png" />
+<link rel="stylesheet" href="../css/style.css" />
+<script>window.APP_BASE_PATH = '../';</script>
+</head>
+<body>
+
+<header class="app-header">
+  <a class="back-btn" href="../index.html" aria-label="Quay lại">←</a>
+  <h1>Học theo chương<span class="header-sub">Lớp 6 – 12</span></h1>
+</header>
+
+<main>
+  <div class="tabs" id="gradeTabs"></div>
+
+  <div class="card progress-overview" id="progressOverview"></div>
+
+  <div class="card free-mode-row">
+    <div class="fm-text">
+      <div class="fm-title">Học tự do</div>
+      <div class="fm-sub">Cho phép mở tất cả chương, không cần học tuần tự</div>
+    </div>
+    <div class="switch" id="freeModeSwitch"><div class="knob"></div></div>
+  </div>
+
+  <div class="section-label">Danh sách chương</div>
+  <div class="chapter-list" id="chapterList"></div>
+
+  <p class="footer-note">Mỗi chương gồm 3 bước: Bài giảng tóm tắt → Flashcard → Trắc nghiệm. Hoàn thành cả 3 bước (trắc nghiệm ≥ 70%) để mở khoá chương tiếp theo. Danh mục chương theo chương trình GDPT 2018 — có thể chênh lệch nhỏ tuỳ bộ sách (Kết Nối Tri Thức / Cánh Diều / Chân Trời Sáng Tạo).</p>
+</main>
+
+<script src="../js/app.js"></script>
+<script src="../js/data/chapters-6.js"></script>
+<script src="../js/data/chapters-7.js"></script>
+<script src="../js/data/chapters-8.js"></script>
+<script src="../js/data/chapters-9.js"></script>
+<script src="../js/data/chapters-10.js"></script>
+<script src="../js/data/chapters-11.js"></script>
+<script src="../js/data/chapters-12.js"></script>
+<script src="../js/data/curriculum.js"></script>
+<script src="../js/features/progress.js"></script>
+<script src="../js/features/chapter-overview.js"></script>
+</body>
+</html>

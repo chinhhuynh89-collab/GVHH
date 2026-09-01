@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Cân bằng phương trình — Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" href="../icons/icon-192.png" />
+<link rel="stylesheet" href="../css/style.css" />
+<script>window.APP_BASE_PATH = '../';</script>
+</head>
+<body>
+
+<header class="app-header">
+  <a class="back-btn" href="../index.html" aria-label="Quay lại">←</a>
+  <h1>Cân bằng phương trình</h1>
+</header>
+
+<main>
+  <div class="card">
+    <h2><span class="icon">⚖️</span>Nhập phương trình chưa cân bằng</h2>
+    <div class="field">
+      <label for="eqInput">Chất phản ứng → sản phẩm (cách nhau bởi dấu +, không cần nhập hệ số)</label>
+      <div class="equation-io">
+        <input type="text" id="eqInput" placeholder="VD: Fe + O2 -> Fe2O3" />
+        <button class="btn primary" id="eqBalanceBtn">Cân bằng</button>
+      </div>
+      <div class="hint">Dùng "-&gt;" hoặc "=" để ngăn cách 2 vế. Có thể nhập hiđrat như CuSO4.5H2O.</div>
+    </div>
+
+    <div class="example-chips">
+      <button data-eq="Fe + O2 -> Fe2O3">Fe + O2 → Fe2O3</button>
+      <button data-eq="C3H8 + O2 -> CO2 + H2O">C3H8 + O2 → CO2 + H2O</button>
+      <button data-eq="Al + HCl -> AlCl3 + H2">Al + HCl → AlCl3 + H2</button>
+      <button data-eq="Na + H2O -> NaOH + H2">Na + H2O → NaOH + H2</button>
+      <button data-eq="KMnO4 + HCl -> KCl + MnCl2 + Cl2 + H2O">KMnO4 + HCl → KCl + MnCl2 + Cl2 + H2O</button>
+      <button data-eq="Ca(OH)2 + H3PO4 -> Ca3(PO4)2 + H2O">Ca(OH)2 + H3PO4 → Ca3(PO4)2 + H2O</button>
+    </div>
+
+    <div class="result-box" id="eqResult"></div>
+  </div>
+
+  <p class="footer-note">Thuật toán giải hệ phương trình đại số tuyến tính (khử Gauss trên phân số) để tìm hệ số nguyên nhỏ nhất — hoạt động với hầu hết phản ứng, kể cả phản ứng oxi hoá-khử phức tạp.</p>
+</main>
+
+<script src="../js/app.js"></script>
+<script src="../js/data/elements.js"></script>
+<script src="../js/features/formula-parser.js"></script>
+<script src="../js/features/balancer.js"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+rules_version = '2';
+
+// Luật bảo mật Firestore cho "Trợ Lý Giáo Viên Hoá Học".
+// Dán vào Firebase Console > Firestore Database > Rules, rồi bấm Publish.
+//
+// Nguyên tắc:
+// - Nội dung riêng của giáo viên (bài giảng, ngân hàng câu hỏi, chỉnh sửa chương) CHỈ chính giáo viên đó
+//   (đã đăng nhập Google, đúng uid) mới đọc/ghi được — đây là dữ liệu có giá trị nhất, bảo vệ chặt nhất.
+// - Nhóm/đề kiểm tra: ai cũng đọc được (để học sinh vào nhóm bằng mã, không cần tài khoản), nhưng CHỈ
+//   giáo viên sở hữu (đúng teacherUid) mới tạo/sửa/xoá được.
+// - Đề kiểm tra tách làm 2 phần: "exams" (câu hỏi, không có đáp án — công khai) và "examAnswers"
+//   (đáp án đúng — chỉ tải về lúc học sinh bấm nộp bài). Vì không dùng Cloud Functions nên đây là giới
+//   hạn đã biết: học sinh rành kỹ thuật vẫn có thể đọc được examAnswers nếu cố tình — chấp nhận đánh đổi
+//   để không cần gói trả phí (Blaze) của Firebase.
+// - Học sinh không có tài khoản: được TẠO (create) bản ghi tham gia nhóm / nộp bài, nhưng không sửa/xoá
+//   được bản ghi của người khác.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Dữ liệu riêng của giáo viên ----------
+    // Hồ sơ giáo viên: chỉ chính họ đọc/ghi (email, tên...).
+    match /teachers/{teacherId} {
+      allow read, write: if request.auth != null && request.auth.uid == teacherId;
+
+      // Nội dung biên soạn (bài giảng, câu hỏi, sửa chương): AI CŨNG ĐỌC ĐƯỢC (để học sinh trong nhóm
+      // của giáo viên đó thấy nội dung khi học), nhưng CHỈ chính giáo viên mới sửa/xoá được.
+      match /customLessons/{lessonId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == teacherId;
+      }
+      match /customQuiz/{quizId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == teacherId;
+      }
+      match /chapterMeta/{chapterId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == teacherId;
+      }
+    }
+
+    // ---------- Nhóm học sinh ----------
+    match /groups/{groupId} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.teacherUid == request.auth.uid;
+      allow update, delete: if request.auth != null
+                    && resource.data.teacherUid == request.auth.uid;
+    }
+
+    // ---------- Học sinh tham gia nhóm ----------
+    match /students/{studentId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['groupCode', 'deviceId', 'studentName', 'joinedAt']);
+      allow update, delete: if false;
+    }
+
+    // ---------- Đề kiểm tra (câu hỏi, không có đáp án) ----------
+    match /exams/{examId} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.teacherUid == request.auth.uid;
+      allow update, delete: if request.auth != null
+                    && resource.data.teacherUid == request.auth.uid;
+    }
+
+    // ---------- Đáp án đúng (tách riêng khỏi exams) ----------
+    match /examAnswers/{examId} {
+      allow read: if true; // học sinh cần đọc lúc tự chấm điểm khi nộp bài
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
+
+    // ---------- Bài nộp của học sinh ----------
+    match /submissions/{submissionId} {
+      allow read: if true; // giáo viên xem thống kê
+      allow create: if request.resource.data.keys().hasAll(['examId', 'studentId', 'answers', 'score', 'deviceId']);
+      allow update, delete: if false;
+    }
+  }
+}

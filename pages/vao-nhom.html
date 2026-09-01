@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Vào nhóm học tập — Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" href="../icons/icon-192.png" />
+<link rel="stylesheet" href="../css/style.css" />
+<script>window.APP_BASE_PATH = '../';</script>
+</head>
+<body>
+
+<header class="app-header">
+  <a class="back-btn" href="../index.html" aria-label="Quay lại">←</a>
+  <h1>Vào nhóm học tập</h1>
+</header>
+
+<main id="joinBody">
+  <div class="card" id="currentMembership" style="display:none;"></div>
+
+  <div class="card">
+    <h2><span class="icon">🎓</span>Tham gia nhóm bằng mã giáo viên cung cấp</h2>
+    <div class="field">
+      <label for="joinName">Họ tên của bạn</label>
+      <input type="text" id="joinName" placeholder="VD: Nguyễn Văn A" />
+    </div>
+    <div class="field">
+      <label for="joinCode">Mã nhóm</label>
+      <input type="text" id="joinCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
+    </div>
+    <button class="btn primary block" id="joinGroupBtn">Tham gia nhóm</button>
+    <div class="result-box" id="joinResult"></div>
+  </div>
+
+  <p class="footer-note">Sau khi tham gia, hệ thống sẽ tự thông báo khi giáo viên mở bài kiểm tra cho nhóm của bạn.</p>
+</main>
+
+<script src="../js/app.js"></script>
+<script src="../js/vendor/firebase/firebase-app-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-auth-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-firestore-compat.js"></script>
+<script src="../js/features/firebase-init.js"></script>
+<script src="../js/features/device-id.js"></script>
+<script src="../js/features/join-group.js"></script>
+<script>initJoinGroupPage();</script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Đăng nhập giáo viên — Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" href="../icons/icon-192.png" />
+<link rel="stylesheet" href="../css/style.css" />
+<script>window.APP_BASE_PATH = '../';</script>
+</head>
+<body>
+
+<header class="app-header">
+  <a class="back-btn" href="../index.html" aria-label="Quay lại">←</a>
+  <h1>Đăng nhập giáo viên</h1>
+</header>
+
+<main>
+  <div class="card">
+    <h2><span class="icon">🔐</span>Đăng nhập bằng Google</h2>
+    <p class="hint" style="margin-top:-4px;">Cần đăng nhập để dùng Nhóm học sinh, Đề kiểm tra tự động và Thống kê. Nội dung bạn soạn (bài giảng, câu hỏi) sẽ tự đồng bộ trên mọi thiết bị bạn đăng nhập cùng tài khoản này. Học sinh không cần bước này.</p>
+    <div id="signInBody"></div>
+  </div>
+
+  <div class="card" id="readyCard" style="display:none;">
+    <h2><span class="icon">✅</span>Sẵn sàng</h2>
+    <div class="btn-row">
+      <a class="btn" href="nhom-hoc-sinh.html">Quản lý nhóm</a>
+      <a class="btn" href="thong-ke.html">Thống kê</a>
+    </div>
+  </div>
+</main>
+
+<script src="../js/app.js"></script>
+<script src="../js/vendor/firebase/firebase-app-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-auth-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-firestore-compat.js"></script>
+<script src="../js/features/firebase-init.js"></script>
+<script src="../js/features/auth.js"></script>
+<script>
+(function () {
+  function refreshSignInArea() {
+    const { auth } = ensureFirebase();
+    checkRedirectResult();
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        $('#signInBody').innerHTML = `
+          <div style="display:flex;align-items:center;gap:10px;">
+            ${user.photoURL ? `<img src="${user.photoURL}" alt="" style="width:36px;height:36px;border-radius:50%;" referrerpolicy="no-referrer" />` : ''}
+            <div style="flex:1;">
+              <div style="font-weight:700;font-size:14px;">${escapeHtml(user.displayName || user.email || 'Giáo viên')}</div>
+              <div class="hint">${escapeHtml(user.email || '')}</div>
+            </div>
+            <button class="btn" id="fbSignOutBtn">Đăng xuất</button>
+          </div>
+        `;
+        $('#fbSignOutBtn').addEventListener('click', () => signOutTeacher());
+        $('#readyCard').style.display = 'block';
+      } else {
+        $('#signInBody').innerHTML = `<button class="btn primary block" id="fbSignInBtn">Đăng nhập bằng Google</button><div class="result-box" id="fbSignInResult"></div>`;
+        $('#fbSignInBtn').addEventListener('click', async () => {
+          const rbox = $('#fbSignInResult');
+          showResult(rbox, '⏳ Đang chuyển sang trang đăng nhập Google...');
+          try { await signInWithGoogle(); } catch (e) { showResult(rbox, `⚠️ ${escapeHtml(e.message)}`, true); }
+        });
+        $('#readyCard').style.display = 'none';
+      }
+    });
+  }
+
+  refreshSignInArea();
+})();
+</script>
+</body>
+</html>

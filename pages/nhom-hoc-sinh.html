@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Nhóm học sinh — Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" href="../icons/icon-192.png" />
+<link rel="stylesheet" href="../css/style.css" />
+<script>window.APP_BASE_PATH = '../';</script>
+</head>
+<body>
+
+<header class="app-header">
+  <a class="back-btn" href="../index.html" aria-label="Quay lại">←</a>
+  <h1>Nhóm học sinh</h1>
+</header>
+
+<main id="groupManagerBody">
+  <div class="card">
+    <h2><span class="icon">➕</span>Tạo nhóm mới</h2>
+    <div class="field">
+      <label for="groupName">Tên nhóm</label>
+      <input type="text" id="groupName" placeholder="VD: 6A1 - Trường THCS ABC" />
+    </div>
+    <div class="field">
+      <label for="groupGrade">Khối lớp</label>
+      <select id="groupGrade"></select>
+    </div>
+    <div class="field">
+      <label>Chương được giao cho nhóm này</label>
+      <div id="groupChapters"></div>
+    </div>
+    <button class="btn primary block" id="groupCreateBtn">Tạo nhóm</button>
+    <div class="result-box" id="groupCreateResult"></div>
+  </div>
+
+  <div class="section-label">Danh sách nhóm</div>
+  <div class="chapter-list" id="groupList"></div>
+
+  <p class="footer-note">Gửi mã nhóm cho học sinh để các em tham gia (trang "Vào nhóm học tập" từ màn hình chính).</p>
+</main>
+
+<script src="../js/app.js"></script>
+<script src="../js/data/chapters-6.js"></script>
+<script src="../js/data/chapters-7.js"></script>
+<script src="../js/data/chapters-8.js"></script>
+<script src="../js/data/chapters-9.js"></script>
+<script src="../js/data/chapters-10.js"></script>
+<script src="../js/data/chapters-11.js"></script>
+<script src="../js/data/chapters-12.js"></script>
+<script src="../js/data/curriculum.js"></script>
+<script src="../js/vendor/firebase/firebase-app-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-auth-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-firestore-compat.js"></script>
+<script src="../js/features/firebase-init.js"></script>
+<script src="../js/features/auth.js"></script>
+<script src="../js/features/groups-data.js"></script>
+<script src="../js/features/group-manager.js"></script>
+</body>
+</html>

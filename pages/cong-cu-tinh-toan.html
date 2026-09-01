@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Công cụ tính toán — Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" href="../icons/icon-192.png" />
+<link rel="stylesheet" href="../css/style.css" />
+<script>window.APP_BASE_PATH = '../';</script>
+</head>
+<body>
+
+<header class="app-header">
+  <a class="back-btn" href="../index.html" aria-label="Quay lại">←</a>
+  <h1>Công cụ tính toán</h1>
+</header>
+
+<main>
+  <div class="tabs" id="calcTabs">
+    <button class="tab-btn active" data-tab="tabMol">Mol · Khối lượng</button>
+    <button class="tab-btn" data-tab="tabConc">Nồng độ dd</button>
+    <button class="tab-btn" data-tab="tabSolub">Độ tan</button>
+    <button class="tab-btn" data-tab="tabPh">pH</button>
+    <button class="tab-btn" data-tab="tabYield">Hiệu suất</button>
+  </div>
+
+  <!-- TAB 1: Mol / Khối lượng / Thể tích khí -->
+  <div class="tab-panel active" id="tabMol">
+    <div class="card">
+      <h2><span class="icon">🧮</span>Tính khối lượng mol từ công thức</h2>
+      <div class="field">
+        <label for="molFormula">Công thức hoá học</label>
+        <div class="equation-io">
+          <input type="text" id="molFormula" placeholder="VD: Al2(SO4)3" />
+          <button class="btn" id="molFormulaBtn">Tính M</button>
+        </div>
+      </div>
+      <div class="result-box" id="molFormulaResult"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🔁</span>Chuyển đổi mol ⇄ khối lượng ⇄ thể tích khí</h2>
+      <div class="field">
+        <label for="molM">Khối lượng mol M (g/mol)</label>
+        <input type="number" id="molM" placeholder="VD: 106" step="any" />
+      </div>
+      <div class="field">
+        <label for="molN">Số mol n</label>
+        <input type="number" id="molN" placeholder="Để trống nếu cần tính" step="any" />
+      </div>
+      <div class="field">
+        <label for="molMass">Khối lượng m (gam)</label>
+        <input type="number" id="molMass" placeholder="Để trống nếu cần tính" step="any" />
+      </div>
+      <div class="field">
+        <label for="molVolume">Thể tích khí V (lít) — chỉ áp dụng chất khí</label>
+        <input type="number" id="molVolume" placeholder="Để trống nếu cần tính" step="any" />
+      </div>
+      <div class="field">
+        <label for="molCondition">Điều kiện khí</label>
+        <select id="molCondition">
+          <option value="22.4">đktc (0°C, 1 atm) — Vm = 22,4 lít/mol</option>
+          <option value="24.79">đkc (25°C, 1 bar) — Vm = 24,79 lít/mol</option>
+        </select>
+      </div>
+      <button class="btn primary block" id="molCalcBtn">Tính</button>
+      <div class="result-box" id="molResult"></div>
+    </div>
+  </div>
+
+  <!-- TAB 2: Nồng độ dung dịch -->
+  <div class="tab-panel" id="tabConc">
+    <div class="card">
+      <h2><span class="icon">🧪</span>Nồng độ mol (C<sub>M</sub> = n / V)</h2>
+      <div class="field">
+        <label for="cmN">Số mol chất tan n (mol)</label>
+        <input type="number" id="cmN" step="any" />
+      </div>
+      <div class="field">
+        <label for="cmV">Thể tích dung dịch V (lít)</label>
+        <input type="number" id="cmV" step="any" />
+      </div>
+      <button class="btn primary block" id="cmBtn">Tính C<sub>M</sub></button>
+      <div class="result-box" id="cmResult"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">💧</span>Nồng độ phần trăm (C% = m<sub>ct</sub> / m<sub>dd</sub> × 100%)</h2>
+      <div class="field">
+        <label for="cpCt">Khối lượng chất tan m<sub>ct</sub> (gam)</label>
+        <input type="number" id="cpCt" step="any" />
+      </div>
+      <div class="field">
+        <label for="cpDd">Khối lượng dung dịch m<sub>dd</sub> (gam)</label>
+        <input type="number" id="cpDd" step="any" />
+      </div>
+      <div class="hint">Nếu biết khối lượng dung môi thay vì khối lượng dung dịch: m<sub>dd</sub> = m<sub>ct</sub> + m<sub>dung môi</sub></div>
+      <button class="btn primary block" id="cpBtn">Tính C%</button>
+      <div class="result-box" id="cpResult"></div>
+    </div>
+  </div>
+
+  <!-- TAB 3: Độ tan -->
+  <div class="tab-panel" id="tabSolub">
+    <div class="card">
+      <h2><span class="icon">🌊</span>Độ tan (S = m<sub>ct</sub> / m<sub>H₂O</sub> × 100)</h2>
+      <p class="hint" style="margin-top:-4px;">Nhập đúng 2 trong 3 giá trị, ô còn lại sẽ được tính tự động.</p>
+      <div class="field">
+        <label for="sS">Độ tan S (gam chất tan / 100 gam nước)</label>
+        <input type="number" id="sS" step="any" />
+      </div>
+      <div class="field">
+        <label for="sCt">Khối lượng chất tan m<sub>ct</sub> (gam)</label>
+        <input type="number" id="sCt" step="any" />
+      </div>
+      <div class="field">
+        <label for="sH2O">Khối lượng nước m<sub>H₂O</sub> (gam)</label>
+        <input type="number" id="sH2O" step="any" />
+      </div>
+      <button class="btn primary block" id="sBtn">Tính</button>
+      <div class="result-box" id="sResult"></div>
+    </div>
+  </div>
+
+  <!-- TAB 4: pH -->
+  <div class="tab-panel" id="tabPh">
+    <div class="card">
+      <h2><span class="icon">⚗️</span>Tính pH từ nồng độ ion</h2>
+      <div class="field">
+        <label for="phIonType">Loại nồng độ đã biết</label>
+        <select id="phIonType">
+          <option value="H">Nồng độ [H⁺] (mol/l)</option>
+          <option value="OH">Nồng độ [OH⁻] (mol/l)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="phIonConc">Nồng độ (mol/l)</label>
+        <input type="number" id="phIonConc" placeholder="VD: 0.001" step="any" />
+      </div>
+      <button class="btn primary block" id="phIonBtn">Tính pH</button>
+      <div class="result-box" id="phIonResult"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🧫</span>Tính pH dung dịch axit/bazơ mạnh</h2>
+      <div class="field">
+        <label for="phType">Loại dung dịch</label>
+        <select id="phType">
+          <option value="acid">Axit mạnh (điện li hoàn toàn)</option>
+          <option value="base">Bazơ mạnh (điện li hoàn toàn)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="phConc">Nồng độ mol dung dịch C (mol/l)</label>
+        <input type="number" id="phConc" placeholder="VD: 0.01" step="any" />
+      </div>
+      <div class="field">
+        <label for="phN">Số ion H⁺ hoặc OH⁻ trong 1 phân tử</label>
+        <input type="number" id="phN" value="1" min="1" step="1" />
+        <div class="hint">VD: HCl → 1, H2SO4 → 2, NaOH → 1, Ca(OH)2 → 2</div>
+      </div>
+      <button class="btn primary block" id="phStrongBtn">Tính pH</button>
+      <div class="result-box" id="phStrongResult"></div>
+    </div>
+  </div>
+
+  <!-- TAB 5: Hiệu suất phản ứng -->
+  <div class="tab-panel" id="tabYield">
+    <div class="card">
+      <h2><span class="icon">📈</span>Hiệu suất phản ứng (H% = thực tế / lý thuyết × 100%)</h2>
+      <div class="field">
+        <label for="yTheory">Lượng lý thuyết (theo phương trình)</label>
+        <input type="number" id="yTheory" step="any" placeholder="VD: 5 (mol hoặc gam)" />
+      </div>
+      <div class="field">
+        <label for="yActual">Lượng thực tế thu được (cùng đơn vị)</label>
+        <input type="number" id="yActual" step="any" placeholder="VD: 4.25" />
+      </div>
+      <div class="hint">Hai giá trị phải cùng đơn vị (đều là mol hoặc đều là gam).</div>
+      <button class="btn primary block" id="yBtn">Tính hiệu suất</button>
+      <div class="result-box" id="yResult"></div>
+    </div>
+  </div>
+</main>
+
+<script src="../js/app.js"></script>
+<script src="../js/data/elements.js"></script>
+<script src="../js/features/formula-parser.js"></script>
+<script src="../js/features/calculator.js"></script>
+</body>
+</html>

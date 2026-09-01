@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "hoa-hoc-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        ".claude\\tools\\static-server.js",
+        "E:\\PHẦN MỀM GIÁO VIÊN",
+        "8934"
+      ],
+      "port": 8934
+    }
+  ]
+}

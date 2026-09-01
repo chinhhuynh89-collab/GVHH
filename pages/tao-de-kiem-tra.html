@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Tạo đề kiểm tra — Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" href="../icons/icon-192.png" />
+<link rel="stylesheet" href="../css/style.css" />
+<script>window.APP_BASE_PATH = '../';</script>
+</head>
+<body>
+
+<header class="app-header">
+  <a class="back-btn" href="nhom-hoc-sinh.html" aria-label="Quay lại">←</a>
+  <h1>Tạo đề kiểm tra</h1>
+</header>
+
+<main id="examCreatorBody">
+  <div class="card">
+    <h2><span class="icon">📝</span>Tạo đề kiểm tra tự động</h2>
+    <div class="field">
+      <label for="examGroup">Nhóm</label>
+      <select id="examGroup"></select>
+    </div>
+    <div class="field">
+      <label for="examChapter">Chương</label>
+      <select id="examChapter"></select>
+      <div class="hint" id="examPoolInfo"></div>
+    </div>
+    <div class="field">
+      <label for="examCount">Số câu hỏi</label>
+      <input type="number" id="examCount" value="30" min="1" />
+    </div>
+    <div class="field">
+      <label for="examDuration">Thời gian làm bài (phút)</label>
+      <input type="number" id="examDuration" value="30" min="1" />
+    </div>
+    <div class="field">
+      <label for="examStartMode">Thời điểm bắt đầu</label>
+      <select id="examStartMode">
+        <option value="now">Ngay bây giờ</option>
+        <option value="scheduled">Hẹn giờ</option>
+      </select>
+    </div>
+    <div class="field" id="examStartAtField" style="display:none;">
+      <label for="examStartAt">Chọn ngày giờ bắt đầu</label>
+      <input type="datetime-local" id="examStartAt" />
+    </div>
+    <button class="btn primary block" id="examCreateBtn">Tạo đề kiểm tra</button>
+    <div class="result-box" id="examCreateResult"></div>
+  </div>
+
+  <p class="footer-note">Đề kiểm tra rút ngẫu nhiên từ kho câu hỏi có sẵn của chương (bao gồm câu hỏi bạn đã tự thêm/nạp). Học sinh có 30 phút đệm sau giờ bắt đầu để kịp vào làm bài.</p>
+</main>
+
+<script src="../js/app.js"></script>
+<script src="../js/data/chapters-6.js"></script>
+<script src="../js/data/chapters-7.js"></script>
+<script src="../js/data/chapters-8.js"></script>
+<script src="../js/data/chapters-9.js"></script>
+<script src="../js/data/chapters-10.js"></script>
+<script src="../js/data/chapters-11.js"></script>
+<script src="../js/data/chapters-12.js"></script>
+<script src="../js/data/curriculum.js"></script>
+<script src="../js/vendor/firebase/firebase-app-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-auth-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-firestore-compat.js"></script>
+<script src="../js/features/firebase-init.js"></script>
+<script src="../js/features/auth.js"></script>
+<script src="../js/features/groups-data.js"></script>
+<script src="../js/features/custom-quiz.js"></script>
+<script src="../js/features/exam-creator.js"></script>
+</body>
+</html>

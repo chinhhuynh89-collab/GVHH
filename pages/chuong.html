@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Chương học — Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" href="../icons/icon-192.png" />
+<link rel="stylesheet" href="../css/style.css" />
+<script>window.APP_BASE_PATH = '../';</script>
+</head>
+<body>
+
+<header class="app-header">
+  <a class="back-btn" href="hoc-theo-chuong.html" aria-label="Quay lại">←</a>
+  <h1>Chi tiết chương</h1>
+</header>
+
+<main>
+  <div class="chapter-hero">
+    <div class="ch-icon" id="chIcon"></div>
+    <div style="flex:1;">
+      <h2 id="chTitle"></h2>
+      <p id="chDesc"></p>
+    </div>
+    <button class="btn" id="chEditBtn" title="Sửa tiêu đề / mô tả chương" style="display:none;">✏️ Sửa</button>
+  </div>
+
+  <div class="card" id="chEditForm" style="display:none;">
+    <h2><span class="icon">✏️</span>Sửa tiêu đề / mô tả chương</h2>
+    <div class="field">
+      <label for="chEditTitle">Tiêu đề chương</label>
+      <input type="text" id="chEditTitle" />
+    </div>
+    <div class="field">
+      <label for="chEditDesc">Mô tả ngắn</label>
+      <input type="text" id="chEditDesc" />
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" id="chEditSave">Lưu</button>
+      <button class="btn" id="chEditCancel">Huỷ</button>
+    </div>
+  </div>
+
+  <div class="tabs" id="chTabs">
+    <button class="tab-btn active" data-tab="tabLesson">Bài giảng <span class="dot" id="dotLesson"></span></button>
+    <button class="tab-btn" data-tab="tabFlash">Flashcard <span class="dot" id="dotFlash"></span></button>
+    <button class="tab-btn" data-tab="tabQuiz">Trắc nghiệm <span class="dot" id="dotQuiz"></span></button>
+  </div>
+
+  <div class="tab-panel active" id="tabLesson">
+    <div id="lessonContent"></div>
+    <div id="customLessonContent"></div>
+
+    <div class="card" id="manualLessonCard" style="display:none;">
+      <h2><span class="icon">✍️</span>Viết bài giảng thủ công</h2>
+      <button class="btn block" id="manualLessonAddBtn">+ Viết bài giảng mới</button>
+      <div id="manualLessonForm" style="display:none;margin-top:14px;">
+        <div class="field">
+          <label for="manualLessonTitle">Tiêu đề</label>
+          <input type="text" id="manualLessonTitle" placeholder="VD: Bài 7. Quy tắc octet" />
+        </div>
+        <div class="field">
+          <label for="manualLessonPoints">Nội dung (mỗi ý một dòng)</label>
+          <textarea id="manualLessonPoints" rows="6" style="width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg-soft);color:var(--text);font-size:14px;font-family:inherit;"></textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="manualLessonSave">Lưu bài giảng</button>
+          <button class="btn" id="manualLessonCancel">Huỷ</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="uploadCard" style="display:none;">
+      <h2><span class="icon">📎</span>Nạp tài liệu bài giảng từ file</h2>
+      <p class="hint" style="margin-top:-4px;">Hỗ trợ file .docx (Word) và .pdf. Nội dung trích xuất được thêm vào bài giảng của chương này, chỉ lưu trên thiết bị này (không đồng bộ lên GitHub).</p>
+      <input type="file" id="docFileInput" accept=".docx,.pdf" style="display:none;" />
+      <button class="btn block" id="docUploadBtn">+ Chọn file để nạp</button>
+      <div id="docImportPreview"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tabFlash">
+    <div class="card">
+      <div class="flash-wrap" id="flashWrap"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tabQuiz">
+    <div class="card" id="quizWrap"></div>
+
+    <div class="card" id="quizManagerSection" style="display:none;">
+      <button class="btn block" id="quizManagerToggle">⚙️ Quản lý câu hỏi trắc nghiệm</button>
+
+      <div id="quizFormWrap" style="display:none;">
+        <button class="btn block" id="quizFormAddBtn" style="margin-top:12px;">+ Thêm câu hỏi</button>
+        <div id="quizForm" style="display:none;margin-top:14px;">
+          <div class="field">
+            <label for="quizFormQ">Câu hỏi</label>
+            <input type="text" id="quizFormQ" />
+          </div>
+          <div class="field">
+            <label>4 đáp án — chọn đáp án đúng</label>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="0" checked /><input type="text" id="quizFormOpt0" placeholder="Đáp án A" style="flex:1;" /></div>
+              <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="1" /><input type="text" id="quizFormOpt1" placeholder="Đáp án B" style="flex:1;" /></div>
+              <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="2" /><input type="text" id="quizFormOpt2" placeholder="Đáp án C" style="flex:1;" /></div>
+              <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="3" /><input type="text" id="quizFormOpt3" placeholder="Đáp án D" style="flex:1;" /></div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="quizFormExplain">Giải thích (tuỳ chọn)</label>
+            <input type="text" id="quizFormExplain" />
+          </div>
+          <div class="btn-row">
+            <button class="btn primary" id="quizFormSave">Lưu câu hỏi</button>
+            <button class="btn" id="quizFormCancel">Huỷ</button>
+          </div>
+        </div>
+
+        <div class="hint" style="margin-top:16px;">
+          <strong>Nạp hàng loạt từ file .txt</strong> theo mẫu:<br>
+          <code style="display:block;background:var(--bg-soft);padding:8px;border-radius:8px;margin-top:6px;white-space:pre-wrap;">Câu hỏi ở đây?
+A) Đáp án A
+B) Đáp án B
+C) Đáp án C
+D) Đáp án D
+Đúng: B
+Giải thích: nội dung (tuỳ chọn)
+
+(Để trống 1 dòng rồi viết câu tiếp theo...)</code>
+        </div>
+        <input type="file" id="quizBulkFileInput" accept=".txt" style="display:none;" />
+        <button class="btn block" id="quizBulkBtn" style="margin-top:10px;">+ Nạp file câu hỏi (.txt)</button>
+        <div id="quizBulkResult"></div>
+
+        <div class="hint" style="margin-top:16px;">
+          <strong>Hoặc nạp từ Excel (.xlsx) / CSV</strong> — theo đúng 7 cột thứ tự: Câu hỏi, Đáp án A, B, C, D, Đáp án đúng (A/B/C/D), Giải thích. Tải mẫu về, mở bằng Excel/Google Sheets, điền theo hàng, lưu lại rồi nạp lên.
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn" id="quizTemplateBtn">⬇️ Tải mẫu Excel</button>
+          <button class="btn block" id="quizExcelBtn" style="flex:1;">+ Nạp file Excel/CSV</button>
+        </div>
+        <input type="file" id="quizExcelFileInput" accept=".xlsx,.csv" style="display:none;" />
+        <div id="quizExcelResult"></div>
+
+        <div id="quizManagerBody" style="display:none;margin-top:14px;"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="../js/app.js"></script>
+<script src="../js/data/chapters-6.js"></script>
+<script src="../js/data/chapters-7.js"></script>
+<script src="../js/data/chapters-8.js"></script>
+<script src="../js/data/chapters-9.js"></script>
+<script src="../js/data/chapters-10.js"></script>
+<script src="../js/data/chapters-11.js"></script>
+<script src="../js/data/chapters-12.js"></script>
+<script src="../js/data/curriculum.js"></script>
+<script src="../js/features/progress.js"></script>
+<script src="../js/vendor/firebase/firebase-app-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-auth-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-firestore-compat.js"></script>
+<script src="../js/features/firebase-init.js"></script>
+<script src="../js/features/auth.js"></script>
+<script src="../js/features/join-group.js"></script>
+<script src="../js/features/custom-lessons.js"></script>
+<script src="../js/features/custom-quiz.js"></script>
+<script src="../js/features/chapter-meta.js"></script>
+<script src="../js/features/quiz-template.js"></script>
+<script src="../js/features/doc-import.js"></script>
+<script src="../js/features/quiz-excel.js"></script>
+<script src="../js/features/chapter-detail.js"></script>
+</body>
+</html>

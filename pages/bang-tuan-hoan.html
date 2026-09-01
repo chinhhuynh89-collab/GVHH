@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Bảng tuần hoàn — Trợ Lý Giáo Viên Hoá Học</title>
+<meta name="theme-color" content="#0d9488" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" href="../icons/icon-192.png" />
+<link rel="stylesheet" href="../css/style.css" />
+<script>window.APP_BASE_PATH = '../';</script>
+</head>
+<body>
+
+<header class="app-header">
+  <a class="back-btn" href="../index.html" aria-label="Quay lại">←</a>
+  <h1>Bảng tuần hoàn</h1>
+</header>
+
+<main>
+  <div class="card pt-search">
+    <input type="text" id="ptSearch" placeholder="Tìm theo tên, ký hiệu hoặc số hiệu nguyên tử..." />
+  </div>
+
+  <div class="pt-legend" id="ptLegend"></div>
+
+  <div class="pt-scroll">
+    <div class="pt-grid" id="ptGrid"></div>
+  </div>
+
+  <p class="footer-note">Chạm vào một nguyên tố để xem chi tiết. Vuốt ngang để xem hết bảng trên màn hình nhỏ.</p>
+</main>
+
+<div class="el-modal-backdrop" id="elModal">
+  <div class="el-modal" id="elModalBody"></div>
+</div>
+
+<script src="../js/app.js"></script>
+<script src="../js/data/elements.js"></script>
+<script src="../js/features/periodic-table.js"></script>
+</body>
+</html>
