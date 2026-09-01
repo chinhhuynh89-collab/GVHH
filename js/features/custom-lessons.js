@@ -12,6 +12,21 @@ async function addCustomLesson(chapterId, lesson) {
   return ref.id;
 }
 
+// Lưu nhiều bài giảng cùng lúc (VD: nhiều phần trích từ 1 file nạp lên) bằng batch write —
+// CHỈ 1 round-trip mạng cho toàn bộ, thay vì 1 round-trip riêng cho mỗi phần.
+async function addCustomLessonBatch(chapterId, lessons) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên để thêm bài giảng.');
+  const { db } = ensureFirebase();
+  const batch = db.batch();
+  const col = db.collection('teachers').doc(teacher.uid).collection('customLessons');
+  lessons.forEach((lesson) => {
+    const ref = col.doc();
+    batch.set(ref, Object.assign({ chapterId, addedAt: new Date().toISOString() }, lesson));
+  });
+  await batch.commit();
+}
+
 async function updateCustomLesson(id, patch) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');

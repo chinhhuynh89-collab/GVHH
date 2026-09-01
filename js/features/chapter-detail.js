@@ -181,10 +181,10 @@
       $('#docSaveBtn').disabled = true;
       $('#docSaveBtn').textContent = 'Đang lưu...';
       try {
-        // Lưu tất cả phần đã chọn CÙNG LÚC (Promise.all) thay vì lần lượt — mỗi phần là 1 round-trip
-        // mạng riêng, tài liệu nhiều phần trước đây sẽ rất chậm nếu chờ tuần tự.
-        await Promise.all(chosen.map((sec) =>
-          addCustomLesson(chapter.id, { title: sec.title, points: sec.points, sourceFileName: fileName })
+        // Lưu tất cả phần đã chọn trong 1 lượt ghi duy nhất (batch write) — trước đây mỗi phần là
+        // 1 round-trip mạng riêng nên tài liệu nhiều phần (VD: 10-20 mục) rất chậm.
+        await addCustomLessonBatch(chapter.id, chosen.map((sec) =>
+          ({ title: sec.title, points: sec.points, sourceFileName: fileName })
         ));
         box.innerHTML = `<div class="result-box show">✓ Đã lưu vào chương.</div>`;
         await renderCustomLessons();
