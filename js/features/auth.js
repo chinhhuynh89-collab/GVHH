@@ -1,12 +1,27 @@
 // Đăng nhập giáo viên bằng tài khoản Google (Firebase Authentication).
 // Học sinh KHÔNG cần đăng nhập — vẫn dùng tên + mã nhóm như trước.
 
-// Dùng signInWithRedirect (không phải popup): bền hơn cho PWA cài trên điện thoại/Safari
-// (popup dễ bị chặn hoặc gặp lỗi với cookie bên thứ 3). Trang sẽ điều hướng sang Google rồi quay lại.
-function signInWithGoogle() {
+// Ưu tiên signInWithPopup: không cần rời trang nên không phụ thuộc trình duyệt lưu đúng trạng thái
+// "đang chờ đăng nhập" qua vòng chuyển trang đi-về — vòng này rất dễ bị các trình duyệt hiện đại
+// chặn cookie/storage bên thứ 3 làm mất, khiến signInWithRedirect quay về im lặng, không báo lỗi gì.
+// Chỉ khi popup bị chặn (thường gặp khi app được cài như PWA trên điện thoại) mới rơi về
+// signInWithRedirect như phương án dự phòng.
+async function signInWithGoogle() {
   const { auth } = ensureFirebase();
   const provider = new firebase.auth.GoogleAuthProvider();
-  return auth.signInWithRedirect(provider);
+  try {
+    const result = await auth.signInWithPopup(provider);
+    if (result && result.user) {
+      _lastRedirectError = null;
+      await ensureTeacherProfile(result.user);
+    }
+    return result;
+  } catch (e) {
+    if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) {
+      return auth.signInWithRedirect(provider);
+    }
+    throw e;
+  }
 }
 
 // Gọi 1 lần khi trang tải xong để xử lý kết quả sau khi Google chuyển hướng về (nếu có).
