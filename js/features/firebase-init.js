@@ -58,6 +58,12 @@ function ensureFirebase() {
   }
 
   if (!useEmu) {
+    // Một số mạng (proxy trường học/cơ quan, tường lửa, phần mềm diệt virus có kiểm tra SSL...)
+    // chặn hoặc làm gãy kết nối streaming (WebChannel) mà Firestore dùng mặc định — biểu hiện đúng
+    // như đã gặp: lưu/tải dữ liệu treo rất lâu hoặc không phản hồi. experimentalAutoDetectLongPolling
+    // giúp Firestore tự nhận ra mạng có vấn đề và chuyển sang kiểu kết nối HTTP thường (long-polling),
+    // không ảnh hưởng gì nếu mạng bình thường không cần đến nó.
+    _fbDb.settings({ experimentalAutoDetectLongPolling: true, useFetchStreams: false });
     try {
       _fbDb.enablePersistence({ synchronizeTabs: true }).catch(() => {
         // Bỏ qua nếu trình duyệt không hỗ trợ (VD nhiều tab cùng lúc không đồng bộ tab) — vẫn hoạt động online bình thường.
