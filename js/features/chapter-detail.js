@@ -1,7 +1,16 @@
 // Trang chi tiết 1 chương: bài giảng tóm tắt -> flashcard -> trắc nghiệm.
-// Nội dung tự biên soạn (bài giảng thêm, câu hỏi thêm, sửa tiêu đề chương) lưu trên Firestore,
-// gắn với giáo viên đã đăng nhập — đọc được bởi bất kỳ ai (kể cả học sinh trong nhóm của giáo viên đó),
-// nhưng chỉ chính giáo viên đó mới sửa được (xem firebase/firestore.rules).
+// Toàn bộ nội dung (kể cả nội dung mặc định có sẵn trong app) đều SỬA/ẨN được bởi giáo viên đã
+// đăng nhập, gắn với chương này — đọc được bởi bất kỳ ai (kể cả học sinh trong nhóm của giáo viên
+// đó), nhưng chỉ chính giáo viên đó mới sửa được (xem firebase/firestore.rules).
+//
+// Cách lưu chỉnh sửa nội dung mặc định: teachers/{uid}/chapterMeta/{chapterId} có 3 field dạng
+// "map theo chỉ số" — lessonOverrides / flashcardOverrides / quizOverrides — key là chỉ số (index)
+// của mục trong mảng mặc định (chapter.lessons / chapter.flashcards / chapter.quiz):
+//   - Không có key đó            -> dùng nguyên bản mặc định.
+//   - Giá trị là object nội dung -> đã sửa, dùng nội dung này thay cho mặc định.
+//   - Giá trị là null            -> đã ẩn (không hiện mục này nữa).
+// Nội dung TỰ THÊM (không có trong app) vẫn lưu riêng như cũ: customLessons / customQuiz /
+// customFlashcards.
 
 (function () {
   const params = new URLSearchParams(location.search);
@@ -19,11 +28,13 @@
     return;
   }
   const chapter = found.chapter;
-  const chapterHasContent = hasContent(chapter);
 
   let owner = { uid: null, isOwner: false };
-  let effectiveQuiz = chapter.quiz.slice();
+  let chapterMeta = {};
+  let customLessonsCache = [];
   let customQuizCache = [];
+  let customFlashcardsCache = [];
+  let effectiveQuiz = [];
 
   function refreshDots() {
     const p = getChapterProgress(chapter.id);
@@ -32,12 +43,40 @@
     $('#dotQuiz').classList.toggle('done', p.quizBestPercent >= QUIZ_PASS_PERCENT);
   }
 
-  // ---------- Tiêu đề / mô tả chương (sửa được nếu là chủ sở hữu) ----------
-  async function renderHeader() {
-    let meta = null;
-    try { meta = owner.uid ? await getChapterMeta(owner.uid, chapter.id) : null; } catch (e) { meta = null; }
-    const title = (meta && meta.title) || chapter.title;
-    const desc = (meta && meta.description) || chapter.description;
+  // Gộp mảng nội dung mặc định với bảng "overrides" (sửa/ẩn theo chỉ số) thành 1 danh sách.
+  function mergeBuiltinWithOverrides(builtinArray, overridesMap) {
+    const overrides = overridesMap || {};
+    const result = [];
+    builtinArray.forEach((item, i) => {
+      const key = String(i);
+      if (Object.prototype.hasOwnProperty.call(overrides, key)) {
+        const ov = overrides[key];
+        if (ov === null) return; // đã ẩn
+        result.push(Object.assign({ kind: 'builtin', index: i, edited: true }, ov));
+      } else {
+        result.push(Object.assign({ kind: 'builtin', index: i, edited: false }, item));
+      }
+    });
+    return result;
+  }
+
+  function getAllLessons() {
+    return mergeBuiltinWithOverrides(chapter.lessons, chapterMeta.lessonOverrides)
+      .concat(customLessonsCache.map((it) => Object.assign({ kind: 'custom' }, it)));
+  }
+  function getAllFlashcards() {
+    return mergeBuiltinWithOverrides(chapter.flashcards, chapterMeta.flashcardOverrides)
+      .concat(customFlashcardsCache.map((it) => Object.assign({ kind: 'custom' }, it)));
+  }
+  function getAllQuizItems() {
+    return mergeBuiltinWithOverrides(chapter.quiz, chapterMeta.quizOverrides)
+      .concat(customQuizCache.map((it) => Object.assign({ kind: 'custom' }, it)));
+  }
+
+  // ---------- Tiêu đề / mô tả chương ----------
+  function renderHeader() {
+    const title = chapterMeta.title || chapter.title;
+    const desc = chapterMeta.description || chapter.description;
     document.title = title + ' — Trợ Lý Giáo Viên Hoá Học';
     $('#chIcon').textContent = chapter.icon;
     $('#chTitle').textContent = title;
@@ -46,8 +85,6 @@
     $('#chEditTitle').value = title;
     $('#chEditDesc').value = desc;
     $('#chEditBtn').style.display = owner.isOwner ? 'inline-flex' : 'none';
-    // Giải thích lý do không thấy nút Sửa/Nạp bài giảng khi chưa đăng nhập — trước đây các nút này
-    // chỉ biến mất im lặng, dễ khiến giáo viên tưởng nhầm là app bị lỗi.
     $('#chSignInHint').style.display = (!owner.isOwner && isFirebaseConfigured()) ? 'inline' : 'none';
   }
 
@@ -63,93 +100,131 @@
       if (!title) return;
       try {
         await setChapterMeta(chapter.id, { title, description });
-        await renderHeader();
+        chapterMeta.title = title;
+        chapterMeta.description = description;
+        renderHeader();
       } catch (e) {
         alert('Không lưu được: ' + e.message);
       }
     });
   }
 
-  // ---------- Bài giảng (nội dung chuẩn) ----------
-  function renderLessons() {
-    if (!chapterHasContent) {
-      $('#lessonContent').innerHTML = `
+  // ---------- Bài giảng (mặc định + tự thêm, gộp chung 1 danh sách) ----------
+  function renderAllLessons() {
+    const box = $('#lessonContent');
+    const items = getAllLessons();
+    if (!items.length) {
+      box.innerHTML = `
         <div class="card">
-          <p class="hint">📝 Chương này chưa có bài giảng chuẩn trong app${owner.isOwner ? ' — bạn có thể viết hoặc nạp tài liệu riêng ở bên dưới.' : '.'}</p>
+          <p class="hint">📝 Chương này chưa có bài giảng${owner.isOwner ? ' — viết bài giảng đầu tiên ở bên dưới.' : '.'}</p>
         </div>
       `;
-      return;
+    } else {
+      box.innerHTML = items.map((l) => `
+        <div class="lesson-block">
+          <h3>${escapeHtml(l.title)}</h3>
+          <ul>${l.points.map((pt) => `<li>${escapeHtml(pt)}</li>`).join('')}</ul>
+          ${owner.isOwner ? `
+            <div class="hint" style="margin-top:8px;">
+              ${l.kind === 'builtin' ? (l.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
+              · <a href="#" class="lesson-edit" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">Sửa</a>
+              · <a href="#" class="lesson-delete" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">${l.kind === 'builtin' ? 'Ẩn' : 'Xoá'}</a>
+              ${l.kind === 'builtin' && l.edited ? ` · <a href="#" class="lesson-restore" data-key="${l.index}">Khôi phục mặc định</a>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
     }
-    $('#lessonContent').innerHTML = chapter.lessons.map((l) => `
-      <div class="lesson-block">
-        <h3>${l.title}</h3>
-        <ul>${l.points.map((pt) => `<li>${pt}</li>`).join('')}</ul>
-      </div>
-    `).join('');
     setChapterProgress(chapter.id, { lessonViewed: true });
     refreshDots();
+    if (owner.isOwner) wireLessonActions(box);
   }
 
-  // ---------- Tài liệu / bài giảng giáo viên tự biên soạn ----------
-  async function renderCustomLessons() {
-    const box = $('#customLessonContent');
-    if (!owner.uid) { box.innerHTML = ''; return; }
-    let items = [];
-    try { items = await getCustomLessons(owner.uid, chapter.id); } catch (e) { box.innerHTML = ''; return; }
-    if (!items.length) { box.innerHTML = ''; return; }
-    box.innerHTML = items.map((item) => `
-      <div class="lesson-block custom-lesson-block">
-        <h3>📎 ${escapeHtml(item.title || item.sourceFileName || 'Bài giảng tự viết')}</h3>
-        <ul>${item.points.map((pt) => `<li>${escapeHtml(pt)}</li>`).join('')}</ul>
-        <div class="hint">
-          ${item.sourceFileName ? `Từ file "${escapeHtml(item.sourceFileName)}"` : 'Viết thủ công'}
-          ${owner.isOwner ? ` · <a href="#" class="edit-custom-lesson" data-id="${item.id}">Sửa</a> · <a href="#" class="delete-custom-lesson" data-id="${item.id}">Xoá</a>` : ''}
-        </div>
-      </div>
-    `).join('');
-    if (!owner.isOwner) return;
-    $$('.delete-custom-lesson', box).forEach((a) => {
-      a.addEventListener('click', async (e) => {
-        e.preventDefault();
-        await deleteCustomLesson(a.dataset.id);
-        renderCustomLessons();
-      });
-    });
-    $$('.edit-custom-lesson', box).forEach((a) => {
+  function wireLessonActions(box) {
+    $$('.lesson-edit', box).forEach((a) => {
       a.addEventListener('click', (e) => {
         e.preventDefault();
-        const item = items.find((it) => it.id === a.dataset.id);
-        if (item) openManualLessonForm(item);
+        const kind = a.dataset.kind;
+        if (kind === 'custom') {
+          const item = customLessonsCache.find((it) => it.id === a.dataset.key);
+          if (item) openLessonForm({ kind: 'custom', id: item.id, title: item.title, points: item.points });
+        } else {
+          const item = getAllLessons().find((it) => it.kind === 'builtin' && String(it.index) === a.dataset.key);
+          if (item) openLessonForm({ kind: 'builtin', index: item.index, title: item.title, points: item.points });
+        }
+      });
+    });
+    $$('.lesson-delete', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const kind = a.dataset.kind, key = a.dataset.key;
+        try {
+          if (kind === 'custom') {
+            if (!confirm('Xoá bài giảng này?')) return;
+            await deleteCustomLesson(key);
+            customLessonsCache = customLessonsCache.filter((it) => it.id !== key);
+          } else {
+            if (!confirm('Ẩn bài giảng mặc định này khỏi chương? (có thể khôi phục lại sau)')) return;
+            await setChapterMeta(chapter.id, { ['lessonOverrides.' + key]: null });
+            chapterMeta.lessonOverrides = Object.assign({}, chapterMeta.lessonOverrides, { [key]: null });
+          }
+          renderAllLessons();
+        } catch (err) {
+          alert('Không thực hiện được: ' + err.message);
+        }
+      });
+    });
+    $$('.lesson-restore', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const key = a.dataset.key;
+        try {
+          await deleteChapterMetaField(chapter.id, 'lessonOverrides.' + key);
+          if (chapterMeta.lessonOverrides) delete chapterMeta.lessonOverrides[key];
+          renderAllLessons();
+        } catch (err) {
+          alert('Không khôi phục được: ' + err.message);
+        }
       });
     });
   }
 
-  function openManualLessonForm(existing) {
+  function openLessonForm(existing) {
     const box = $('#manualLessonForm');
     box.style.display = 'block';
-    $('#manualLessonTitle').value = existing ? (existing.title || '') : '';
+    $('#manualLessonTitle').value = existing ? existing.title : '';
     $('#manualLessonPoints').value = existing ? existing.points.join('\n') : '';
-    box.dataset.editId = existing ? existing.id : '';
+    box.dataset.kind = existing ? existing.kind : 'custom';
+    box.dataset.id = (existing && existing.kind === 'custom') ? existing.id : '';
+    box.dataset.index = (existing && existing.kind === 'builtin') ? String(existing.index) : '';
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function initManualLessonForm() {
     if (!owner.isOwner) return;
-    $('#manualLessonAddBtn').addEventListener('click', () => openManualLessonForm(null));
+    $('#manualLessonAddBtn').addEventListener('click', () => openLessonForm(null));
     $('#manualLessonCancel').addEventListener('click', () => { $('#manualLessonForm').style.display = 'none'; });
     $('#manualLessonSave').addEventListener('click', async () => {
       const title = $('#manualLessonTitle').value.trim();
       const points = $('#manualLessonPoints').value.split('\n').map((s) => s.trim()).filter(Boolean);
-      if (!title || !points.length) { return; }
-      const editId = $('#manualLessonForm').dataset.editId;
+      if (!title || !points.length) return;
+      const box = $('#manualLessonForm');
+      const kind = box.dataset.kind;
       try {
-        if (editId) {
-          await updateCustomLesson(editId, { title, points });
+        if (kind === 'builtin') {
+          const index = box.dataset.index;
+          await setChapterMeta(chapter.id, { ['lessonOverrides.' + index]: { title, points } });
+          chapterMeta.lessonOverrides = Object.assign({}, chapterMeta.lessonOverrides, { [index]: { title, points } });
+        } else if (box.dataset.id) {
+          await updateCustomLesson(box.dataset.id, { title, points });
+          const it = customLessonsCache.find((x) => x.id === box.dataset.id);
+          if (it) { it.title = title; it.points = points; }
         } else {
-          await addCustomLesson(chapter.id, { title, points, sourceFileName: null });
+          const id = await addCustomLesson(chapter.id, { title, points, sourceFileName: null });
+          customLessonsCache.push({ id, chapterId: chapter.id, title, points, sourceFileName: null });
         }
-        $('#manualLessonForm').style.display = 'none';
-        renderCustomLessons();
+        box.style.display = 'none';
+        renderAllLessons();
       } catch (e) {
         alert('Không lưu được: ' + e.message);
       }
@@ -184,13 +259,12 @@
       $('#docSaveBtn').disabled = true;
       $('#docSaveBtn').textContent = 'Đang lưu...';
       try {
-        // Lưu tất cả phần đã chọn trong 1 lượt ghi duy nhất (batch write) — trước đây mỗi phần là
-        // 1 round-trip mạng riêng nên tài liệu nhiều phần (VD: 10-20 mục) rất chậm.
         await addCustomLessonBatch(chapter.id, chosen.map((sec) =>
           ({ title: sec.title, points: sec.points, sourceFileName: fileName })
         ));
+        customLessonsCache = await getCustomLessons(owner.uid, chapter.id);
         box.innerHTML = `<div class="result-box show">✓ Đã lưu vào chương.</div>`;
-        await renderCustomLessons();
+        renderAllLessons();
       } catch (e) {
         box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
       }
@@ -215,18 +289,20 @@
     });
   }
 
-  // ---------- Flashcard ----------
+  // ---------- Flashcard: xem (học) ----------
   let fcIndex = 0;
   let fcFlipped = false;
   const fcViewed = new Set();
 
   function renderFlash() {
-    const total = chapter.flashcards.length;
+    const cards = getAllFlashcards();
+    const total = cards.length;
     if (!total) {
-      $('#flashWrap').innerHTML = `<p class="hint">📝 Chương này chưa có flashcard.</p>`;
+      $('#flashWrap').innerHTML = `<p class="hint">📝 Chương này chưa có flashcard${owner.isOwner ? ' — thêm ở phần quản lý flashcard bên dưới.' : '.'}</p>`;
       return;
     }
-    const card = chapter.flashcards[fcIndex];
+    if (fcIndex >= total) fcIndex = 0;
+    const card = cards[fcIndex];
     fcViewed.add(fcIndex);
     if (fcViewed.size === total) {
       setChapterProgress(chapter.id, { flashcardsViewed: true });
@@ -234,7 +310,7 @@
     }
     $('#flashWrap').innerHTML = `
       <div class="flash-progress">Thẻ ${fcIndex + 1}/${total} · đã xem ${fcViewed.size}/${total}</div>
-      <div class="flash-card ${fcFlipped ? 'back' : ''}" id="flashCardEl">${fcFlipped ? card.back : card.front}</div>
+      <div class="flash-card ${fcFlipped ? 'back' : ''}" id="flashCardEl">${escapeHtml(fcFlipped ? card.back : card.front)}</div>
       <div class="flash-nav">
         <button class="btn" id="fcPrev" ${fcIndex === 0 ? 'disabled' : ''}>← Trước</button>
         <button class="btn primary" id="fcNext" ${fcIndex === total - 1 ? 'disabled' : ''}>Tiếp →</button>
@@ -245,10 +321,143 @@
     $('#fcNext').addEventListener('click', () => { if (fcIndex < total - 1) { fcIndex++; fcFlipped = false; renderFlash(); } });
   }
 
+  // ---------- Flashcard: quản lý (giáo viên) ----------
+  function renderFlashManager() {
+    const box = $('#flashManagerBody');
+    const cards = getAllFlashcards();
+    if (!cards.length) {
+      box.innerHTML = '<div class="hint" style="margin-top:14px;">Chưa có flashcard nào.</div>';
+    } else {
+      box.innerHTML = cards.map((c) => `
+        <div class="quiz-review-item" style="text-align:left;">
+          <div class="qi-q">${escapeHtml(c.front)}</div>
+          <div class="hint">${escapeHtml(c.back)}</div>
+          <div class="hint" style="margin-top:4px;">
+            ${c.kind === 'builtin' ? (c.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
+            · <a href="#" class="flash-edit" data-kind="${c.kind}" data-key="${c.kind === 'builtin' ? c.index : c.id}">Sửa</a>
+            · <a href="#" class="flash-delete" data-kind="${c.kind}" data-key="${c.kind === 'builtin' ? c.index : c.id}">${c.kind === 'builtin' ? 'Ẩn' : 'Xoá'}</a>
+            ${c.kind === 'builtin' && c.edited ? ` · <a href="#" class="flash-restore" data-key="${c.index}">Khôi phục mặc định</a>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+    wireFlashActions(box);
+  }
+
+  function wireFlashActions(box) {
+    $$('.flash-edit', box).forEach((a) => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const kind = a.dataset.kind;
+        if (kind === 'custom') {
+          const item = customFlashcardsCache.find((it) => it.id === a.dataset.key);
+          if (item) openFlashForm({ kind: 'custom', id: item.id, front: item.front, back: item.back });
+        } else {
+          const item = getAllFlashcards().find((it) => it.kind === 'builtin' && String(it.index) === a.dataset.key);
+          if (item) openFlashForm({ kind: 'builtin', index: item.index, front: item.front, back: item.back });
+        }
+      });
+    });
+    $$('.flash-delete', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const kind = a.dataset.kind, key = a.dataset.key;
+        try {
+          if (kind === 'custom') {
+            if (!confirm('Xoá flashcard này?')) return;
+            await deleteCustomFlashcard(key);
+            customFlashcardsCache = customFlashcardsCache.filter((it) => it.id !== key);
+          } else {
+            if (!confirm('Ẩn flashcard mặc định này khỏi chương? (có thể khôi phục lại sau)')) return;
+            await setChapterMeta(chapter.id, { ['flashcardOverrides.' + key]: null });
+            chapterMeta.flashcardOverrides = Object.assign({}, chapterMeta.flashcardOverrides, { [key]: null });
+          }
+          fcIndex = 0; fcFlipped = false; fcViewed.clear();
+          renderFlashManager();
+          renderFlash();
+        } catch (err) {
+          alert('Không thực hiện được: ' + err.message);
+        }
+      });
+    });
+    $$('.flash-restore', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const key = a.dataset.key;
+        try {
+          await deleteChapterMetaField(chapter.id, 'flashcardOverrides.' + key);
+          if (chapterMeta.flashcardOverrides) delete chapterMeta.flashcardOverrides[key];
+          renderFlashManager();
+          renderFlash();
+        } catch (err) {
+          alert('Không khôi phục được: ' + err.message);
+        }
+      });
+    });
+  }
+
+  function openFlashForm(existing) {
+    const box = $('#flashForm');
+    box.style.display = 'block';
+    $('#flashFormFront').value = existing ? existing.front : '';
+    $('#flashFormBack').value = existing ? existing.back : '';
+    box.dataset.kind = existing ? existing.kind : 'custom';
+    box.dataset.id = (existing && existing.kind === 'custom') ? existing.id : '';
+    box.dataset.index = (existing && existing.kind === 'builtin') ? String(existing.index) : '';
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function initFlashManager() {
+    if (!owner.isOwner) return;
+    $('#flashManagerSection').style.display = 'block';
+    $('#flashManagerToggle').addEventListener('click', () => {
+      const body = $('#flashManagerBody');
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : 'block';
+      $('#flashFormWrap').style.display = open ? 'none' : 'block';
+      $('#flashManagerToggle').textContent = open ? '⚙️ Quản lý flashcard' : '⚙️ Ẩn quản lý flashcard';
+    });
+    $('#flashFormAddBtn').addEventListener('click', () => openFlashForm(null));
+    $('#flashFormCancel').addEventListener('click', () => { $('#flashForm').style.display = 'none'; });
+    $('#flashFormSave').addEventListener('click', async () => {
+      const front = $('#flashFormFront').value.trim();
+      const back = $('#flashFormBack').value.trim();
+      if (!front || !back) return;
+      const box = $('#flashForm');
+      const kind = box.dataset.kind;
+      try {
+        if (kind === 'builtin') {
+          const index = box.dataset.index;
+          await setChapterMeta(chapter.id, { ['flashcardOverrides.' + index]: { front, back } });
+          chapterMeta.flashcardOverrides = Object.assign({}, chapterMeta.flashcardOverrides, { [index]: { front, back } });
+        } else if (box.dataset.id) {
+          await updateCustomFlashcard(box.dataset.id, { front, back });
+          const it = customFlashcardsCache.find((x) => x.id === box.dataset.id);
+          if (it) { it.front = front; it.back = back; }
+        } else {
+          const id = await addCustomFlashcard(chapter.id, { front, back });
+          customFlashcardsCache.push({ id, chapterId: chapter.id, front, back });
+        }
+        box.style.display = 'none';
+        renderFlashManager();
+        renderFlash();
+      } catch (e) {
+        alert('Không lưu được: ' + e.message);
+      }
+    });
+  }
+
   // ---------- Trắc nghiệm (làm bài) ----------
   let qIndex = 0;
   let qAnswers = [];
   let qFinished = false;
+
+  function rebuildEffectiveQuiz() {
+    effectiveQuiz = getAllQuizItems();
+    qIndex = 0;
+    qAnswers = new Array(effectiveQuiz.length).fill(null);
+    qFinished = false;
+  }
 
   function renderQuiz() {
     const total = effectiveQuiz.length;
@@ -324,48 +533,71 @@
     });
   }
 
-  async function reloadEffectiveQuiz() {
-    try { customQuizCache = owner.uid ? await getCustomQuiz(owner.uid, chapter.id) : []; } catch (e) { customQuizCache = []; }
-    effectiveQuiz = chapter.quiz.concat(customQuizCache);
-    qIndex = 0;
-    qAnswers = new Array(effectiveQuiz.length).fill(null);
-    qFinished = false;
-  }
-
-  // ---------- Quản lý câu hỏi trắc nghiệm (giáo viên) ----------
+  // ---------- Quản lý câu hỏi trắc nghiệm (mặc định + tự thêm, gộp chung) ----------
   function renderQuizManager() {
     const box = $('#quizManagerBody');
-    const builtInHtml = chapter.quiz.length ? `
-      <div class="hint" style="margin-bottom:8px;font-weight:700;">Câu hỏi có sẵn trong app (${chapter.quiz.length}) — không sửa được:</div>
-      ${chapter.quiz.map((item, i) => `<div class="hint" style="margin-bottom:4px;">${i + 1}. ${escapeHtml(item.q)}</div>`).join('')}
-    ` : '';
-    const customHtml = customQuizCache.length ? `
-      <div class="hint" style="margin:14px 0 8px;font-weight:700;">Câu hỏi bạn tự thêm (${customQuizCache.length}):</div>
-      ${customQuizCache.map((item) => `
-        <div class="quiz-review-item" style="text-align:left;">
-          <div class="qi-q">${escapeHtml(item.q)}</div>
-          <div class="hint">Đúng: ${escapeHtml(item.options[item.correct])}</div>
-          <div class="hint"><a href="#" class="edit-custom-quiz" data-id="${item.id}">Sửa</a> · <a href="#" class="delete-custom-quiz" data-id="${item.id}">Xoá</a></div>
+    const items = getAllQuizItems();
+    box.innerHTML = items.length ? items.map((item) => `
+      <div class="quiz-review-item" style="text-align:left;">
+        <div class="qi-q">${escapeHtml(item.q)}</div>
+        <div class="hint">Đúng: ${escapeHtml(item.options[item.correct])}</div>
+        <div class="hint" style="margin-top:4px;">
+          ${item.kind === 'builtin' ? (item.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
+          · <a href="#" class="quiz-edit" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">Sửa</a>
+          · <a href="#" class="quiz-delete" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">${item.kind === 'builtin' ? 'Ẩn' : 'Xoá'}</a>
+          ${item.kind === 'builtin' && item.edited ? ` · <a href="#" class="quiz-restore" data-key="${item.index}">Khôi phục mặc định</a>` : ''}
         </div>
-      `).join('')}
-    ` : '<div class="hint" style="margin-top:14px;">Chưa có câu hỏi tự thêm nào.</div>';
+      </div>
+    `).join('') : '<div class="hint">Chưa có câu hỏi nào.</div>';
 
-    box.innerHTML = builtInHtml + customHtml;
-
-    $$('.delete-custom-quiz', box).forEach((a) => {
-      a.addEventListener('click', async (e) => {
-        e.preventDefault();
-        await deleteCustomQuiz(a.dataset.id);
-        await reloadEffectiveQuiz();
-        renderQuizManager();
-        renderQuiz();
-      });
-    });
-    $$('.edit-custom-quiz', box).forEach((a) => {
+    $$('.quiz-edit', box).forEach((a) => {
       a.addEventListener('click', (e) => {
         e.preventDefault();
-        const item = customQuizCache.find((it) => it.id === a.dataset.id);
-        if (item) openQuizForm(item);
+        const kind = a.dataset.kind;
+        if (kind === 'custom') {
+          const item = customQuizCache.find((it) => it.id === a.dataset.key);
+          if (item) openQuizForm({ kind: 'custom', id: item.id, q: item.q, options: item.options, correct: item.correct, explain: item.explain });
+        } else {
+          const item = getAllQuizItems().find((it) => it.kind === 'builtin' && String(it.index) === a.dataset.key);
+          if (item) openQuizForm({ kind: 'builtin', index: item.index, q: item.q, options: item.options, correct: item.correct, explain: item.explain });
+        }
+      });
+    });
+    $$('.quiz-delete', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const kind = a.dataset.kind, key = a.dataset.key;
+        try {
+          if (kind === 'custom') {
+            if (!confirm('Xoá câu hỏi này?')) return;
+            await deleteCustomQuiz(key);
+            customQuizCache = customQuizCache.filter((it) => it.id !== key);
+          } else {
+            if (!confirm('Ẩn câu hỏi mặc định này khỏi chương? (có thể khôi phục lại sau)')) return;
+            await setChapterMeta(chapter.id, { ['quizOverrides.' + key]: null });
+            chapterMeta.quizOverrides = Object.assign({}, chapterMeta.quizOverrides, { [key]: null });
+          }
+          rebuildEffectiveQuiz();
+          renderQuizManager();
+          renderQuiz();
+        } catch (err) {
+          alert('Không thực hiện được: ' + err.message);
+        }
+      });
+    });
+    $$('.quiz-restore', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const key = a.dataset.key;
+        try {
+          await deleteChapterMetaField(chapter.id, 'quizOverrides.' + key);
+          if (chapterMeta.quizOverrides) delete chapterMeta.quizOverrides[key];
+          rebuildEffectiveQuiz();
+          renderQuizManager();
+          renderQuiz();
+        } catch (err) {
+          alert('Không khôi phục được: ' + err.message);
+        }
       });
     });
   }
@@ -377,7 +609,9 @@
     [0, 1, 2, 3].forEach((i) => { $('#quizFormOpt' + i).value = existing ? existing.options[i] : ''; });
     $$('input[name="quizFormCorrect"]').forEach((r, i) => { r.checked = existing ? existing.correct === i : i === 0; });
     $('#quizFormExplain').value = existing ? (existing.explain || '') : '';
-    box.dataset.editId = existing ? existing.id : '';
+    box.dataset.kind = existing ? existing.kind : 'custom';
+    box.dataset.id = (existing && existing.kind === 'custom') ? existing.id : '';
+    box.dataset.index = (existing && existing.kind === 'builtin') ? String(existing.index) : '';
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
@@ -401,15 +635,23 @@
       const correct = correctRadio ? parseInt(correctRadio.value, 10) : 0;
       const explain = $('#quizFormExplain').value.trim();
       if (!q || options.some((o) => !o)) return;
-      const editId = $('#quizForm').dataset.editId;
+      const box = $('#quizForm');
+      const kind = box.dataset.kind;
       try {
-        if (editId) {
-          await updateCustomQuiz(editId, { q, options, correct, explain });
+        if (kind === 'builtin') {
+          const index = box.dataset.index;
+          await setChapterMeta(chapter.id, { ['quizOverrides.' + index]: { q, options, correct, explain } });
+          chapterMeta.quizOverrides = Object.assign({}, chapterMeta.quizOverrides, { [index]: { q, options, correct, explain } });
+        } else if (box.dataset.id) {
+          await updateCustomQuiz(box.dataset.id, { q, options, correct, explain });
+          const it = customQuizCache.find((x) => x.id === box.dataset.id);
+          if (it) { it.q = q; it.options = options; it.correct = correct; it.explain = explain; }
         } else {
-          await addCustomQuiz(chapter.id, { q, options, correct, explain });
+          const id = await addCustomQuiz(chapter.id, { q, options, correct, explain });
+          customQuizCache.push({ id, chapterId: chapter.id, q, options, correct, explain });
         }
         $('#quizForm').style.display = 'none';
-        await reloadEffectiveQuiz();
+        rebuildEffectiveQuiz();
         renderQuizManager();
         renderQuiz();
       } catch (e) {
@@ -428,8 +670,9 @@
         const text = await file.text();
         const questions = parseQuizTemplate(text);
         await addCustomQuizBatch(chapter.id, questions);
+        customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
         box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>`;
-        await reloadEffectiveQuiz();
+        rebuildEffectiveQuiz();
         renderQuizManager();
         renderQuiz();
       } catch (err) {
@@ -448,8 +691,9 @@
       try {
         const questions = await parseQuizExcelFile(file);
         await addCustomQuizBatch(chapter.id, questions);
+        customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
         box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>`;
-        await reloadEffectiveQuiz();
+        rebuildEffectiveQuiz();
         renderQuizManager();
         renderQuiz();
       } catch (err) {
@@ -461,24 +705,34 @@
 
   async function init() {
     owner = isFirebaseConfigured() ? await resolveContentOwner() : { uid: null, isOwner: false };
-
     initHeaderEdit();
-    renderLessons();
-    renderFlash();
 
-    // 3 lượt đọc Firestore độc lập (tiêu đề chương, bài giảng tự thêm, câu hỏi tự thêm) — chạy
-    // CÙNG LÚC thay vì chờ lần lượt (trước đây mỗi lượt là 1 round-trip mạng nối tiếp nhau, cộng
-    // dồn lại rất chậm khi mở 1 chương).
-    await Promise.all([renderHeader(), renderCustomLessons(), reloadEffectiveQuiz()]);
+    if (owner.uid) {
+      const [meta, lessons, quiz, flashcards] = await Promise.all([
+        getChapterMeta(owner.uid, chapter.id).catch(() => null),
+        getCustomLessons(owner.uid, chapter.id).catch(() => []),
+        getCustomQuiz(owner.uid, chapter.id).catch(() => []),
+        getCustomFlashcards(owner.uid, chapter.id).catch(() => [])
+      ]);
+      chapterMeta = meta || {};
+      customLessonsCache = lessons;
+      customQuizCache = quiz;
+      customFlashcardsCache = flashcards;
+    }
+
+    renderHeader();
+    renderAllLessons();
+    renderFlash();
+    rebuildEffectiveQuiz();
+    renderQuiz();
 
     if (owner.isOwner) {
       $('#manualLessonCard').style.display = 'block';
       $('#uploadCard').style.display = 'block';
       initManualLessonForm();
       initUploadControl();
-    }
-    renderQuiz();
-    if (owner.isOwner) {
+      initFlashManager();
+      renderFlashManager();
       renderQuizManager();
       initQuizManager();
     }

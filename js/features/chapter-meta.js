@@ -14,3 +14,13 @@ async function setChapterMeta(chapterId, patch) {
   const { db } = ensureFirebase();
   await db.collection('teachers').doc(teacher.uid).collection('chapterMeta').doc(chapterId).set(patch, { merge: true });
 }
+
+// Xoá 1 field cụ thể (VD: "lessonOverrides.3") khỏi chapterMeta — dùng để "khôi phục mặc định"
+// cho 1 mục đã sửa/ẩn, thay vì phải đọc-sửa-ghi lại cả object overrides.
+async function deleteChapterMetaField(chapterId, fieldPath) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  await db.collection('teachers').doc(teacher.uid).collection('chapterMeta').doc(chapterId)
+    .update({ [fieldPath]: firebase.firestore.FieldValue.delete() });
+}

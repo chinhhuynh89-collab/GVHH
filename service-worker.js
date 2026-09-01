@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v18';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v19';
 const ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,7 @@ const ASSETS = [
   './js/features/chapter-detail.js',
   './js/features/custom-lessons.js',
   './js/features/custom-quiz.js',
+  './js/features/custom-flashcards.js',
   './js/features/chapter-meta.js',
   './js/features/quiz-template.js',
   './js/features/quiz-excel.js',
