@@ -89,6 +89,15 @@ async function resolveContentOwner() {
   return { uid: null, isOwner: false };
 }
 
+// Đọc hồ sơ tuỳ chỉnh giáo viên tự lưu (tên hiển thị, đơn vị công tác, giới thiệu, ảnh đại diện
+// riêng — xem trang "Hồ sơ giáo viên"). Trả về null nếu giáo viên chưa từng lưu gì thêm, khi đó
+// nơi gọi nên dùng lại thông tin gốc từ tài khoản Google.
+async function fetchTeacherProfile(uid) {
+  const { db } = ensureFirebase();
+  const snap = await db.collection('teachers').doc(uid).get();
+  return snap.exists ? snap.data() : null;
+}
+
 async function ensureTeacherProfile(user) {
   const { db } = ensureFirebase();
   const ref = db.collection('teachers').doc(user.uid);
@@ -144,15 +153,19 @@ function requireTeacherAuth(onReady) {
     });
   }
 
-  function renderSignedIn(user) {
+  async function renderSignedIn(user) {
     mainChildren.forEach((el) => { el.style.display = ''; });
+    const profile = await fetchTeacherProfile(user.uid).catch(() => null);
+    const displayName = (profile && profile.displayName) || user.displayName || user.email || 'Giáo viên';
+    const photoURL = (profile && profile.photoURL) || user.photoURL || '';
     gate.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;">
-        ${user.photoURL ? `<img src="${user.photoURL}" alt="" style="width:36px;height:36px;border-radius:50%;" referrerpolicy="no-referrer" />` : ''}
+        ${photoURL ? `<img src="${photoURL}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;" referrerpolicy="no-referrer" />` : ''}
         <div style="flex:1;">
-          <div style="font-weight:700;font-size:14px;">${escapeHtml(user.displayName || user.email || 'Giáo viên')}</div>
+          <div style="font-weight:700;font-size:14px;">${escapeHtml(displayName)}</div>
           <div class="hint">${escapeHtml(user.email || '')}</div>
         </div>
+        <a class="btn" href="ho-so.html">✏️ Hồ sơ</a>
         <button class="btn" id="teacherSignOutBtn">Đăng xuất</button>
       </div>
     `;

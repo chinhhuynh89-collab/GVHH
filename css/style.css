@@ -227,7 +227,7 @@ main {
   margin-top: 5px;
 }
 
-input[type="text"], input[type="number"], select {
+input[type="text"], input[type="number"], select, textarea {
   width: 100%;
   padding: 11px 12px;
   border-radius: var(--radius-sm);
@@ -237,10 +237,11 @@ input[type="text"], input[type="number"], select {
   font-size: 15px;
   outline: none;
 }
-input[type="text"]:focus, input[type="number"]:focus, select:focus {
+textarea { resize: vertical; font-family: inherit; }
+input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
   border-color: var(--brand);
 }
-input::placeholder { color: var(--text-faint); }
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
 .btn {
   display: inline-flex;
