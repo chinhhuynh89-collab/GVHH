@@ -36,9 +36,11 @@ async function listGroupsForCurrentTeacher() {
   const { db } = ensureFirebase();
   const snap = await db.collection('groups').where('teacherUid', '==', teacher.uid).get();
   const groups = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
-  for (const g of groups) {
+  // Đếm số học sinh của tất cả nhóm CÙNG LÚC (Promise.all) thay vì lần lượt từng nhóm —
+  // trước đây chờ tuần tự nên có bao nhiêu nhóm là mất bấy nhiêu lượt round-trip mạng, rất chậm.
+  await Promise.all(groups.map(async (g) => {
     const studentsSnap = await db.collection('students').where('groupCode', '==', g.groupCode).get();
     g.studentCount = studentsSnap.size;
-  }
+  }));
   return groups;
 }

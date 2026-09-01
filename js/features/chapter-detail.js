@@ -181,9 +181,11 @@
       $('#docSaveBtn').disabled = true;
       $('#docSaveBtn').textContent = 'Đang lưu...';
       try {
-        for (const sec of chosen) {
-          await addCustomLesson(chapter.id, { title: sec.title, points: sec.points, sourceFileName: fileName });
-        }
+        // Lưu tất cả phần đã chọn CÙNG LÚC (Promise.all) thay vì lần lượt — mỗi phần là 1 round-trip
+        // mạng riêng, tài liệu nhiều phần trước đây sẽ rất chậm nếu chờ tuần tự.
+        await Promise.all(chosen.map((sec) =>
+          addCustomLesson(chapter.id, { title: sec.title, points: sec.points, sourceFileName: fileName })
+        ));
         box.innerHTML = `<div class="result-box show">✓ Đã lưu vào chương.</div>`;
         await renderCustomLessons();
       } catch (e) {
@@ -457,18 +459,21 @@
   async function init() {
     owner = isFirebaseConfigured() ? await resolveContentOwner() : { uid: null, isOwner: false };
 
-    await renderHeader();
     initHeaderEdit();
     renderLessons();
-    await renderCustomLessons();
+    renderFlash();
+
+    // 3 lượt đọc Firestore độc lập (tiêu đề chương, bài giảng tự thêm, câu hỏi tự thêm) — chạy
+    // CÙNG LÚC thay vì chờ lần lượt (trước đây mỗi lượt là 1 round-trip mạng nối tiếp nhau, cộng
+    // dồn lại rất chậm khi mở 1 chương).
+    await Promise.all([renderHeader(), renderCustomLessons(), reloadEffectiveQuiz()]);
+
     if (owner.isOwner) {
       $('#manualLessonCard').style.display = 'block';
       $('#uploadCard').style.display = 'block';
       initManualLessonForm();
       initUploadControl();
     }
-    renderFlash();
-    await reloadEffectiveQuiz();
     renderQuiz();
     if (owner.isOwner) {
       renderQuizManager();

@@ -18,20 +18,23 @@ async function createExamForCurrentTeacher(examInput) {
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
   const examRef = db.collection('exams').doc();
-  await examRef.set({
-    teacherUid: teacher.uid,
-    groupCode: examInput.groupCode,
-    chapterId: examInput.chapterId,
-    chapterTitle: examInput.chapterTitle,
-    durationMinutes: examInput.durationMinutes,
-    startTime: examInput.startTime,
-    endTime: examInput.endTime,
-    questions: examInput.questions.map((q) => ({ q: q.q, options: q.options })),
-    createdAt: new Date().toISOString()
-  });
-  await db.collection('examAnswers').doc(examRef.id).set({
-    answers: examInput.questions.map((q) => ({ correct: q.correct, explain: q.explain || '' }))
-  });
+  // 2 tài liệu độc lập (câu hỏi + đáp án) — ghi CÙNG LÚC thay vì lần lượt để đỡ mất 1 round-trip mạng.
+  await Promise.all([
+    examRef.set({
+      teacherUid: teacher.uid,
+      groupCode: examInput.groupCode,
+      chapterId: examInput.chapterId,
+      chapterTitle: examInput.chapterTitle,
+      durationMinutes: examInput.durationMinutes,
+      startTime: examInput.startTime,
+      endTime: examInput.endTime,
+      questions: examInput.questions.map((q) => ({ q: q.q, options: q.options })),
+      createdAt: new Date().toISOString()
+    }),
+    db.collection('examAnswers').doc(examRef.id).set({
+      answers: examInput.questions.map((q) => ({ correct: q.correct, explain: q.explain || '' }))
+    })
+  ]);
   return examRef.id;
 }
 
