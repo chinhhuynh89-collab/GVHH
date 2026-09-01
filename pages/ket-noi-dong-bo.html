@@ -40,10 +40,11 @@
 <script src="../js/features/firebase-init.js"></script>
 <script src="../js/features/auth.js"></script>
 <script>
-(function () {
-  function refreshSignInArea() {
+(async function () {
+  async function refreshSignInArea() {
     const { auth } = ensureFirebase();
-    checkRedirectResult();
+    // Chờ xử lý xong kết quả chuyển hướng (và lỗi, nếu có) trước khi vẽ giao diện lần đầu.
+    await checkRedirectResult();
     auth.onAuthStateChanged((user) => {
       if (user) {
         $('#signInBody').innerHTML = `
@@ -60,6 +61,10 @@
         $('#readyCard').style.display = 'block';
       } else {
         $('#signInBody').innerHTML = `<button class="btn primary block" id="fbSignInBtn">Đăng nhập bằng Google</button><div class="result-box" id="fbSignInResult"></div>`;
+        const lastErr = getLastRedirectError();
+        if (lastErr) {
+          showResult($('#fbSignInResult'), `⚠️ Đăng nhập thất bại: ${escapeHtml(lastErr.message)}${lastErr.code ? ' (mã lỗi: ' + escapeHtml(lastErr.code) + ')' : ''}`, true);
+        }
         $('#fbSignInBtn').addEventListener('click', async () => {
           const rbox = $('#fbSignInResult');
           showResult(rbox, '⏳ Đang chuyển sang trang đăng nhập Google...');
@@ -70,7 +75,7 @@
     });
   }
 
-  refreshSignInArea();
+  await refreshSignInArea();
 })();
 </script>
 </body>

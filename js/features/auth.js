@@ -10,17 +10,26 @@ function signInWithGoogle() {
 }
 
 // Gọi 1 lần khi trang tải xong để xử lý kết quả sau khi Google chuyển hướng về (nếu có).
+// Lỗi (nếu có) được lưu lại qua getLastRedirectError() để trang hiện cho người dùng thấy —
+// trước đây lỗi này chỉ ghi ra console nên người dùng không biết vì sao đăng nhập thất bại.
+let _lastRedirectError = null;
+function getLastRedirectError() {
+  return _lastRedirectError;
+}
+
 async function checkRedirectResult() {
   if (!isFirebaseConfigured()) return null;
   try {
     const { auth } = ensureFirebase();
     const result = await auth.getRedirectResult();
     if (result && result.user) {
+      _lastRedirectError = null;
       await ensureTeacherProfile(result.user);
       return result.user;
     }
   } catch (e) {
-    console.warn('Lỗi đăng nhập:', e.message);
+    console.warn('Lỗi đăng nhập:', e.code, e.message);
+    _lastRedirectError = e;
   }
   return null;
 }
@@ -105,6 +114,10 @@ function requireTeacherAuth(onReady) {
       <button class="btn primary block" id="teacherSignInBtn">Đăng nhập bằng Google</button>
       <div class="result-box" id="teacherAuthResult"></div>
     `;
+    const lastErr = getLastRedirectError();
+    if (lastErr) {
+      showResult($('#teacherAuthResult'), `⚠️ Đăng nhập thất bại: ${escapeHtml(lastErr.message)}${lastErr.code ? ' (mã lỗi: ' + escapeHtml(lastErr.code) + ')' : ''}`, true);
+    }
     $('#teacherSignInBtn').addEventListener('click', async () => {
       const box = $('#teacherAuthResult');
       showResult(box, '⏳ Đang chuyển sang trang đăng nhập Google...');
@@ -131,13 +144,17 @@ function requireTeacherAuth(onReady) {
     $('#teacherSignOutBtn').addEventListener('click', () => signOutTeacher());
   }
 
-  try {
-    checkRedirectResult();
-    onAuthChange((user) => {
-      if (user) { renderSignedIn(user); if (onReady) onReady(user); }
-      else renderSignedOut();
-    });
-  } catch (e) {
-    gate.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
-  }
+  (async () => {
+    try {
+      // Chờ xử lý xong kết quả chuyển hướng (và lỗi, nếu có) TRƯỚC khi vẽ giao diện lần đầu —
+      // nếu không đợi, màn hình "chưa đăng nhập" có thể vẽ ra trước khi lỗi kịp ghi nhận.
+      await checkRedirectResult();
+      onAuthChange((user) => {
+        if (user) { renderSignedIn(user); if (onReady) onReady(user); }
+        else renderSignedOut();
+      });
+    } catch (e) {
+      gate.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
+    }
+  })();
 }
