@@ -46,6 +46,9 @@
     $('#chEditTitle').value = title;
     $('#chEditDesc').value = desc;
     $('#chEditBtn').style.display = owner.isOwner ? 'inline-flex' : 'none';
+    // Giải thích lý do không thấy nút Sửa/Nạp bài giảng khi chưa đăng nhập — trước đây các nút này
+    // chỉ biến mất im lặng, dễ khiến giáo viên tưởng nhầm là app bị lỗi.
+    $('#chSignInHint').style.display = (!owner.isOwner && isFirebaseConfigured()) ? 'inline' : 'none';
   }
 
   function initHeaderEdit() {
