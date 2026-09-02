@@ -85,7 +85,19 @@
     $('#chEditTitle').value = title;
     $('#chEditDesc').value = desc;
     $('#chEditBtn').style.display = owner.isOwner ? 'inline-flex' : 'none';
-    $('#chSignInHint').style.display = (!owner.isOwner && isFirebaseConfigured()) ? 'inline' : 'none';
+    const hint = $('#chSignInHint');
+    if (owner.isOwner || !isFirebaseConfigured()) {
+      hint.style.display = 'none';
+    } else if (getCurrentTeacher() && (typeof getRole === 'function') && getRole() === 'student') {
+      // Đã đăng nhập giáo viên nhưng đang xem thử ở vai trò Học sinh — không phải chưa đăng nhập.
+      hint.href = '../index.html';
+      hint.textContent = '👁️ Đang xem thử vai trò Học sinh — đổi lại vai trò Giáo viên để sửa';
+      hint.style.display = 'inline';
+    } else {
+      hint.href = 'ket-noi-dong-bo.html';
+      hint.textContent = '🔒 Đăng nhập giáo viên để sửa';
+      hint.style.display = 'inline';
+    }
   }
 
   function initHeaderEdit() {

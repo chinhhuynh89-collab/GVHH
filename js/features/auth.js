@@ -77,15 +77,25 @@ function waitForAuthReady() {
   });
 }
 
-// Xác định nội dung biên soạn (bài giảng/câu hỏi tự thêm) đang xem là của giáo viên nào:
-// - Nếu đang đăng nhập giáo viên -> chính họ (và được sửa).
+// Xác định nội dung biên soạn (bài giảng/câu hỏi tự thêm) đang xem là của giáo viên nào, và có
+// được SỬA hay không:
+// - Nếu đang đăng nhập giáo viên VÀ vai trò hiện tại (xem index.html) không phải "học sinh"
+//   -> chính họ, được sửa.
+// - Nếu vai trò đang chọn là "học sinh" (kể cả khi trình duyệt này vẫn đang đăng nhập Google của
+//   giáo viên — VD chính giáo viên bật thử giao diện học sinh để xem trước) -> KHÔNG được sửa.
+//   Vai trò chỉ là lựa chọn giao diện (role.js), không phải đăng nhập thật, nhưng phải tôn trọng nó
+//   ở đây để giáo viên xem thử vai trò học sinh thấy đúng trải nghiệm chỉ-xem như học sinh thật.
 // - Nếu là học sinh đã vào nhóm -> giáo viên của nhóm đó (chỉ xem, không sửa).
-// - Ngoài ra (duyệt tự do, chưa vào nhóm) -> không có nội dung tự biên soạn nào để hiện.
+// - Nếu giáo viên đang xem thử ở vai trò học sinh nhưng chưa vào nhóm nào -> vẫn hiện đúng nội dung
+//   của chính họ để xem thử, nhưng không sửa được (isOwner: false).
+// - Ngoài ra (duyệt tự do, chưa vào nhóm, chưa đăng nhập) -> không có nội dung tự biên soạn nào để hiện.
 async function resolveContentOwner() {
+  const role = (typeof getRole === 'function') ? getRole() : null;
   const user = await waitForAuthReady();
-  if (user) return { uid: user.uid, isOwner: true };
+  if (user && role !== 'student') return { uid: user.uid, isOwner: true };
   const membership = (typeof getMembership === 'function') ? getMembership() : null;
   if (membership && membership.teacherUid) return { uid: membership.teacherUid, isOwner: false };
+  if (user) return { uid: user.uid, isOwner: false };
   return { uid: null, isOwner: false };
 }
 
