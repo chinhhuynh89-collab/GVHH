@@ -124,13 +124,18 @@ async function getGroupLearningResults(group) {
   return results;
 }
 
-// Gộp học sinh của nhiều nhóm thành 1 danh sách theo SĐT (vì 1 học sinh có thể học cùng lúc nhiều
-// nhóm — mỗi nhóm là 1 bản ghi "students" riêng). groupsWithStudents = [{ group, students }, ...].
+// Gộp học sinh của nhiều nhóm thành 1 danh sách theo THIẾT BỊ (deviceId) — vì 1 học sinh có thể học
+// cùng lúc nhiều nhóm, mỗi nhóm là 1 bản ghi "students" riêng trên CÙNG 1 thiết bị. KHÔNG gộp theo
+// SĐT như trước: 2 học sinh khác nhau (VD anh chị em) hoàn toàn có thể dùng chung 1 số điện thoại
+// (của bố/mẹ) — gộp theo SĐT sẽ làm mất hẳn 1 học sinh khỏi danh sách (chỉ còn thấy 1 trong 2).
+// deviceId sinh ngẫu nhiên riêng cho từng trình duyệt (xem device-id.js) nên hiếm khi trùng giữa 2
+// người khác nhau, đáng tin hơn nhiều so với SĐT có thể dùng chung trong gia đình.
+// groupsWithStudents = [{ group, students }, ...].
 function mergeStudentsAcrossGroups(groupsWithStudents) {
   const byKey = new Map();
   groupsWithStudents.forEach(({ group, students }) => {
     students.forEach((s) => {
-      const key = (s.phone || '').trim() || s.id;
+      const key = (s.deviceId || '').trim() || s.id;
       if (!byKey.has(key)) {
         byKey.set(key, Object.assign({}, s, { groups: [], latestJoinedAt: s.joinedAt }));
       }
