@@ -22,107 +22,24 @@
     <div class="free-mode-row" style="margin:0;padding:10px 12px;">
       <div class="fm-text">
         <div class="fm-title">Công tắc tổng — Chiến dịch kinh doanh</div>
-        <div class="fm-sub">Bật: áp dụng giới hạn gói miễn phí, hiện nút nâng cấp cho giáo viên/học sinh. Tắt: mọi người dùng như bản miễn phí hiện tại, không giới hạn gì.</div>
+        <div class="fm-sub">Bật: áp dụng giới hạn gói miễn phí, hiện nút nâng cấp. Tắt: mọi người dùng như bản miễn phí, không giới hạn gì.</div>
       </div>
       <div class="switch" id="monetizationEnabledToggle"><div class="knob"></div></div>
     </div>
   </div>
 
-  <div class="card">
-    <h2><span class="icon">📈</span>Thống kê nhanh</h2>
-    <div id="adminStatsBody"><p class="hint">⏳ Đang tải...</p></div>
+  <div class="section-label">Chức năng quản trị</div>
+  <div class="action-grid">
+    <button class="btn admin-menu-btn" type="button" data-section="stats">📈 Thống kê nhanh</button>
+    <button class="btn admin-menu-btn" type="button" data-section="roster">👥 Danh sách giáo viên</button>
+    <button class="btn admin-menu-btn" type="button" data-section="locked">🔒 Khoá tính năng</button>
+    <button class="btn admin-menu-btn" type="button" data-section="plans">💳 Gói &amp; giá</button>
+    <button class="btn admin-menu-btn" type="button" data-section="payment">🏦 Chuyển khoản</button>
+    <button class="btn admin-menu-btn" type="button" data-section="pending">🧾 Duyệt thanh toán<span class="admin-menu-badge" id="pendingCountBadge" style="display:none;"></span></button>
+    <button class="btn admin-menu-btn" type="button" data-section="commissions">💰 Hoa hồng cần trả</button>
   </div>
 
-  <div class="card">
-    <h2><span class="icon">👥</span>Danh sách giáo viên</h2>
-    <p class="hint" style="margin-top:-4px;">Mã, trạng thái gói, số học sinh và hoa hồng của từng giáo viên — bấm 1 dòng để xem danh sách học sinh của giáo viên đó.</p>
-    <div id="teacherRosterBody"><p class="hint">⏳ Đang tải...</p></div>
-  </div>
-
-  <div class="card">
-    <h2><span class="icon">🔒</span>Tính năng chỉ dành cho gói Pro</h2>
-    <p class="hint" style="margin-top:-4px;">Bật tính năng nào ở đây thì giáo viên gói miễn phí sẽ KHÔNG dùng được tính năng đó nữa (khác với giới hạn số lượng nhóm/học sinh ở dưới — đây là khoá hẳn cả tính năng). Chỉ có tác dụng khi công tắc tổng ở trên đang bật.</p>
-    <div id="lockedFeaturesBody"></div>
-  </div>
-
-  <div class="card">
-    <h2><span class="icon">💳</span>Gói &amp; giá</h2>
-    <div class="field">
-      <label for="planTeacherPrice">Giá gói Pro cho giáo viên (đ/kỳ)</label>
-      <input type="number" id="planTeacherPrice" min="0" step="1000" />
-    </div>
-    <div class="field">
-      <label for="planTeacherPeriod">Thời hạn 1 kỳ (số ngày)</label>
-      <input type="number" id="planTeacherPeriod" min="1" step="1" />
-    </div>
-    <div class="field">
-      <label for="planMaxGroups">Gói miễn phí: tối đa số nhóm</label>
-      <input type="number" id="planMaxGroups" min="0" step="1" />
-    </div>
-    <div class="field">
-      <label for="planMaxStudents">Gói miễn phí: tối đa số học sinh</label>
-      <input type="number" id="planMaxStudents" min="0" step="1" />
-    </div>
-    <div class="field">
-      <label for="planMaxChapters">Gói miễn phí: tối đa số chương tự soạn</label>
-      <input type="number" id="planMaxChapters" min="0" step="1" />
-    </div>
-    <div class="field">
-      <label for="planStudentPrice">Giá gói Premium cho học sinh (đ/kỳ)</label>
-      <input type="number" id="planStudentPrice" min="0" step="1000" />
-    </div>
-    <div class="field">
-      <label for="planStudentPeriod">Thời hạn 1 kỳ (số ngày)</label>
-      <input type="number" id="planStudentPeriod" min="1" step="1" />
-    </div>
-    <div class="field">
-      <label for="commissionTeacher">Hoa hồng giới thiệu giáo viên (%)</label>
-      <input type="number" id="commissionTeacher" min="0" max="100" step="1" />
-    </div>
-    <div class="field">
-      <label for="commissionStudent">Hoa hồng khi học sinh (trong nhóm) mua Premium (%)</label>
-      <input type="number" id="commissionStudent" min="0" max="100" step="1" />
-    </div>
-    <button class="btn primary block" id="savePlansBtn">Lưu gói &amp; giá &amp; hoa hồng</button>
-    <div class="result-box" id="savePlansResult"></div>
-  </div>
-
-  <div class="card">
-    <h2><span class="icon">🏦</span>Thông tin chuyển khoản</h2>
-    <p class="hint" style="margin-top:-4px;">Hiện cho giáo viên/học sinh khi bấm nâng cấp gói.</p>
-    <div class="field">
-      <label for="payBank">Ngân hàng</label>
-      <input type="text" id="payBank" placeholder="VD: Vietcombank" />
-    </div>
-    <div class="field">
-      <label for="payAccount">Số tài khoản</label>
-      <input type="text" id="payAccount" />
-    </div>
-    <div class="field">
-      <label for="payHolder">Chủ tài khoản</label>
-      <input type="text" id="payHolder" />
-    </div>
-    <div class="field">
-      <label for="payMomo">Số MoMo (nếu có)</label>
-      <input type="text" id="payMomo" />
-    </div>
-    <div class="field">
-      <label for="payNote">Ghi chú thêm</label>
-      <textarea id="payNote" rows="2" placeholder="VD: Ghi rõ nội dung chuyển khoản là tên + số điện thoại"></textarea>
-    </div>
-    <button class="btn primary block" id="savePaymentInfoBtn">Lưu thông tin chuyển khoản</button>
-    <div class="result-box" id="savePaymentInfoResult"></div>
-  </div>
-
-  <div class="card">
-    <h2><span class="icon">🧾</span>Duyệt thanh toán</h2>
-    <div id="pendingPaymentsBody"><p class="hint">⏳ Đang tải...</p></div>
-  </div>
-
-  <div class="card">
-    <h2><span class="icon">💰</span>Hoa hồng cần trả</h2>
-    <div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div>
-  </div>
+  <div id="adminSectionPanel" style="display:none;margin-top:12px;"></div>
 </main>
 
 <script src="../js/app.js"></script>

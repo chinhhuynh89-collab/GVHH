@@ -3,6 +3,11 @@
 // (isAdmin() chặn ghi config/subscriptions/studentSubscriptions/commissions, và chặn đọc
 // paymentSubmissions/commissions của người khác), nên dù ai đó lách qua được UI này cũng không ghi/
 // đọc được gì ngoài quyền thật của họ.
+//
+// Bố cục: 1 lưới nút (giống nút hành động ở "Nhóm học sinh") — bấm nút nào thì CHỈ mở đúng khung nội
+// dung của mục đó vào #adminSectionPanel (đóng khung đang mở trước, nếu có), thay vì hiện hết tất cả
+// các mục cùng lúc như trước — đỡ phải cuộn dài. Mỗi mục tự tải dữ liệu MỖI LẦN mở (không cache lại
+// giữa các lần mở) — đơn giản, đủ nhanh vì quy mô dữ liệu nhỏ (1 admin, vài chục giáo viên).
 
 (function () {
   requireTeacherAuth(async (user) => {
@@ -17,61 +22,9 @@
 
     const { db } = ensureFirebase();
     let cfg = await getMonetizationConfig(true);
+    let openSection = null;
 
-    function fillForm() {
-      $('#monetizationEnabledToggle').classList.toggle('on', cfg.enabled);
-      $('#planTeacherPrice').value = cfg.teacherPlan.price;
-      $('#planTeacherPeriod').value = cfg.teacherPlan.periodDays;
-      $('#planMaxGroups').value = cfg.teacherPlan.maxGroupsFree;
-      $('#planMaxStudents').value = cfg.teacherPlan.maxStudentsFree;
-      $('#planMaxChapters').value = cfg.teacherPlan.maxCustomChaptersFree;
-      $('#planStudentPrice').value = cfg.studentPlan.price;
-      $('#planStudentPeriod').value = cfg.studentPlan.periodDays;
-      $('#commissionTeacher').value = cfg.commission.teacherReferralPercent;
-      $('#commissionStudent').value = cfg.commission.studentReferralPercent;
-      $('#payBank').value = cfg.payment.bankName;
-      $('#payAccount').value = cfg.payment.accountNumber;
-      $('#payHolder').value = cfg.payment.accountHolder;
-      $('#payMomo').value = cfg.payment.momoNumber;
-      $('#payNote').value = cfg.payment.note;
-    }
-    fillForm();
-
-    function renderLockedFeatures() {
-      const any = LOCKABLE_FEATURES.filter((f) => f.audience === 'any');
-      const teacherOnly = LOCKABLE_FEATURES.filter((f) => f.audience !== 'any');
-      const rowHtml = (f) => `
-        <div class="free-mode-row" style="margin:8px 0;padding:10px 12px;">
-          <div class="fm-text">
-            <div class="fm-title">${escapeHtml(f.label)}</div>
-          </div>
-          <div class="switch locked-feature-toggle ${cfg.lockedFeatures[f.id] ? 'on' : ''}" data-feature="${f.id}"><div class="knob"></div></div>
-        </div>
-      `;
-      $('#lockedFeaturesBody').innerHTML = `
-        <div class="hint" style="font-weight:700;margin:6px 0;">Trang chủ (giáo viên &amp; học sinh đều thấy)</div>
-        ${any.map(rowHtml).join('')}
-        <div class="hint" style="font-weight:700;margin:14px 0 6px;">Chỉ dành cho giáo viên</div>
-        ${teacherOnly.map(rowHtml).join('')}
-      `;
-      $$('.locked-feature-toggle').forEach((el) => {
-        el.addEventListener('click', async () => {
-          const featureId = el.dataset.feature;
-          const next = !cfg.lockedFeatures[featureId];
-          el.classList.toggle('on', next);
-          try {
-            const lockedFeatures = Object.assign({}, cfg.lockedFeatures, { [featureId]: next });
-            await saveMonetizationConfig({ lockedFeatures });
-            cfg.lockedFeatures = lockedFeatures;
-          } catch (e) {
-            el.classList.toggle('on', !next);
-            alert('Không lưu được: ' + e.message);
-          }
-        });
-      });
-    }
-    renderLockedFeatures();
-
+    $('#monetizationEnabledToggle').classList.toggle('on', cfg.enabled);
     $('#monetizationEnabledToggle').addEventListener('click', async () => {
       const next = !cfg.enabled;
       $('#monetizationEnabledToggle').classList.toggle('on', next); // phản hồi ngay
@@ -84,57 +37,51 @@
       }
     });
 
-    $('#savePlansBtn').addEventListener('click', async () => {
-      const box = $('#savePlansResult');
-      showResult(box, '⏳ Đang lưu...');
-      try {
-        const partial = {
-          teacherPlan: {
-            price: Number($('#planTeacherPrice').value) || 0,
-            periodDays: Math.max(1, Number($('#planTeacherPeriod').value) || 30),
-            maxGroupsFree: Math.max(0, Number($('#planMaxGroups').value) || 0),
-            maxStudentsFree: Math.max(0, Number($('#planMaxStudents').value) || 0),
-            maxCustomChaptersFree: Math.max(0, Number($('#planMaxChapters').value) || 0)
-          },
-          studentPlan: {
-            price: Number($('#planStudentPrice').value) || 0,
-            periodDays: Math.max(1, Number($('#planStudentPeriod').value) || 30)
-          },
-          commission: {
-            teacherReferralPercent: Math.min(100, Math.max(0, Number($('#commissionTeacher').value) || 0)),
-            studentReferralPercent: Math.min(100, Math.max(0, Number($('#commissionStudent').value) || 0))
-          }
-        };
-        await saveMonetizationConfig(partial);
-        cfg = await getMonetizationConfig(true);
-        showResult(box, '✅ Đã lưu.');
-      } catch (e) {
-        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+    // Số yêu cầu đang chờ duyệt — hiện chấm đỏ trên nút "Duyệt thanh toán" để admin biết có việc cần làm
+    // mà không cần mở ra xem.
+    try {
+      const pendingSnap = await db.collection('paymentSubmissions').where('status', '==', 'pending').get();
+      if (pendingSnap.size) {
+        const badge = $('#pendingCountBadge');
+        badge.textContent = pendingSnap.size > 99 ? '99+' : String(pendingSnap.size);
+        badge.style.display = 'flex';
       }
+    } catch (e) { /* ignore */ }
+
+    // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
+    const SECTION_BUILDERS = {
+      stats: buildStatsSection,
+      roster: buildRosterSection,
+      locked: buildLockedFeaturesSection,
+      plans: buildPlansSection,
+      payment: buildPaymentSection,
+      pending: buildPendingSection,
+      commissions: buildCommissionsSection
+    };
+
+    $$('.admin-menu-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const key = btn.dataset.section;
+        const panel = $('#adminSectionPanel');
+        if (openSection === key) {
+          panel.style.display = 'none';
+          panel.innerHTML = '';
+          btn.classList.remove('has-open');
+          openSection = null;
+          return;
+        }
+        $$('.admin-menu-btn').forEach((b) => b.classList.remove('has-open'));
+        btn.classList.add('has-open');
+        openSection = key;
+        panel.style.display = 'block';
+        panel.innerHTML = '<div class="card"><p class="hint">⏳ Đang tải...</p></div>';
+        await SECTION_BUILDERS[key](panel);
+      });
     });
 
-    $('#savePaymentInfoBtn').addEventListener('click', async () => {
-      const box = $('#savePaymentInfoResult');
-      showResult(box, '⏳ Đang lưu...');
-      try {
-        await saveMonetizationConfig({
-          payment: {
-            bankName: $('#payBank').value.trim(),
-            accountNumber: $('#payAccount').value.trim(),
-            accountHolder: $('#payHolder').value.trim(),
-            momoNumber: $('#payMomo').value.trim(),
-            note: $('#payNote').value.trim()
-          }
-        });
-        cfg = await getMonetizationConfig(true);
-        showResult(box, '✅ Đã lưu.');
-      } catch (e) {
-        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
-      }
-    });
-
-    // ---------- Thống kê nhanh ----------
-    async function renderStats() {
+    // ---------- 📈 Thống kê nhanh ----------
+    async function buildStatsSection(panel) {
+      panel.innerHTML = `<div class="card"><h2><span class="icon">📈</span>Thống kê nhanh</h2><div id="adminStatsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
       const box = $('#adminStatsBody');
       try {
         const [subsSnap, studentSubsSnap, paymentsSnap, commissionsSnap] = await Promise.all([
@@ -158,12 +105,17 @@
       }
     }
 
-    // ---------- Danh sách giáo viên (báo cáo tổng hợp) ----------
+    // ---------- 👥 Danh sách giáo viên (báo cáo tổng hợp) ----------
     // Đọc từ các collection CÔNG KHAI (teacherProfiles/subscriptions/groups/students) + commissions
-    // (chỉ admin đọc được toàn bộ) — KHÔNG đọc "teachers" (có email, chỉ chính chủ đọc được) vì
-    // không cần thiết, mọi thứ cần cho báo cáo đã có ở các collection công khai.
-    let rosterGroupsSnap = null, rosterStudentsSnap = null;
-    async function renderTeacherRoster() {
+    // (chỉ admin đọc được toàn bộ) — KHÔNG đọc "teachers" (có email, chỉ chính chủ đọc được).
+    async function buildRosterSection(panel) {
+      panel.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">👥</span>Danh sách giáo viên</h2>
+          <p class="hint" style="margin-top:-4px;">Bấm 1 dòng để xem danh sách học sinh của giáo viên đó.</p>
+          <div id="teacherRosterBody"><p class="hint">⏳ Đang tải...</p></div>
+        </div>
+      `;
       const box = $('#teacherRosterBody');
       try {
         const [profilesSnap, subsSnap, groupsSnap, studentsSnap, commissionsSnap] = await Promise.all([
@@ -173,8 +125,6 @@
           db.collection('students').get(),
           db.collection('commissions').get()
         ]);
-        rosterGroupsSnap = groupsSnap;
-        rosterStudentsSnap = studentsSnap;
 
         const subsByUid = new Map(subsSnap.docs.map((d) => [d.id, d.data()]));
         const groupTeacherByCode = new Map(groupsSnap.docs.map((d) => [d.data().groupCode, d.data().teacherUid]));
@@ -243,16 +193,34 @@
             if (row.dataset.loaded) return;
             row.dataset.loaded = '1';
             cell.innerHTML = '<p class="hint">⏳ Đang tải...</p>';
-            const teacherGroupCodes = new Set(rosterGroupsSnap.docs.filter((d) => d.data().teacherUid === uid).map((d) => d.data().groupCode));
-            const students = rosterStudentsSnap.docs.filter((d) => teacherGroupCodes.has(d.data().groupCode))
-              .map((d) => Object.assign({ id: d.id }, d.data()));
+            const teacherGroupCodes = new Set(groupsSnap.docs.filter((d) => d.data().teacherUid === uid).map((d) => d.data().groupCode));
+            const students = studentsSnap.docs.filter((d) => teacherGroupCodes.has(d.data().groupCode))
+              .map((d) => Object.assign({ id: d.id }, d.data()))
+              .sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi'));
             if (!students.length) { cell.innerHTML = '<p class="hint">Chưa có học sinh nào.</p>'; return; }
             const subs = await Promise.all(students.map((s) => getStudentSubscription(s.deviceId)));
-            cell.innerHTML = students.map((s, i) => `
-              <div class="hint" style="padding:6px 0;border-top:1px solid var(--border);">
-                ${escapeHtml(s.studentName || '')} · ${escapeHtml(s.school || '')} · ${escapeHtml(s.phone || '')} · ${subs[i].tier === 'premium' ? '⭐ Premium' : 'Miễn phí'}
+            cell.innerHTML = `
+              <div class="roster-table-wrap">
+                <table class="roster-table">
+                  <thead>
+                    <tr><th>STT</th><th>Họ tên</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Gói</th></tr>
+                  </thead>
+                  <tbody>
+                    ${students.map((s, i) => `
+                      <tr>
+                        <td>${i + 1}</td>
+                        <td>${escapeHtml(s.studentName || '—')}</td>
+                        <td>${escapeHtml(s.school || '—')}</td>
+                        <td>${escapeHtml(s.className || '—')}</td>
+                        <td>${escapeHtml(s.address || '—')}</td>
+                        <td>${escapeHtml(s.phone || '—')}</td>
+                        <td>${subs[i].tier === 'premium' ? '⭐ Premium' : 'Miễn phí'}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
               </div>
-            `).join('');
+            `;
           });
         });
       } catch (e) {
@@ -260,7 +228,144 @@
       }
     }
 
-    // ---------- Duyệt thanh toán ----------
+    // ---------- 🔒 Khoá tính năng ----------
+    async function buildLockedFeaturesSection(panel) {
+      const any = LOCKABLE_FEATURES.filter((f) => f.audience === 'any');
+      const teacherOnly = LOCKABLE_FEATURES.filter((f) => f.audience !== 'any');
+      const rowHtml = (f) => `
+        <div class="free-mode-row" style="margin:8px 0;padding:10px 12px;">
+          <div class="fm-text"><div class="fm-title">${escapeHtml(f.label)}</div></div>
+          <div class="switch locked-feature-toggle ${cfg.lockedFeatures[f.id] ? 'on' : ''}" data-feature="${f.id}"><div class="knob"></div></div>
+        </div>
+      `;
+      panel.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">🔒</span>Tính năng chỉ dành cho gói Pro</h2>
+          <p class="hint" style="margin-top:-4px;">Bật tính năng nào thì gói miễn phí KHÔNG dùng được tính năng đó nữa. Chỉ có tác dụng khi công tắc tổng ở trên đang bật.</p>
+          <div class="hint" style="font-weight:700;margin:6px 0;">Trang chủ (giáo viên &amp; học sinh đều thấy)</div>
+          ${any.map(rowHtml).join('')}
+          <div class="hint" style="font-weight:700;margin:14px 0 6px;">Chỉ dành cho giáo viên</div>
+          ${teacherOnly.map(rowHtml).join('')}
+        </div>
+      `;
+      $$('.locked-feature-toggle', panel).forEach((el) => {
+        el.addEventListener('click', async () => {
+          const featureId = el.dataset.feature;
+          const next = !cfg.lockedFeatures[featureId];
+          el.classList.toggle('on', next);
+          try {
+            const lockedFeatures = Object.assign({}, cfg.lockedFeatures, { [featureId]: next });
+            await saveMonetizationConfig({ lockedFeatures });
+            cfg.lockedFeatures = lockedFeatures;
+          } catch (e) {
+            el.classList.toggle('on', !next);
+            alert('Không lưu được: ' + e.message);
+          }
+        });
+      });
+    }
+
+    // ---------- 💳 Gói & giá ----------
+    async function buildPlansSection(panel) {
+      panel.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">💳</span>Gói &amp; giá</h2>
+          <div class="field"><label for="planTeacherPrice">Giá gói Pro cho giáo viên (đ/kỳ)</label><input type="number" id="planTeacherPrice" min="0" step="1000" /></div>
+          <div class="field"><label for="planTeacherPeriod">Thời hạn 1 kỳ (số ngày)</label><input type="number" id="planTeacherPeriod" min="1" step="1" /></div>
+          <div class="field"><label for="planMaxGroups">Gói miễn phí: tối đa số nhóm</label><input type="number" id="planMaxGroups" min="0" step="1" /></div>
+          <div class="field"><label for="planMaxStudents">Gói miễn phí: tối đa số học sinh</label><input type="number" id="planMaxStudents" min="0" step="1" /></div>
+          <div class="field"><label for="planMaxChapters">Gói miễn phí: tối đa số chương tự soạn</label><input type="number" id="planMaxChapters" min="0" step="1" /></div>
+          <div class="field"><label for="planStudentPrice">Giá gói Premium cho học sinh (đ/kỳ)</label><input type="number" id="planStudentPrice" min="0" step="1000" /></div>
+          <div class="field"><label for="planStudentPeriod">Thời hạn 1 kỳ (số ngày)</label><input type="number" id="planStudentPeriod" min="1" step="1" /></div>
+          <div class="field"><label for="commissionTeacher">Hoa hồng giới thiệu giáo viên (%)</label><input type="number" id="commissionTeacher" min="0" max="100" step="1" /></div>
+          <div class="field"><label for="commissionStudent">Hoa hồng khi học sinh (trong nhóm) mua Premium (%)</label><input type="number" id="commissionStudent" min="0" max="100" step="1" /></div>
+          <button class="btn primary block" id="savePlansBtn">Lưu gói &amp; giá &amp; hoa hồng</button>
+          <div class="result-box" id="savePlansResult"></div>
+        </div>
+      `;
+      $('#planTeacherPrice').value = cfg.teacherPlan.price;
+      $('#planTeacherPeriod').value = cfg.teacherPlan.periodDays;
+      $('#planMaxGroups').value = cfg.teacherPlan.maxGroupsFree;
+      $('#planMaxStudents').value = cfg.teacherPlan.maxStudentsFree;
+      $('#planMaxChapters').value = cfg.teacherPlan.maxCustomChaptersFree;
+      $('#planStudentPrice').value = cfg.studentPlan.price;
+      $('#planStudentPeriod').value = cfg.studentPlan.periodDays;
+      $('#commissionTeacher').value = cfg.commission.teacherReferralPercent;
+      $('#commissionStudent').value = cfg.commission.studentReferralPercent;
+
+      $('#savePlansBtn').addEventListener('click', async () => {
+        const box = $('#savePlansResult');
+        showResult(box, '⏳ Đang lưu...');
+        try {
+          const partial = {
+            teacherPlan: {
+              price: Number($('#planTeacherPrice').value) || 0,
+              periodDays: Math.max(1, Number($('#planTeacherPeriod').value) || 30),
+              maxGroupsFree: Math.max(0, Number($('#planMaxGroups').value) || 0),
+              maxStudentsFree: Math.max(0, Number($('#planMaxStudents').value) || 0),
+              maxCustomChaptersFree: Math.max(0, Number($('#planMaxChapters').value) || 0)
+            },
+            studentPlan: {
+              price: Number($('#planStudentPrice').value) || 0,
+              periodDays: Math.max(1, Number($('#planStudentPeriod').value) || 30)
+            },
+            commission: {
+              teacherReferralPercent: Math.min(100, Math.max(0, Number($('#commissionTeacher').value) || 0)),
+              studentReferralPercent: Math.min(100, Math.max(0, Number($('#commissionStudent').value) || 0))
+            }
+          };
+          await saveMonetizationConfig(partial);
+          cfg = await getMonetizationConfig(true);
+          showResult(box, '✅ Đã lưu.');
+        } catch (e) {
+          showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        }
+      });
+    }
+
+    // ---------- 🏦 Thông tin chuyển khoản ----------
+    async function buildPaymentSection(panel) {
+      panel.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">🏦</span>Thông tin chuyển khoản</h2>
+          <p class="hint" style="margin-top:-4px;">Hiện cho giáo viên/học sinh khi bấm nâng cấp gói.</p>
+          <div class="field"><label for="payBank">Ngân hàng</label><input type="text" id="payBank" placeholder="VD: Vietcombank" /></div>
+          <div class="field"><label for="payAccount">Số tài khoản</label><input type="text" id="payAccount" /></div>
+          <div class="field"><label for="payHolder">Chủ tài khoản</label><input type="text" id="payHolder" /></div>
+          <div class="field"><label for="payMomo">Số MoMo (nếu có)</label><input type="text" id="payMomo" /></div>
+          <div class="field"><label for="payNote">Ghi chú thêm</label><textarea id="payNote" rows="2" placeholder="VD: Ghi rõ nội dung chuyển khoản là tên + số điện thoại"></textarea></div>
+          <button class="btn primary block" id="savePaymentInfoBtn">Lưu thông tin chuyển khoản</button>
+          <div class="result-box" id="savePaymentInfoResult"></div>
+        </div>
+      `;
+      $('#payBank').value = cfg.payment.bankName;
+      $('#payAccount').value = cfg.payment.accountNumber;
+      $('#payHolder').value = cfg.payment.accountHolder;
+      $('#payMomo').value = cfg.payment.momoNumber;
+      $('#payNote').value = cfg.payment.note;
+
+      $('#savePaymentInfoBtn').addEventListener('click', async () => {
+        const box = $('#savePaymentInfoResult');
+        showResult(box, '⏳ Đang lưu...');
+        try {
+          await saveMonetizationConfig({
+            payment: {
+              bankName: $('#payBank').value.trim(),
+              accountNumber: $('#payAccount').value.trim(),
+              accountHolder: $('#payHolder').value.trim(),
+              momoNumber: $('#payMomo').value.trim(),
+              note: $('#payNote').value.trim()
+            }
+          });
+          cfg = await getMonetizationConfig(true);
+          showResult(box, '✅ Đã lưu.');
+        } catch (e) {
+          showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        }
+      });
+    }
+
+    // ---------- 🧾 Duyệt thanh toán ----------
     async function approvePayment(sub) {
       const freshCfg = await getMonetizationConfig(true);
       const now = new Date();
@@ -298,8 +403,14 @@
       });
     }
 
+    async function buildPendingSection(panel) {
+      panel.innerHTML = `<div class="card"><h2><span class="icon">🧾</span>Duyệt thanh toán</h2><div id="pendingPaymentsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+      await renderPendingPayments();
+    }
+
     async function renderPendingPayments() {
       const box = $('#pendingPaymentsBody');
+      if (!box) return;
       try {
         const snap = await db.collection('paymentSubmissions').where('status', '==', 'pending').get();
         const list = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
@@ -327,7 +438,7 @@
             try {
               await approvePayment(sub);
               showResult(resultBox, '✅ Đã duyệt — gói đã được cấp.');
-              await Promise.all([renderPendingPayments(), renderCommissions(), renderStats(), renderTeacherRoster()]);
+              await renderPendingPayments();
             } catch (e) {
               showResult(resultBox, `⚠️ ${escapeHtml(e.message)}`, true);
               btn.disabled = false;
@@ -353,9 +464,15 @@
       }
     }
 
-    // ---------- Hoa hồng cần trả ----------
+    // ---------- 💰 Hoa hồng cần trả ----------
+    async function buildCommissionsSection(panel) {
+      panel.innerHTML = `<div class="card"><h2><span class="icon">💰</span>Hoa hồng cần trả</h2><div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+      await renderCommissions();
+    }
+
     async function renderCommissions() {
       const box = $('#commissionsBody');
+      if (!box) return;
       try {
         const snap = await db.collection('commissions').get();
         const list = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
@@ -376,7 +493,7 @@
             btn.textContent = '⏳ Đang lưu...';
             try {
               await db.collection('commissions').doc(btn.dataset.id).update({ status: 'paid', paidAt: new Date().toISOString() });
-              await Promise.all([renderCommissions(), renderStats(), renderTeacherRoster()]);
+              await renderCommissions();
             } catch (e) {
               alert('Không lưu được: ' + e.message);
               btn.disabled = false;
@@ -388,7 +505,5 @@
         box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
       }
     }
-
-    await Promise.all([renderStats(), renderTeacherRoster(), renderPendingPayments(), renderCommissions()]);
   });
 })();
