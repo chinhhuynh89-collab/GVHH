@@ -22,7 +22,18 @@
       })
       .catch((err) => console.warn('Không đăng ký được service worker:', err));
 
-    navigator.serviceWorker.addEventListener('controllerchange', showUpdateAvailableBanner);
+    // Bản mới đã giành quyền kiểm soát trang — TỰ tải lại ngay (không cần người dùng biết mà bấm),
+    // trừ khi họ đang gõ dở gì đó (1 ô nhập/textarea đang focus VÀ có nội dung) thì chỉ hiện banner
+    // để họ tự chọn lúc tải lại, tránh mất nội dung đang soạn (VD tạo đề kiểm tra, viết bài giảng).
+    let refreshed = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshed) return;
+      const active = document.activeElement;
+      const isTyping = active && /^(TEXTAREA|INPUT)$/.test(active.tagName) && active.type !== 'checkbox' && active.type !== 'radio' && active.value;
+      if (isTyping) { showUpdateAvailableBanner(); return; }
+      refreshed = true;
+      window.location.reload();
+    });
   });
 })();
 

@@ -213,16 +213,24 @@ function wireCoreFeatureTileClicks() {
     const featureId = tile.dataset.feature;
     const feature = LOCKABLE_FEATURES.find((f) => f.id === featureId && f.audience === 'any');
     if (!feature) return;
-    tile.addEventListener('click', async (e) => {
-      if (!isFirebaseConfigured()) return;
-      const cfg = await getMonetizationConfig();
-      if (!cfg.enabled || !cfg.lockedFeatures[featureId]) return; // không khoá -> mở bình thường
-      const premium = await isViewerPremium();
-      if (premium) return;
+    const href = tile.getAttribute('href');
+    tile.addEventListener('click', (e) => {
+      // preventDefault() PHẢI gọi NGAY LẬP TỨC, ĐỒNG BỘ — nếu để trong hàm async rồi gọi SAU 1
+      // await, trình duyệt đã kịp điều hướng theo href thật ngay khi bấm (trước khi phần async chạy
+      // tới dòng preventDefault), khiến việc chặn hoàn toàn không có tác dụng: đúng lỗi "hiện ngôi
+      // sao nhưng bấm vào vẫn mở được". Chặn trước, rồi mới quyết định async có cho đi tiếp hay không
+      // (đi tiếp thì tự điều hướng bằng tay qua "href" đã lưu sẵn ở trên).
       e.preventDefault();
-      if (confirm(`⭐ "${feature.label}" chỉ dành cho gói trả phí. Nâng cấp ngay?`)) {
-        window.location.href = (window.APP_BASE_PATH || './') + 'pages/nang-cap.html';
-      }
+      (async () => {
+        if (!isFirebaseConfigured()) { if (href) window.location.href = href; return; }
+        const cfg = await getMonetizationConfig();
+        if (!cfg.enabled || !cfg.lockedFeatures[featureId]) { if (href) window.location.href = href; return; }
+        const premium = await isViewerPremium();
+        if (premium) { if (href) window.location.href = href; return; }
+        if (confirm(`⭐ "${feature.label}" chỉ dành cho gói trả phí. Nâng cấp ngay?`)) {
+          window.location.href = (window.APP_BASE_PATH || './') + 'pages/nang-cap.html';
+        }
+      })();
     });
   });
 }
