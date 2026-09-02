@@ -60,6 +60,7 @@ function resizeImageToDataUrl(file) {
     try { profile = await fetchTeacherProfile(user.uid); } catch (e) { /* dùng mặc định từ Google */ }
 
     $('#profileName').value = (profile && profile.displayName) || user.displayName || '';
+    $('#profileGender').value = (profile && profile.gender) || '';
     $('#profileWorkplace').value = (profile && profile.workplace) || '';
     $('#profileBio').value = (profile && profile.bio) || '';
     $('#profilePhone').value = (profile && profile.phone) || '';
@@ -92,12 +93,15 @@ function resizeImageToDataUrl(file) {
 
     $('#profileSaveBtn').addEventListener('click', async () => {
       const name = $('#profileName').value.trim();
+      const gender = $('#profileGender').value;
       if (!name) { showResult(box, '⚠️ Nhập tên hiển thị.', true); return; }
+      if (!gender) { showResult(box, '⚠️ Chọn giới tính (Thầy/Cô) trước khi lưu.', true); return; }
       showResult(box, '⏳ Đang lưu...');
       try {
         const { db } = ensureFirebase();
         const data = {
           displayName: name,
+          gender,
           workplace: $('#profileWorkplace').value.trim(),
           bio: $('#profileBio').value.trim(),
           phone: $('#profilePhone').value.trim(),
@@ -107,9 +111,9 @@ function resizeImageToDataUrl(file) {
         };
         // Bản công khai (không có email) — dùng để cá nhân hoá trang chủ cho học sinh trong nhóm
         // của giáo viên này xem, và hiện nút liên hệ (xem js/features/branding.js). Số điện thoại/
-        // Zalo/Facebook cố ý công khai vì mục đích là để học sinh liên hệ được.
+        // Zalo/Facebook/giới tính cố ý công khai vì mục đích là để học sinh liên hệ/xưng hô đúng.
         const publicData = {
-          displayName: data.displayName, bio: data.bio,
+          displayName: data.displayName, gender: data.gender, bio: data.bio,
           phone: data.phone, zaloLink: data.zaloLink, facebookLink: data.facebookLink,
           updatedAt: data.updatedAt
         };

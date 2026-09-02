@@ -26,38 +26,41 @@
     <div class="logo-mark" id="heroLogoMark">⚗️</div>
     <h1 id="heroTitle">Trợ Lý Giáo Viên Hoá Học</h1>
     <p id="heroSubtitle">Công cụ học &amp; dạy Hoá — hoạt động hoàn toàn offline</p>
-    <div id="registerWithTeacherWrap" style="display:none;margin-top:12px;text-align:center;">
-      <button class="btn primary block" id="registerToggleBtn" type="button">📝 Đăng ký học cùng thầy (cô)</button>
-      <div class="card" id="registerFormCard" style="display:none;margin-top:12px;text-align:left;">
-        <div class="field">
-          <label for="regName">Họ và tên *</label>
-          <input type="text" id="regName" placeholder="VD: Nguyễn Văn A" />
-        </div>
-        <div class="field">
-          <label for="regSchool">Trường *</label>
-          <input type="text" id="regSchool" placeholder="VD: THPT Nguyễn Trãi" />
-        </div>
-        <div class="field">
-          <label for="regClassName">Lớp *</label>
-          <input type="text" id="regClassName" placeholder="VD: 10A1" />
-        </div>
-        <div class="field">
-          <label for="regAddress">Địa chỉ *</label>
-          <input type="text" id="regAddress" placeholder="VD: 12 Nguyễn Huệ, Quy Nhơn" />
-        </div>
-        <div class="field">
-          <label for="regPhone">Số điện thoại liên lạc *</label>
-          <input type="tel" id="regPhone" placeholder="VD: 0912345678" />
-        </div>
-        <div class="field">
-          <label for="regCode">Mã nhóm giáo viên cung cấp *</label>
-          <input type="text" id="regCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
-        </div>
-        <button class="btn primary block" id="registerSubmitBtn" type="button">Đăng ký</button>
-        <div class="result-box" id="registerResult"></div>
+    <div class="btn-row" style="margin-top:12px;">
+      <div id="registerWithTeacherWrap" style="display:none;flex:1;min-width:180px;">
+        <button class="btn primary block" id="registerToggleBtn" type="button">📝 Đăng ký học cùng thầy (cô)</button>
       </div>
+      <div id="contactTeacherWrap" style="display:none;flex:1;min-width:180px;"></div>
     </div>
-    <div id="contactTeacherWrap" style="display:none;margin-top:12px;text-align:center;"></div>
+    <div class="card" id="registerFormCard" style="display:none;margin-top:12px;text-align:left;">
+      <div class="field">
+        <label for="regName">Họ và tên *</label>
+        <input type="text" id="regName" placeholder="VD: Nguyễn Văn A" />
+      </div>
+      <div class="field">
+        <label for="regSchool">Trường *</label>
+        <input type="text" id="regSchool" placeholder="VD: THPT Nguyễn Trãi" />
+      </div>
+      <div class="field">
+        <label for="regClassName">Lớp *</label>
+        <input type="text" id="regClassName" placeholder="VD: 10A1" />
+      </div>
+      <div class="field">
+        <label for="regAddress">Địa chỉ *</label>
+        <input type="text" id="regAddress" placeholder="VD: 12 Nguyễn Huệ, Quy Nhơn" />
+      </div>
+      <div class="field">
+        <label for="regPhone">Số điện thoại liên lạc *</label>
+        <input type="tel" id="regPhone" placeholder="VD: 0912345678" />
+      </div>
+      <div class="field">
+        <label for="regCode">Mã nhóm giáo viên cung cấp *</label>
+        <input type="text" id="regCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
+      </div>
+      <button class="btn primary block" id="registerSubmitBtn" type="button">Đăng ký</button>
+      <div class="result-box" id="registerResult"></div>
+    </div>
+    <div class="btn-row" id="contactOptionsRow" style="display:none;margin-top:10px;justify-content:center;flex-wrap:wrap;"></div>
   </section>
 
   <div class="section-label">Tính năng lõi</div>

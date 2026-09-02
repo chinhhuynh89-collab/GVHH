@@ -50,8 +50,20 @@
     }
   }
 
-  renderContactButton(profile);
+  const honorific = getHonorific(profile);
+  const registerBtn = document.getElementById('registerToggleBtn');
+  if (registerBtn) registerBtn.textContent = `📝 Đăng ký học cùng ${honorific}`;
+
+  renderContactButton(profile, honorific);
 })();
+
+// Giới tính giáo viên (đặt ở trang Hồ sơ) → xưng hô "Thầy"/"Cô" đúng cho các nút mời học sinh liên
+// hệ/đăng ký. Hồ sơ cũ chưa từng chọn giới tính thì dùng lại cách gọi chung "thầy (cô)".
+function getHonorific(profile) {
+  if (profile.gender === 'female') return 'Cô';
+  if (profile.gender === 'male') return 'Thầy';
+  return 'thầy (cô)';
+}
 
 // Chuẩn hoá 1 giá trị người dùng nhập thành URL đầy đủ (tự thêm https:// nếu thiếu).
 function normalizeContactUrl(v) {
@@ -69,8 +81,9 @@ function normalizeZaloUrl(v) {
   return digits ? `https://zalo.me/${digits}` : normalizeContactUrl(trimmed);
 }
 
-function renderContactButton(profile) {
+function renderContactButton(profile, honorific) {
   const wrap = document.getElementById('contactTeacherWrap');
+  const optionsRow = document.getElementById('contactOptionsRow');
   if (!wrap) return;
   const phone = (profile.phone || '').trim();
   const zalo = normalizeZaloUrl(profile.zaloLink);
@@ -78,17 +91,17 @@ function renderContactButton(profile) {
   if (!phone && !zalo && !fb) return;
 
   wrap.style.display = 'block';
-  wrap.innerHTML = `
-    <button class="btn" id="contactToggleBtn" type="button">📞 Liên hệ với thầy (cô)</button>
-    <div class="btn-row" id="contactOptions" style="display:none;margin-top:10px;justify-content:center;flex-wrap:wrap;">
+  wrap.innerHTML = `<button class="btn primary block" id="contactToggleBtn" type="button">📞 Liên hệ với ${honorific}</button>`;
+  if (optionsRow) {
+    optionsRow.innerHTML = `
       ${phone ? `<a class="btn primary" href="tel:${escapeHtml(phone)}">📞 Gọi điện</a>` : ''}
       ${zalo ? `<a class="btn primary" href="${escapeHtml(zalo)}" target="_blank" rel="noopener">💬 Nhắn Zalo</a>` : ''}
       ${fb ? `<a class="btn primary" href="${escapeHtml(fb)}" target="_blank" rel="noopener">📘 Nhắn Facebook</a>` : ''}
-    </div>
-  `;
+    `;
+  }
   const toggleBtn = document.getElementById('contactToggleBtn');
-  const options = document.getElementById('contactOptions');
   toggleBtn.addEventListener('click', () => {
-    options.style.display = options.style.display === 'none' ? 'flex' : 'none';
+    if (!optionsRow) return;
+    optionsRow.style.display = optionsRow.style.display === 'none' ? 'flex' : 'none';
   });
 }
