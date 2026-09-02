@@ -54,8 +54,9 @@
         <input type="tel" id="regPhone" placeholder="VD: 0912345678" />
       </div>
       <div class="field">
-        <label for="regCode">Mã nhóm giáo viên cung cấp *</label>
+        <label for="regCode">Mã giáo viên *</label>
         <input type="text" id="regCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
+        <div class="hint" style="margin-top:4px;">Mã riêng của thầy/cô (xem trang "Hồ sơ" của giáo viên) — không phải mã nhóm.</div>
       </div>
       <button class="btn primary block" id="registerSubmitBtn" type="button">Đăng ký</button>
       <div class="result-box" id="registerResult"></div>
@@ -277,9 +278,9 @@
     const className = $('#regClassName').value.trim();
     const address = $('#regAddress').value.trim();
     const phone = $('#regPhone').value.trim();
-    const groupCode = $('#regCode').value.trim().toUpperCase();
+    const teacherCode = $('#regCode').value.trim().toUpperCase();
     const box = $('#registerResult');
-    if (!studentName || !school || !className || !address || !phone || !groupCode) {
+    if (!studentName || !school || !className || !address || !phone || !teacherCode) {
       showResult(box, 'Điền đầy đủ tất cả các mục (đánh dấu *) trước khi đăng ký.', true);
       return;
     }
@@ -290,13 +291,10 @@
     showResult(box, '⏳ Đang đăng ký...');
     try {
       const info = { studentName, school, className, address, phone };
-      const data = await joinGroupByCode(groupCode, info, getDeviceId());
-      setMembership(Object.assign(
-        { studentId: data.studentId, groupCode: data.groupCode, groupName: data.groupName,
-          grade: data.grade, teacherUid: data.teacherUid },
-        info
-      ));
-      showResult(box, `✓ Đã đăng ký học cùng nhóm "${escapeHtml(data.groupName)}"! Vào mục "Chương trình học tập" hoặc "Bài kiểm tra" để bắt đầu.`);
+      const data = await registerWithTeacherCode(teacherCode, info, getDeviceId());
+      showResult(box, `✓ Đã gửi đăng ký tới ${escapeHtml(data.teacherName || 'giáo viên')}! Thầy/cô sẽ xếp bạn vào nhóm học tập phù hợp.`);
+      $('#regName').value = ''; $('#regSchool').value = ''; $('#regClassName').value = '';
+      $('#regAddress').value = ''; $('#regPhone').value = ''; $('#regCode').value = '';
     } catch (e) {
       showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
     }
@@ -311,9 +309,8 @@
     if (!teacher) return;
     // Theo dõi trực tiếp (Firestore onSnapshot) — nếu trang này đang mở (VD trên điện thoại) lúc có
     // học sinh mới đăng ký ở máy khác, thông báo sẽ tự hiện ra ngay, không cần tải lại trang.
-    watchAllStudentsForCurrentTeacher((students) => {
-      const lastSeen = getStudentsLastSeen(teacher.uid);
-      const newCount = students.filter((s) => !lastSeen || (s.latestJoinedAt || '') > lastSeen).length;
+    watchPendingRegistrationsForCurrentTeacher(teacher.uid, (registrations) => {
+      const newCount = registrations.length;
       const badge = document.getElementById('manageStudentsBadge');
       const card = document.getElementById('teacherStudentsNotifyCard');
       if (newCount > 0) {
@@ -325,7 +322,7 @@
           card.style.display = 'block';
           card.innerHTML = `
             <h2><span class="icon">🔔</span>Có học sinh mới đăng ký!</h2>
-            <p class="hint">${newCount} học sinh vừa đăng ký học cùng bạn kể từ lần bạn xem gần nhất.</p>
+            <p class="hint">${newCount} học sinh đang chờ bạn xếp vào nhóm.</p>
             <a class="btn primary block" href="pages/quan-ly-hoc-sinh.html">Xem ngay</a>
           `;
         }

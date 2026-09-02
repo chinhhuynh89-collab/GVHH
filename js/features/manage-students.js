@@ -1,55 +1,127 @@
-// Trang "Quản lý học sinh": gộp TẤT CẢ học sinh đã đăng ký ở TẤT CẢ nhóm của giáo viên hiện tại
-// thành 1 danh sách duy nhất (1 học sinh có thể xuất hiện với nhiều nhóm nếu học cùng lúc), đánh
-// dấu "MỚI" cho học sinh đăng ký sau lần giáo viên xem gần nhất, rồi cập nhật lại mốc "đã xem".
+// Trang "Quản lý học sinh":
+// 1) "Học sinh chờ xếp nhóm" — học sinh đăng ký bằng MÃ GIÁO VIÊN (chưa gắn nhóm nào), giáo viên
+//    chọn 1 nhóm có sẵn để xếp vào, hoặc xoá nếu đăng ký nhầm/spam.
+// 2) "Học sinh đã có trong nhóm" — gộp TẤT CẢ học sinh đã ở trong nhóm nào đó thành 1 danh sách
+//    (1 học sinh có thể xuất hiện với nhiều nhóm nếu học cùng lúc nhiều nhóm).
 
 (function () {
   requireTeacherAuth(async (user) => {
-    const box = $('#manageStudentsBody');
-    const lastSeen = getStudentsLastSeen(user.uid);
-    box.innerHTML = '<p class="hint">⏳ Đang tải danh sách học sinh...</p>';
+    const pendingCard = $('#pendingRegistrationsCard');
+    const pendingBody = $('#pendingRegistrationsBody');
+    const assignedBody = $('#manageStudentsBody');
 
-    let students = [];
-    try {
-      students = await getAllStudentsForCurrentTeacher();
-    } catch (e) {
-      box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
-      return;
+    let groups = [];
+    try { groups = await listGroupsForCurrentTeacher(); } catch (e) { /* xử lý khi render */ }
+
+    async function renderPending() {
+      let pending = [];
+      try {
+        pending = await getPendingRegistrationsForCurrentTeacher();
+      } catch (e) {
+        pendingCard.style.display = 'block';
+        pendingBody.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+        return;
+      }
+
+      if (!pending.length) { pendingCard.style.display = 'none'; return; }
+      pendingCard.style.display = 'block';
+
+      const groupOptions = groups.map((g) => `<option value="${escapeHtml(g.groupCode)}">${escapeHtml(g.groupName)} (${escapeHtml(g.groupCode)})</option>`).join('');
+
+      pendingBody.innerHTML = pending.map((r) => `
+        <div class="card" style="margin-top:10px;background:rgba(220,38,38,0.06);">
+          <div style="font-weight:700;">${escapeHtml(r.studentName || '')}</div>
+          <div class="hint">${escapeHtml(r.school || '')} · Lớp ${escapeHtml(r.className || '')} · ${escapeHtml(r.phone || '')}</div>
+          <div class="hint">${escapeHtml(r.address || '')}</div>
+          ${groups.length ? `
+            <div class="btn-row" style="margin-top:8px;">
+              <select class="assign-group-select" data-reg="${r.id}" style="flex:1;">${groupOptions}</select>
+              <button class="btn primary assign-btn" data-reg="${r.id}" type="button">Xếp vào nhóm</button>
+            </div>
+          ` : `<p class="hint" style="margin-top:8px;">⚠️ Bạn chưa có nhóm nào — vào "Nhóm học sinh" tạo nhóm trước.</p>`}
+          <button class="btn reject-btn" data-reg="${r.id}" type="button" style="margin-top:8px;">Xoá đăng ký này</button>
+          <div class="result-box" id="reg-result-${r.id}"></div>
+        </div>
+      `).join('');
+
+      $$('.assign-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const regId = btn.dataset.reg;
+          const reg = pending.find((r) => r.id === regId);
+          const select = document.querySelector(`.assign-group-select[data-reg="${regId}"]`);
+          const box = document.getElementById(`reg-result-${regId}`);
+          showResult(box, '⏳ Đang xếp vào nhóm...');
+          try {
+            await assignRegistrationToGroup(reg, select.value);
+            showResult(box, '✓ Đã xếp vào nhóm!');
+            await renderPending();
+            await renderAssigned();
+          } catch (e) {
+            showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+          }
+        });
+      });
+      $$('.reject-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const regId = btn.dataset.reg;
+          if (!confirm('Xoá đăng ký này? Học sinh sẽ không được xếp vào nhóm nào.')) return;
+          const box = document.getElementById(`reg-result-${regId}`);
+          showResult(box, '⏳ Đang xoá...');
+          try {
+            await rejectRegistration(regId);
+            await renderPending();
+          } catch (e) {
+            showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+          }
+        });
+      });
     }
 
-    if (!students.length) {
-      box.innerHTML = '<p class="hint">Chưa có học sinh nào đăng ký học cùng bạn.</p>';
-      markStudentsSeenNow(user.uid);
-      return;
-    }
+    async function renderAssigned() {
+      assignedBody.innerHTML = '<p class="hint">⏳ Đang tải danh sách học sinh...</p>';
+      let students = [];
+      try {
+        students = await getAllStudentsForCurrentTeacher();
+      } catch (e) {
+        assignedBody.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+        return;
+      }
 
-    const rows = students.map((s, i) => {
-      const isNew = !!lastSeen && (s.latestJoinedAt || '') > lastSeen;
-      const groupsText = s.groups.map((g) => escapeHtml(g.groupName)).join(', ');
-      return `
-        <tr${isNew ? ' style="background:rgba(220,38,38,0.08);"' : ''}>
-          <td>${i + 1}${isNew ? ' <span class="badge" style="position:static;display:inline-block;background:#dc2626;color:#fff;">MỚI</span>' : ''}</td>
-          <td>${escapeHtml(s.studentName || '')}</td>
-          <td>${escapeHtml(s.school || '')}</td>
-          <td>${escapeHtml(s.className || '')}</td>
-          <td>${escapeHtml(s.address || '')}</td>
-          <td>${escapeHtml(s.phone || '')}</td>
-          <td>${groupsText}</td>
-          <td>${escapeHtml((s.latestJoinedAt || '').slice(0, 10))}</td>
-        </tr>
+      if (!students.length) {
+        assignedBody.innerHTML = '<p class="hint">Chưa có học sinh nào trong nhóm.</p>';
+        return;
+      }
+
+      const rows = students.map((s, i) => {
+        const groupsText = s.groups.map((g) => escapeHtml(g.groupName)).join(', ');
+        return `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${escapeHtml(s.studentName || '')}</td>
+            <td>${escapeHtml(s.school || '')}</td>
+            <td>${escapeHtml(s.className || '')}</td>
+            <td>${escapeHtml(s.address || '')}</td>
+            <td>${escapeHtml(s.phone || '')}</td>
+            <td>${groupsText}</td>
+            <td>${escapeHtml((s.latestJoinedAt || '').slice(0, 10))}</td>
+          </tr>
+        `;
+      }).join('');
+
+      assignedBody.innerHTML = `
+        <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
+        <div class="roster-table-wrap">
+          <table class="roster-table">
+            <thead>
+              <tr><th>STT</th><th>Họ tên</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
       `;
-    }).join('');
+    }
 
-    box.innerHTML = `
-      <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
-      <div class="roster-table-wrap">
-        <table class="roster-table">
-          <thead>
-            <tr><th>STT</th><th>Họ tên</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Đăng ký gần nhất</th></tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    `;
-    markStudentsSeenNow(user.uid);
+    await renderPending();
+    await renderAssigned();
   });
 })();

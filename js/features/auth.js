@@ -108,22 +108,39 @@ async function fetchTeacherProfile(uid) {
   return snap.exists ? snap.data() : null;
 }
 
+// Sinh 1 mã ngắn (6 ký tự, giống mã nhóm) rồi kiểm tra chưa ai dùng trong teacherProfiles.teacherCode
+// — dùng làm "mã giáo viên" riêng cho mỗi tài khoản để học sinh đăng ký thẳng (không cần mã nhóm).
+async function genUniqueTeacherCode(db) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // bỏ ký tự dễ nhầm (0,O,1,I)
+  let code, attempts = 0;
+  do {
+    code = '';
+    for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+    const clash = await db.collection('teacherProfiles').where('teacherCode', '==', code).limit(1).get();
+    if (clash.empty) break;
+    attempts++;
+  } while (attempts < 5);
+  return code;
+}
+
 async function ensureTeacherProfile(user) {
   const { db } = ensureFirebase();
   const ref = db.collection('teachers').doc(user.uid);
   const snap = await ref.get();
   if (!snap.exists) {
+    const teacherCode = await genUniqueTeacherCode(db);
     await Promise.all([
       ref.set({
         displayName: user.displayName || '',
         email: user.email || '',
         photoURL: user.photoURL || '',
+        teacherCode,
         createdAt: new Date().toISOString()
       }),
       // Gieo sẵn bản công khai (không có email) bằng tên/ảnh Google — để trang chủ cá nhân hoá
       // được ngay từ lần đăng nhập đầu tiên, giáo viên có thể tự đổi sau ở trang "Hồ sơ".
       db.collection('teacherProfiles').doc(user.uid).set({
-        displayName: user.displayName || '', photoURL: user.photoURL || '', bio: '',
+        displayName: user.displayName || '', photoURL: user.photoURL || '', bio: '', teacherCode,
         createdAt: new Date().toISOString()
       })
     ]);

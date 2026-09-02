@@ -41,6 +41,25 @@ async function joinGroupByCode(groupCode, info, deviceId) {
   };
 }
 
+// Đăng ký "chờ xếp nhóm" bằng MÃ GIÁO VIÊN (không cần biết mã nhóm cụ thể) — dùng cho nút "Đăng ký
+// học cùng thầy (cô)" ở trang chủ. Giáo viên nhận thông báo rồi tự xếp học sinh vào 1 nhóm sau, xem
+// js/features/groups-data.js (getPendingRegistrationsForCurrentTeacher/assignRegistrationToGroup).
+// info = { studentName, school, className, address, phone }.
+async function registerWithTeacherCode(teacherCode, info, deviceId) {
+  const { db } = ensureFirebase();
+  const code = (teacherCode || '').trim().toUpperCase();
+  const profileSnap = await db.collection('teacherProfiles').where('teacherCode', '==', code).limit(1).get();
+  if (profileSnap.empty) throw new Error(`Không tìm thấy giáo viên với mã "${code}"`);
+  const teacherDoc = profileSnap.docs[0];
+  const teacherProfile = teacherDoc.data();
+
+  const ref = await db.collection('studentRegistrations').add(Object.assign(
+    { teacherUid: teacherDoc.id, teacherCode: code, deviceId, status: 'pending', createdAt: new Date().toISOString() },
+    info
+  ));
+  return { registrationId: ref.id, teacherUid: teacherDoc.id, teacherName: teacherProfile.displayName || '' };
+}
+
 function initJoinGroupPage() {
   if (!isFirebaseConfigured()) {
     $('#joinBody').innerHTML = `<div class="card"><p class="hint">⚠️ Tính năng nhóm chưa được giáo viên bật (chưa kết nối Firebase).</p></div>`;

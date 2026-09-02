@@ -151,38 +151,55 @@ async function getAllStudentsForCurrentTeacher() {
   return mergeStudentsAcrossGroups(groups.map((group, i) => ({ group, students: perGroup[i] })));
 }
 
-// Theo dõi TRỰC TIẾP (Firestore onSnapshot) học sinh đăng ký ở tất cả nhóm của giáo viên hiện tại —
-// gọi lại callback(students) mỗi khi có thay đổi, để trang ĐANG MỞ (VD trang chủ trên điện thoại
-// giáo viên) tự cập nhật thông báo "có học sinh mới" mà không cần bấm tải lại trang. Lưu ý: đây
-// KHÔNG phải push notification hệ thống (không dùng Cloud Functions/FCM nên không làm được) — chỉ
-// cập nhật khi trang đang mở trên màn hình. Trả về hàm huỷ theo dõi (unsubscribe).
-async function watchAllStudentsForCurrentTeacher(callback) {
-  const groups = await listGroupsForCurrentTeacher();
-  if (!groups.length) { callback([]); return () => {}; }
+// ---------- Học sinh đăng ký bằng MÃ GIÁO VIÊN, chờ xếp vào 1 nhóm cụ thể ----------
+// Khác với students/joinGroupByCode (đăng ký thẳng vào 1 nhóm bằng MÃ NHÓM): học sinh chỉ cần MÃ
+// GIÁO VIÊN — giáo viên nhận thông báo ngay (xem watchPendingRegistrationsForCurrentTeacher), rồi
+// mới tự xếp học sinh vào đúng nhóm (assignRegistrationToGroup). Xem js/features/join-group.js.
+
+async function getPendingRegistrationsForCurrentTeacher() {
+  const teacher = getCurrentTeacher();
+  if (!teacher) return [];
   const { db } = ensureFirebase();
-  const cachedByGroupCode = new Map();
-
-  function emit() {
-    const groupsWithStudents = groups
-      .filter((g) => cachedByGroupCode.has(g.groupCode))
-      .map((g) => ({ group: g, students: cachedByGroupCode.get(g.groupCode) }));
-    callback(mergeStudentsAcrossGroups(groupsWithStudents));
-  }
-
-  const unsubs = groups.map((g) => db.collection('students').where('groupCode', '==', g.groupCode)
-    .onSnapshot((snap) => {
-      cachedByGroupCode.set(g.groupCode, snap.docs.map((d) => Object.assign({ id: d.id }, d.data())));
-      emit();
-    }, () => { /* im lặng bỏ qua lỗi mạng */ }));
-
-  return () => unsubs.forEach((u) => u());
+  const snap = await db.collection('studentRegistrations')
+    .where('teacherUid', '==', teacher.uid).where('status', '==', 'pending').get();
+  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 }
 
-// "Đã xem" danh sách học sinh mới đăng ký lần cuối lúc nào — lưu cục bộ theo từng giáo viên (không
-// cần Firestore) để tính số học sinh MỚI hiện trên huy hiệu đỏ ở trang chủ.
-function getStudentsSeenKey(teacherUid) { return `hoahoc_students_seen_${teacherUid}`; }
-function getStudentsLastSeen(teacherUid) { return localStorage.getItem(getStudentsSeenKey(teacherUid)) || ''; }
-function markStudentsSeenNow(teacherUid) { localStorage.setItem(getStudentsSeenKey(teacherUid), new Date().toISOString()); }
+// Theo dõi TRỰC TIẾP (Firestore onSnapshot) học sinh đang chờ xếp nhóm của giáo viên hiện tại — gọi
+// lại callback(registrations) mỗi khi có thay đổi, để trang ĐANG MỞ (VD trang chủ trên điện thoại
+// giáo viên) tự hiện thông báo ngay, không cần tải lại trang. Lưu ý: đây KHÔNG phải push notification
+// hệ thống (không dùng Cloud Functions/FCM nên không làm được) — chỉ cập nhật khi trang đang mở.
+function watchPendingRegistrationsForCurrentTeacher(teacherUid, callback) {
+  const { db } = ensureFirebase();
+  return db.collection('studentRegistrations')
+    .where('teacherUid', '==', teacherUid).where('status', '==', 'pending')
+    .onSnapshot((snap) => {
+      callback(snap.docs.map((d) => Object.assign({ id: d.id }, d.data())));
+    }, () => { /* im lặng bỏ qua lỗi mạng */ });
+}
+
+// Giáo viên xếp 1 học sinh đang chờ vào 1 nhóm cụ thể: tạo bản ghi "students" bình thường (giống hệt
+// học sinh tự vào nhóm bằng mã) rồi xoá khỏi danh sách chờ.
+async function assignRegistrationToGroup(registration, groupCode) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  await db.collection('students').add({
+    groupCode, deviceId: registration.deviceId, joinedAt: new Date().toISOString(),
+    studentName: registration.studentName, school: registration.school,
+    className: registration.className, address: registration.address, phone: registration.phone
+  });
+  await db.collection('studentRegistrations').doc(registration.id).delete();
+}
+
+// Từ chối/xoá 1 đăng ký chờ (VD đăng ký nhầm, spam) — không tạo học sinh vào nhóm nào cả.
+async function rejectRegistration(registrationId) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  await db.collection('studentRegistrations').doc(registrationId).delete();
+}
 
 // Hoạt động học tập theo từng chương, GỘP TẤT CẢ NHÓM của giáo viên hiện tại — dùng để hiện
 // "N nhóm đang học · M học sinh" ngay trên trang "Học theo chương" khi giáo viên xem, để dễ quan

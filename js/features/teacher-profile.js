@@ -68,6 +68,25 @@ function resizeImageToDataUrl(file) {
     $('#profileFacebook').value = (profile && profile.facebookLink) || '';
     updatePhotoPreview((profile && profile.photoURL) || user.photoURL || '');
 
+    // Hồ sơ tạo trước khi có tính năng "mã giáo viên" sẽ chưa có teacherCode — sinh bù ngay đây.
+    let teacherCode = profile && profile.teacherCode;
+    if (teacherCode) {
+      $('#profileTeacherCode').textContent = teacherCode;
+    } else {
+      $('#profileTeacherCode').textContent = '⏳ đang tạo...';
+      try {
+        const { db } = ensureFirebase();
+        teacherCode = await genUniqueTeacherCode(db);
+        await Promise.all([
+          db.collection('teachers').doc(user.uid).set({ teacherCode }, { merge: true }),
+          db.collection('teacherProfiles').doc(user.uid).set({ teacherCode }, { merge: true })
+        ]);
+        $('#profileTeacherCode').textContent = teacherCode;
+      } catch (e) {
+        $('#profileTeacherCode').textContent = '⚠️ chưa tạo được, tải lại trang để thử lại';
+      }
+    }
+
     $('#profilePhotoBtn').addEventListener('click', () => $('#profilePhotoInput').click());
 
     $('#profilePhotoInput').addEventListener('change', async (e) => {
