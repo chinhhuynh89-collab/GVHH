@@ -18,26 +18,31 @@
 </header>
 
 <main id="groupManagerBody">
-  <div class="card">
-    <h2><span class="icon">➕</span>Tạo nhóm mới</h2>
-    <div class="field">
-      <label for="groupName">Tên nhóm</label>
-      <input type="text" id="groupName" placeholder="VD: 6A1 - Trường THCS ABC" />
-    </div>
-    <div class="field">
-      <label for="groupGrade">Khối lớp</label>
-      <select id="groupGrade"></select>
-    </div>
-    <div class="field">
-      <label>Chương được giao cho nhóm này</label>
-      <div id="groupChapters"></div>
-    </div>
-    <button class="btn primary block" id="groupCreateBtn">Tạo nhóm</button>
-    <div class="result-box" id="groupCreateResult"></div>
-  </div>
-
   <div class="section-label">Danh sách nhóm</div>
   <div class="chapter-list" id="groupList"></div>
+
+  <div class="card">
+    <button class="btn primary block" id="groupCreateToggleBtn">➕ Tạo nhóm mới</button>
+    <div id="groupCreateForm" style="display:none;margin-top:14px;">
+      <div class="field">
+        <label for="groupName">Tên nhóm</label>
+        <input type="text" id="groupName" placeholder="VD: 6A1 - Trường THCS ABC" />
+      </div>
+      <div class="field">
+        <label for="groupGrade">Khối lớp</label>
+        <select id="groupGrade"></select>
+      </div>
+      <div class="field">
+        <label>Chương được giao cho nhóm này</label>
+        <div id="groupChapters"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="groupCreateBtn" style="flex:1;">Tạo nhóm</button>
+        <button class="btn" id="groupCreateCancelBtn">Huỷ</button>
+      </div>
+      <div class="result-box" id="groupCreateResult"></div>
+    </div>
+  </div>
 
   <p class="footer-note">Gửi mã nhóm cho học sinh để các em tham gia (trang "Vào nhóm học tập" từ màn hình chính).</p>
 </main>

@@ -50,6 +50,19 @@
 
   $('#groupGrade').addEventListener('change', renderChapterChecklist);
 
+  $('#groupCreateToggleBtn').addEventListener('click', () => {
+    $('#groupCreateForm').style.display = 'block';
+    $('#groupCreateToggleBtn').style.display = 'none';
+    $('#groupName').focus();
+  });
+
+  $('#groupCreateCancelBtn').addEventListener('click', () => {
+    $('#groupCreateForm').style.display = 'none';
+    $('#groupCreateToggleBtn').style.display = 'flex';
+    $('#groupName').value = '';
+    hideResult($('#groupCreateResult'));
+  });
+
   $('#groupCreateBtn').addEventListener('click', async () => {
     const groupName = $('#groupName').value.trim();
     const grade = parseInt($('#groupGrade').value, 10);
