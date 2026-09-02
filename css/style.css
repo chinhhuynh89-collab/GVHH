@@ -781,6 +781,14 @@ sub { font-size: 0.72em; }
 
 ::selection { background: rgba(20, 184, 166, 0.35); }
 
+/* Bảng danh sách học sinh (Nhóm học sinh) */
+.roster-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.roster-table { width: 100%; border-collapse: collapse; font-size: calc(13px * var(--font-scale)); white-space: nowrap; }
+.roster-table th, .roster-table td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.roster-table th { background: var(--surface-2); color: var(--text-dim); font-weight: 700; font-size: calc(11.5px * var(--font-scale)); text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
+.roster-table tbody tr:last-child td { border-bottom: none; }
+.roster-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+
 /* Nút tăng/giảm cỡ chữ nổi (xem app.js) */
 #fontSizeControl {
   position: fixed;

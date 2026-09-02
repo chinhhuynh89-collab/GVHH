@@ -88,15 +88,36 @@
           const students = await getStudentsForGroup(groupCode);
           box.dataset.loaded = '1';
           if (!students.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào tham gia.</p>'; return; }
-          box.innerHTML = students.map((s, i) => `
-            <div class="quiz-review-item" style="text-align:left;">
-              <div class="qi-q">${i + 1}. ${escapeHtml(s.studentName || '(chưa rõ tên)')}</div>
-              <div class="hint">Trường: ${escapeHtml(s.school || '—')} · Lớp: ${escapeHtml(s.className || '—')}</div>
-              <div class="hint">Địa chỉ: ${escapeHtml(s.address || '—')}</div>
-              <div class="hint">SĐT: ${escapeHtml(s.phone || '—')}</div>
-              <div class="hint">Tham gia lúc: ${s.joinedAt ? new Date(s.joinedAt).toLocaleString('vi-VN') : '—'}</div>
+          box.innerHTML = `
+            <div class="roster-table-wrap">
+              <table class="roster-table">
+                <thead>
+                  <tr>
+                    <th>STT</th>
+                    <th>Họ tên</th>
+                    <th>Địa chỉ</th>
+                    <th>Trường</th>
+                    <th>Lớp</th>
+                    <th>SĐT</th>
+                    <th>Tham gia lúc</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${students.map((s, i) => `
+                    <tr>
+                      <td>${i + 1}</td>
+                      <td>${escapeHtml(s.studentName || '—')}</td>
+                      <td>${escapeHtml(s.address || '—')}</td>
+                      <td>${escapeHtml(s.school || '—')}</td>
+                      <td>${escapeHtml(s.className || '—')}</td>
+                      <td>${escapeHtml(s.phone || '—')}</td>
+                      <td>${s.joinedAt ? new Date(s.joinedAt).toLocaleString('vi-VN') : '—'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
             </div>
-          `).join('');
+          `;
         } catch (e) {
           box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
         }
