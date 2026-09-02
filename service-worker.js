@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v46';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v47';
 const ASSETS = [
   './',
   './index.html',
@@ -42,6 +42,7 @@ const ASSETS = [
   './js/features/exam-stats.js',
   './js/features/teacher-exam-monitor.js',
   './js/features/branding.js',
+  './js/features/manage-students.js',
   './js/vendor/pdfjs/pdf.min.js',
   './js/vendor/pdfjs/pdf.worker.min.js',
   './js/vendor/firebase/firebase-app-compat.js',
@@ -55,6 +56,7 @@ const ASSETS = [
   './pages/ket-noi-dong-bo.html',
   './pages/ho-so.html',
   './pages/nhom-hoc-sinh.html',
+  './pages/quan-ly-hoc-sinh.html',
   './pages/vao-nhom.html',
   './pages/tao-de-kiem-tra.html',
   './pages/kiem-tra.html',

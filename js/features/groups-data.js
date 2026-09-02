@@ -124,6 +124,36 @@ async function getGroupLearningResults(group) {
   return results;
 }
 
+// Toàn bộ học sinh đã đăng ký ở TẤT CẢ nhóm của giáo viên hiện tại, gộp theo SĐT (vì 1 học sinh có
+// thể học cùng lúc nhiều nhóm — mỗi nhóm là 1 bản ghi "students" riêng) — mỗi học sinh chỉ xuất hiện
+// 1 lần kèm danh sách các nhóm đang học. Sắp xếp theo lần đăng ký gần nhất giảm dần (mới nhất lên đầu).
+async function getAllStudentsForCurrentTeacher() {
+  const groups = await listGroupsForCurrentTeacher();
+  if (!groups.length) return [];
+
+  const perGroup = await Promise.all(groups.map((g) => getStudentsForGroup(g.groupCode)));
+  const byKey = new Map();
+  groups.forEach((group, i) => {
+    perGroup[i].forEach((s) => {
+      const key = (s.phone || '').trim() || s.id;
+      if (!byKey.has(key)) {
+        byKey.set(key, Object.assign({}, s, { groups: [], latestJoinedAt: s.joinedAt }));
+      }
+      const merged = byKey.get(key);
+      merged.groups.push({ groupCode: group.groupCode, groupName: group.groupName, joinedAt: s.joinedAt });
+      if ((s.joinedAt || '') > (merged.latestJoinedAt || '')) merged.latestJoinedAt = s.joinedAt;
+    });
+  });
+
+  return Array.from(byKey.values()).sort((a, b) => (b.latestJoinedAt || '').localeCompare(a.latestJoinedAt || ''));
+}
+
+// "Đã xem" danh sách học sinh mới đăng ký lần cuối lúc nào — lưu cục bộ theo từng giáo viên (không
+// cần Firestore) để tính số học sinh MỚI hiện trên huy hiệu đỏ ở trang chủ.
+function getStudentsSeenKey(teacherUid) { return `hoahoc_students_seen_${teacherUid}`; }
+function getStudentsLastSeen(teacherUid) { return localStorage.getItem(getStudentsSeenKey(teacherUid)) || ''; }
+function markStudentsSeenNow(teacherUid) { localStorage.setItem(getStudentsSeenKey(teacherUid), new Date().toISOString()); }
+
 // Hoạt động học tập theo từng chương, GỘP TẤT CẢ NHÓM của giáo viên hiện tại — dùng để hiện
 // "N nhóm đang học · M học sinh" ngay trên trang "Học theo chương" khi giáo viên xem, để dễ quan
 // sát nhóm nào đang học chương nào mà không cần vào từng nhóm riêng lẻ.

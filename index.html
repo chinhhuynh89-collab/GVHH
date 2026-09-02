@@ -26,6 +26,37 @@
     <div class="logo-mark" id="heroLogoMark">⚗️</div>
     <h1 id="heroTitle">Trợ Lý Giáo Viên Hoá Học</h1>
     <p id="heroSubtitle">Công cụ học &amp; dạy Hoá — hoạt động hoàn toàn offline</p>
+    <div id="registerWithTeacherWrap" style="display:none;margin-top:12px;text-align:center;">
+      <button class="btn primary block" id="registerToggleBtn" type="button">📝 Đăng ký học cùng thầy (cô)</button>
+      <div class="card" id="registerFormCard" style="display:none;margin-top:12px;text-align:left;">
+        <div class="field">
+          <label for="regName">Họ và tên *</label>
+          <input type="text" id="regName" placeholder="VD: Nguyễn Văn A" />
+        </div>
+        <div class="field">
+          <label for="regSchool">Trường *</label>
+          <input type="text" id="regSchool" placeholder="VD: THPT Nguyễn Trãi" />
+        </div>
+        <div class="field">
+          <label for="regClassName">Lớp *</label>
+          <input type="text" id="regClassName" placeholder="VD: 10A1" />
+        </div>
+        <div class="field">
+          <label for="regAddress">Địa chỉ *</label>
+          <input type="text" id="regAddress" placeholder="VD: 12 Nguyễn Huệ, Quy Nhơn" />
+        </div>
+        <div class="field">
+          <label for="regPhone">Số điện thoại liên lạc *</label>
+          <input type="tel" id="regPhone" placeholder="VD: 0912345678" />
+        </div>
+        <div class="field">
+          <label for="regCode">Mã nhóm giáo viên cung cấp *</label>
+          <input type="text" id="regCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
+        </div>
+        <button class="btn primary block" id="registerSubmitBtn" type="button">Đăng ký</button>
+        <div class="result-box" id="registerResult"></div>
+      </div>
+    </div>
     <div id="contactTeacherWrap" style="display:none;margin-top:12px;text-align:center;"></div>
   </section>
 
@@ -83,6 +114,13 @@
         <div class="tile-icon">👥</div>
         <div class="tile-title">Nhóm học sinh</div>
         <div class="tile-desc">Tạo nhóm, giao chương, tạo đề kiểm tra tự động, xem thống kê</div>
+      </a>
+
+      <a class="tile is-active" href="pages/quan-ly-hoc-sinh.html">
+        <span class="badge" id="manageStudentsBadge" style="display:none;background:#dc2626;color:#fff;">0</span>
+        <div class="tile-icon">🧑‍🎓</div>
+        <div class="tile-title">Quản lý học sinh</div>
+        <div class="tile-desc">Danh sách học sinh đã đăng ký học cùng bạn ở tất cả các nhóm</div>
       </a>
 
       <a class="tile is-active" href="pages/ho-so.html">
@@ -172,6 +210,7 @@
 <script src="js/features/auth.js"></script>
 <script src="js/features/device-id.js"></script>
 <script src="js/features/join-group.js"></script>
+<script src="js/features/groups-data.js"></script>
 <script src="js/features/teacher-exam-monitor.js"></script>
 <script src="js/features/branding.js"></script>
 <script>
@@ -181,6 +220,7 @@
     $('#rolePickerCard').style.display = role ? 'none' : 'block';
     $('#teacherSection').style.display = role === 'teacher' ? 'block' : 'none';
     $('#studentSection').style.display = role === 'student' ? 'block' : 'none';
+    $('#registerWithTeacherWrap').style.display = role === 'student' ? 'block' : 'none';
   }
   $('#pickTeacherBtn').addEventListener('click', () => { setRole('teacher'); renderRoleSections(); });
   $('#pickStudentBtn').addEventListener('click', () => { setRole('student'); renderRoleSections(); });
@@ -215,6 +255,66 @@
       <p class="hint">${escapeHtml(active.examTitle || (active.chapterTitles || []).join(', '))} — ${active.questions.length} câu — ${active.durationMinutes} phút</p>
       <a class="btn primary block" href="pages/kiem-tra.html">Vào làm bài ngay</a>
     `;
+  } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
+})();
+</script>
+<script>
+(function () {
+  const toggleBtn = document.getElementById('registerToggleBtn');
+  const formCard = document.getElementById('registerFormCard');
+  if (!toggleBtn) return;
+  toggleBtn.addEventListener('click', () => {
+    formCard.style.display = formCard.style.display === 'none' ? 'block' : 'none';
+  });
+
+  document.getElementById('registerSubmitBtn').addEventListener('click', async () => {
+    const studentName = $('#regName').value.trim();
+    const school = $('#regSchool').value.trim();
+    const className = $('#regClassName').value.trim();
+    const address = $('#regAddress').value.trim();
+    const phone = $('#regPhone').value.trim();
+    const groupCode = $('#regCode').value.trim().toUpperCase();
+    const box = $('#registerResult');
+    if (!studentName || !school || !className || !address || !phone || !groupCode) {
+      showResult(box, 'Điền đầy đủ tất cả các mục (đánh dấu *) trước khi đăng ký.', true);
+      return;
+    }
+    if (!isFirebaseConfigured()) {
+      showResult(box, '⚠️ Chưa kết nối Firebase.', true);
+      return;
+    }
+    showResult(box, '⏳ Đang đăng ký...');
+    try {
+      const info = { studentName, school, className, address, phone };
+      const data = await joinGroupByCode(groupCode, info, getDeviceId());
+      setMembership(Object.assign(
+        { studentId: data.studentId, groupCode: data.groupCode, groupName: data.groupName,
+          grade: data.grade, teacherUid: data.teacherUid },
+        info
+      ));
+      showResult(box, `✓ Đã đăng ký học cùng nhóm "${escapeHtml(data.groupName)}"! Vào mục "Chương trình học tập" hoặc "Bài kiểm tra" để bắt đầu.`);
+    } catch (e) {
+      showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+    }
+  });
+})();
+</script>
+<script>
+(async function () {
+  if (!isFirebaseConfigured()) return;
+  try {
+    const teacher = await waitForAuthReady();
+    if (!teacher) return;
+    const students = await getAllStudentsForCurrentTeacher();
+    const lastSeen = getStudentsLastSeen(teacher.uid);
+    const newCount = students.filter((s) => !lastSeen || (s.latestJoinedAt || '') > lastSeen).length;
+    if (newCount > 0) {
+      const badge = document.getElementById('manageStudentsBadge');
+      if (badge) {
+        badge.textContent = newCount > 99 ? '99+' : String(newCount);
+        badge.style.display = 'inline-block';
+      }
+    }
   } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
 })();
 </script>
