@@ -305,9 +305,16 @@
     }
   });
 
+  function applyHeaderTitle() {
+    const title = viewerMode === 'teacher' ? 'Tạo chương trình giảng dạy' : 'Chương trình học tập';
+    $('#pageHeaderTitle').textContent = title;
+    document.title = title + ' — Trợ Lý Giáo Viên Hoá Học';
+  }
+
   (async function init() {
     await initContext();
     if (viewerMode === 'guest' || viewerMode === 'no-firebase') { renderGate(); return; }
+    applyHeaderTitle();
     $('#overviewWrap').style.display = 'block';
     buildTabs();
     await renderCurrentTab();
