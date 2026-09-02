@@ -109,41 +109,63 @@
   </div>
 
   <div class="tab-panel" id="tabQuiz">
-    <div class="card" id="quizManagerSection" style="display:none;">
-      <button class="btn block" id="quizManagerToggle">✏️ Tạo câu hỏi trắc nghiệm</button>
+    <div class="card" id="quizStudentMenu" style="display:none;">
+      <h2><span class="icon">📝</span>Trắc nghiệm</h2>
+      <p class="hint" style="margin-top:-4px;">Chọn cách học bên dưới.</p>
+      <div class="btn-row">
+        <button class="btn primary" id="quizMenuReviewBtn" style="flex:1;">📖 Ôn tập</button>
+        <button class="btn primary" id="quizMenuSelfTestBtn" style="flex:1;">🎯 Kiểm tra thử</button>
+      </div>
+    </div>
 
-      <div id="quizFormWrap" style="display:none;">
-        <div id="quizManagerBody" style="margin-top:12px;"></div>
+    <div class="card" id="quizTeacherMenu" style="display:none;">
+      <h2><span class="icon">📝</span>Trắc nghiệm</h2>
+      <p class="hint" style="margin-top:-4px;">Chọn 1 thao tác để quản lý câu hỏi của chương này.</p>
+      <div class="action-grid">
+        <button class="btn" id="quizMenuEditBtn">📋 Sửa câu hỏi trắc nghiệm</button>
+        <button class="btn" id="quizMenuManualBtn">✍️ Tạo câu hỏi thủ công</button>
+        <button class="btn" id="quizMenuTxtBtn">📄 Nạp file txt</button>
+        <button class="btn" id="quizMenuExcelBtn">📊 Nạp file Excel/CSV</button>
+        <button class="btn" id="quizTemplateBtn">⬇️ Tải mẫu Excel</button>
+      </div>
+    </div>
 
-        <div class="hint" style="margin-top:16px;font-weight:700;">Thêm câu hỏi mới</div>
-        <button class="btn block" id="quizFormAddBtn" style="margin-top:8px;">+ Thêm câu hỏi</button>
-        <div id="quizForm" style="display:none;margin-top:14px;">
-          <div class="field">
-            <label for="quizFormQ">Câu hỏi</label>
-            <input type="text" id="quizFormQ" />
-          </div>
-          <div class="field">
-            <label>4 đáp án — chọn đáp án đúng</label>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="0" checked /><input type="text" id="quizFormOpt0" placeholder="Đáp án A" style="flex:1;" /></div>
-              <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="1" /><input type="text" id="quizFormOpt1" placeholder="Đáp án B" style="flex:1;" /></div>
-              <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="2" /><input type="text" id="quizFormOpt2" placeholder="Đáp án C" style="flex:1;" /></div>
-              <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="3" /><input type="text" id="quizFormOpt3" placeholder="Đáp án D" style="flex:1;" /></div>
-            </div>
-          </div>
-          <div class="field">
-            <label for="quizFormExplain">Giải thích (tuỳ chọn)</label>
-            <input type="text" id="quizFormExplain" />
-          </div>
-          <div class="btn-row">
-            <button class="btn primary" id="quizFormSave">Lưu câu hỏi</button>
-            <button class="btn" id="quizFormCancel">Huỷ</button>
+    <button class="btn block" id="quizBackToMenuBtn" style="display:none;margin-bottom:12px;">← Quay lại</button>
+
+    <div class="card" id="quizEditSection" style="display:none;">
+      <h2><span class="icon">📋</span>Sửa câu hỏi trắc nghiệm</h2>
+      <button class="btn block" id="quizFormAddBtn" style="margin:10px 0;">+ Thêm câu hỏi</button>
+      <div id="quizForm" style="display:none;margin-bottom:14px;">
+        <div class="field">
+          <label for="quizFormQ">Câu hỏi</label>
+          <input type="text" id="quizFormQ" />
+        </div>
+        <div class="field">
+          <label>4 đáp án — chọn đáp án đúng</label>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="0" checked /><input type="text" id="quizFormOpt0" placeholder="Đáp án A" style="flex:1;" /></div>
+            <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="1" /><input type="text" id="quizFormOpt1" placeholder="Đáp án B" style="flex:1;" /></div>
+            <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="2" /><input type="text" id="quizFormOpt2" placeholder="Đáp án C" style="flex:1;" /></div>
+            <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="3" /><input type="text" id="quizFormOpt3" placeholder="Đáp án D" style="flex:1;" /></div>
           </div>
         </div>
+        <div class="field">
+          <label for="quizFormExplain">Giải thích (tuỳ chọn)</label>
+          <input type="text" id="quizFormExplain" />
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="quizFormSave">Lưu câu hỏi</button>
+          <button class="btn" id="quizFormCancel">Huỷ</button>
+        </div>
+      </div>
+      <div id="quizManagerBody"></div>
+    </div>
 
-        <div class="hint" style="margin-top:16px;">
-          <strong>Nạp hàng loạt từ file .txt</strong> theo mẫu:<br>
-          <code style="display:block;background:var(--bg-soft);padding:8px;border-radius:8px;margin-top:6px;white-space:pre-wrap;">Câu hỏi ở đây?
+    <div class="card" id="quizTxtCard" style="display:none;">
+      <h2><span class="icon">📄</span>Nạp file câu hỏi (.txt)</h2>
+      <div class="hint">
+        <strong>Định dạng mẫu:</strong><br>
+        <code style="display:block;background:var(--bg-soft);padding:8px;border-radius:8px;margin-top:6px;white-space:pre-wrap;">Câu hỏi ở đây?
 A) Đáp án A
 B) Đáp án B
 C) Đáp án C
@@ -152,21 +174,18 @@ D) Đáp án D
 Giải thích: nội dung (tuỳ chọn)
 
 (Để trống 1 dòng rồi viết câu tiếp theo...)</code>
-        </div>
-        <input type="file" id="quizBulkFileInput" accept=".txt" style="display:none;" />
-        <button class="btn block" id="quizBulkBtn" style="margin-top:10px;">+ Nạp file câu hỏi (.txt)</button>
-        <div id="quizBulkResult"></div>
-
-        <div class="hint" style="margin-top:16px;">
-          <strong>Hoặc nạp từ Excel (.xlsx) / CSV</strong> — theo đúng 7 cột thứ tự: Câu hỏi, Đáp án A, B, C, D, Đáp án đúng (A/B/C/D), Giải thích. Tải mẫu về, mở bằng Excel/Google Sheets, điền theo hàng, lưu lại rồi nạp lên.
-        </div>
-        <div class="btn-row" style="margin-top:8px;">
-          <button class="btn" id="quizTemplateBtn">⬇️ Tải mẫu Excel</button>
-          <button class="btn block" id="quizExcelBtn" style="flex:1;">+ Nạp file Excel/CSV</button>
-        </div>
-        <input type="file" id="quizExcelFileInput" accept=".xlsx,.csv" style="display:none;" />
-        <div id="quizExcelResult"></div>
       </div>
+      <input type="file" id="quizBulkFileInput" accept=".txt" style="display:none;" />
+      <button class="btn primary block" id="quizBulkBtn" style="margin-top:10px;">+ Chọn file .txt</button>
+      <div id="quizBulkResult"></div>
+    </div>
+
+    <div class="card" id="quizExcelCard" style="display:none;">
+      <h2><span class="icon">📊</span>Nạp file Excel/CSV</h2>
+      <div class="hint">Theo đúng 7 cột thứ tự: Câu hỏi, Đáp án A, B, C, D, Đáp án đúng (A/B/C/D), Giải thích. Tải mẫu ở màn hình trước, mở bằng Excel/Google Sheets, điền theo hàng, lưu lại rồi nạp lên.</div>
+      <input type="file" id="quizExcelFileInput" accept=".xlsx,.csv" style="display:none;" />
+      <button class="btn primary block" id="quizExcelBtn" style="margin-top:10px;">+ Chọn file Excel/CSV</button>
+      <div id="quizExcelResult"></div>
     </div>
 
     <div class="card" id="selfTestCard" style="display:none;">
@@ -195,8 +214,10 @@ Giải thích: nội dung (tuỳ chọn)
       <div id="selfTestRunning" style="display:none;"></div>
     </div>
 
-    <div class="section-label">Ôn tập (làm hết câu hỏi, xem đáp án ngay)</div>
-    <div class="card" id="quizWrap"></div>
+    <div id="quizReviewSection" style="display:none;">
+      <div class="section-label">Ôn tập (làm hết câu hỏi, xem đáp án ngay)</div>
+      <div class="card" id="quizWrap"></div>
+    </div>
   </div>
 </main>
 

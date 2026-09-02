@@ -493,14 +493,14 @@
   }
 
   function initSelfTest() {
+    // Không tự hiện #selfTestCard nữa — chỉ chuẩn bị dữ liệu/wiring, còn hiển thị do menu Trắc
+    // nghiệm điều khiển (xem initQuizMenu) khi học sinh bấm "🎯 Kiểm tra thử".
     const total = effectiveQuiz.length;
     if (total < 5) {
-      $('#selfTestCard').style.display = 'block';
       $('#selfTestSetup').style.display = 'none';
       $('#selfTestNotEnough').style.display = 'block';
       return;
     }
-    $('#selfTestCard').style.display = 'block';
     const validCounts = SELF_TEST_COUNT_OPTIONS.filter((n) => n <= total);
     if (!validCounts.includes(total)) validCounts.push(total);
     const defaultCount = validCounts.includes(10) ? 10 : validCounts[validCounts.length - 1];
@@ -627,7 +627,7 @@
   function renderQuiz() {
     const total = effectiveQuiz.length;
     if (!total) {
-      $('#quizWrap').innerHTML = `<p class="hint">📝 Chương này chưa có câu hỏi trắc nghiệm.${owner.isOwner ? ' Hãy thêm câu hỏi ở phần "Tạo câu hỏi trắc nghiệm" phía trên.' : ''}</p>`;
+      $('#quizWrap').innerHTML = '<p class="hint">📝 Chương này chưa có câu hỏi trắc nghiệm.</p>';
       return;
     }
     if (qFinished) { renderQuizResult(); return; }
@@ -782,13 +782,6 @@
 
   function initQuizManager() {
     if (!owner.isOwner) return;
-    $('#quizManagerSection').style.display = 'block';
-    $('#quizManagerToggle').addEventListener('click', () => {
-      const wrap = $('#quizFormWrap');
-      const open = wrap.style.display !== 'none';
-      wrap.style.display = open ? 'none' : 'block';
-      $('#quizManagerToggle').textContent = open ? '✏️ Tạo câu hỏi trắc nghiệm' : '✏️ Ẩn tạo câu hỏi trắc nghiệm';
-    });
 
     $('#quizFormAddBtn').addEventListener('click', () => openQuizForm(null));
     $('#quizFormCancel').addEventListener('click', () => { $('#quizForm').style.display = 'none'; });
@@ -869,6 +862,37 @@
     });
   }
 
+  // ---------- Menu tab Trắc nghiệm: bấm vào mới hiện đúng 1 khung tương ứng, có nút "Quay lại" ----------
+  // Học sinh thấy 2 lối vào (Ôn tập / Kiểm tra thử); giáo viên thấy 5 thao tác quản lý câu hỏi.
+  const QUIZ_SECTION_IDS = ['quizEditSection', 'quizTxtCard', 'quizExcelCard', 'selfTestCard', 'quizReviewSection'];
+
+  function showQuizSection(sectionId) {
+    $('#quizStudentMenu').style.display = 'none';
+    $('#quizTeacherMenu').style.display = 'none';
+    QUIZ_SECTION_IDS.forEach((id) => { $('#' + id).style.display = id === sectionId ? 'block' : 'none'; });
+    $('#quizBackToMenuBtn').style.display = 'block';
+  }
+
+  function showQuizMenu() {
+    $('#quizBackToMenuBtn').style.display = 'none';
+    QUIZ_SECTION_IDS.forEach((id) => { $('#' + id).style.display = 'none'; });
+    $('#quizStudentMenu').style.display = owner.isOwner ? 'none' : 'block';
+    $('#quizTeacherMenu').style.display = owner.isOwner ? 'block' : 'none';
+  }
+
+  function initQuizMenu() {
+    $('#quizMenuReviewBtn').addEventListener('click', () => showQuizSection('quizReviewSection'));
+    $('#quizMenuSelfTestBtn').addEventListener('click', () => showQuizSection('selfTestCard'));
+    if (owner.isOwner) {
+      $('#quizMenuEditBtn').addEventListener('click', () => showQuizSection('quizEditSection'));
+      $('#quizMenuManualBtn').addEventListener('click', () => { showQuizSection('quizEditSection'); openQuizForm(null); });
+      $('#quizMenuTxtBtn').addEventListener('click', () => showQuizSection('quizTxtCard'));
+      $('#quizMenuExcelBtn').addEventListener('click', () => showQuizSection('quizExcelCard'));
+    }
+    $('#quizBackToMenuBtn').addEventListener('click', showQuizMenu);
+    showQuizMenu();
+  }
+
   async function init() {
     owner = isFirebaseConfigured() ? await resolveContentOwner() : { uid: null, isOwner: false };
     initHeaderEdit();
@@ -902,6 +926,7 @@
       renderQuizManager();
       initQuizManager();
     }
+    initQuizMenu();
     refreshDots();
     initTabs(document);
   }
