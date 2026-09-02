@@ -58,8 +58,14 @@ async function createExamForCurrentTeacher(examInput) {
       const code = $('#examGroup').value;
       currentGroup = groups.find((g) => g.groupCode === code);
       if (!currentGroup) { $('#examChapter').innerHTML = ''; return; }
-      const chapters = getChaptersByGrade(currentGroup.grade).filter((c) => currentGroup.chapterIds.includes(c.id));
-      $('#examChapter').innerHTML = chapters.map((c) => `<option value="${c.id}">Chương ${c.order}. ${escapeHtml(c.title)}</option>`).join('');
+      // Chương của 1 nhóm có thể đến từ nhiều khối lớp khác nhau (chương trình riêng) — tra theo
+      // đúng chapterIds của nhóm thay vì lọc theo 1 khối duy nhất.
+      const chapters = currentGroup.chapterIds
+        .map((id) => findChapterAnywhere(id))
+        .filter(Boolean);
+      $('#examChapter').innerHTML = chapters.map(({ chapter, grade }) =>
+        `<option value="${chapter.id}">Lớp ${grade} - Chương ${chapter.order}. ${escapeHtml(chapter.title)}</option>`
+      ).join('');
       await onChapterChange();
     }
 

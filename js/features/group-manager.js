@@ -1,26 +1,48 @@
 // Giao diện trang "Nhóm học sinh": tạo nhóm mới + danh sách nhóm của giáo viên đang đăng nhập.
 // Các hàm đọc/ghi Firestore dùng chung nằm ở groups-data.js.
+//
+// Chương trình học của 1 nhóm không còn bị gò vào 1 khối lớp duy nhất — giáo viên chọn tự do
+// chương từ bất kỳ khối nào để ghép chương trình riêng (VD: bồi dưỡng học sinh nâng cao bằng
+// chương của khối trên, hoặc phụ đạo học sinh yếu bằng chương của khối dưới). "Lớp" hiện trong
+// danh sách nhóm chỉ còn là NHÃN mô tả, tự suy ra từ các khối có chương được chọn.
 
 (function () {
   requireTeacherAuth(async () => {
-    renderGradeOptions();
+    renderQuickGradeOptions();
     renderChapterChecklist();
     renderGroupList();
   });
 
-  function renderGradeOptions() {
-    $('#groupGrade').innerHTML = GRADES.map((g) => `<option value="${g.grade}">${g.label}</option>`).join('');
+  function renderQuickGradeOptions() {
+    $('#groupQuickGrade').innerHTML = GRADES.map((g) => `<option value="${g.grade}">${g.label}</option>`).join('');
   }
 
   function renderChapterChecklist() {
-    const grade = parseInt($('#groupGrade').value, 10);
-    const chapters = getChaptersByGrade(grade);
-    $('#groupChapters').innerHTML = chapters.map((c) => `
-      <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
-        <input type="checkbox" class="chapter-check" value="${c.id}" checked style="margin-top:3px;" />
-        <span>Chương ${c.order}. ${escapeHtml(c.title)}${!hasContent(c) ? ' <span class="hint">(chưa có nội dung)</span>' : ''}</span>
-      </label>
-    `).join('');
+    $('#groupChapters').innerHTML = GRADES.map((g) => {
+      const chapters = getChaptersByGrade(g.grade);
+      if (!chapters.length) return '';
+      return `
+        <div class="hint" style="font-weight:700;margin:10px 0 6px;">${escapeHtml(g.label)}</div>
+        ${chapters.map((c) => `
+          <label data-grade="${g.grade}" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" class="chapter-check" value="${c.id}" style="margin-top:3px;" />
+            <span>Chương ${c.order}. ${escapeHtml(c.title)}${!hasContent(c) ? ' <span class="hint">(chưa có nội dung)</span>' : ''}</span>
+          </label>
+        `).join('')}
+      `;
+    }).join('');
+  }
+
+  // Nhãn "lớp" hiển thị trong danh sách nhóm — tự suy ra từ khối của các chương đã chọn, không
+  // còn là 1 lựa chọn riêng của giáo viên.
+  function computeGradeLabel(chapterIds) {
+    const grades = new Set();
+    chapterIds.forEach((id) => {
+      const found = findChapterAnywhere(id);
+      if (found) grades.add(found.grade);
+    });
+    const sorted = Array.from(grades).sort((a, b) => a - b);
+    return sorted.length ? sorted.join(', ') : '—';
   }
 
   async function renderGroupList() {
@@ -33,7 +55,7 @@
         <div class="chapter-card">
           <div class="cc-icon">👥</div>
           <div class="cc-body">
-            <div class="cc-order">Lớp ${g.grade} · Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
+            <div class="cc-order">Lớp ${escapeHtml(String(g.grade))} · Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
             <div class="cc-title">${escapeHtml(g.groupName)}</div>
             <div class="cc-desc">${g.studentCount} học sinh đã tham gia · ${g.chapterIds.length} chương được giao</div>
             <div class="btn-row" style="margin-top:8px;">
@@ -48,7 +70,17 @@
     }
   }
 
-  $('#groupGrade').addEventListener('change', renderChapterChecklist);
+  $('#groupQuickSelectBtn').addEventListener('click', () => {
+    const grade = $('#groupQuickGrade').value;
+    $$(`label[data-grade="${grade}"]`).forEach((label) => {
+      const cb = $('.chapter-check', label);
+      if (cb) cb.checked = true;
+    });
+  });
+
+  $('#groupUnselectAllBtn').addEventListener('click', () => {
+    $$('.chapter-check').forEach((cb) => { cb.checked = false; });
+  });
 
   $('#groupCreateToggleBtn').addEventListener('click', () => {
     $('#groupCreateForm').style.display = 'block';
@@ -65,10 +97,11 @@
 
   $('#groupCreateBtn').addEventListener('click', async () => {
     const groupName = $('#groupName').value.trim();
-    const grade = parseInt($('#groupGrade').value, 10);
     const chapterIds = $$('.chapter-check').filter((c) => c.checked).map((c) => c.value);
     const box = $('#groupCreateResult');
     if (!groupName) { showResult(box, 'Nhập tên nhóm.', true); return; }
+    if (!chapterIds.length) { showResult(box, 'Chọn ít nhất 1 chương cho nhóm.', true); return; }
+    const grade = computeGradeLabel(chapterIds);
     showResult(box, '⏳ Đang tạo nhóm...');
     try {
       const group = await createGroupForCurrentTeacher(groupName, grade, chapterIds);

@@ -29,12 +29,14 @@
         <input type="text" id="groupName" placeholder="VD: 6A1 - Trường THCS ABC" />
       </div>
       <div class="field">
-        <label for="groupGrade">Khối lớp</label>
-        <select id="groupGrade"></select>
-      </div>
-      <div class="field">
-        <label>Chương được giao cho nhóm này</label>
-        <div id="groupChapters"></div>
+        <label>Chương trình học của nhóm</label>
+        <p class="hint" style="margin-top:-2px;">Chọn chương bất kỳ, có thể lấy từ nhiều khối lớp khác nhau — dùng để ghép chương trình riêng cho nhóm (VD: bồi dưỡng học sinh nâng cao bằng chương của khối trên, hoặc phụ đạo học sinh yếu bằng chương của khối dưới).</p>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <select id="groupQuickGrade" style="flex:1;"></select>
+          <button class="btn" id="groupQuickSelectBtn" type="button">Chọn cả khối</button>
+        </div>
+        <div id="groupChapters" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:9px;padding:10px;"></div>
+        <button class="btn" id="groupUnselectAllBtn" type="button" style="margin-top:8px;">Bỏ chọn tất cả</button>
       </div>
       <div class="btn-row">
         <button class="btn primary" id="groupCreateBtn" style="flex:1;">Tạo nhóm</button>
