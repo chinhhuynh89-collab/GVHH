@@ -38,14 +38,22 @@
     fillForm();
 
     function renderLockedFeatures() {
-      $('#lockedFeaturesBody').innerHTML = LOCKABLE_FEATURES.map((f) => `
+      const any = LOCKABLE_FEATURES.filter((f) => f.audience === 'any');
+      const teacherOnly = LOCKABLE_FEATURES.filter((f) => f.audience !== 'any');
+      const rowHtml = (f) => `
         <div class="free-mode-row" style="margin:8px 0;padding:10px 12px;">
           <div class="fm-text">
             <div class="fm-title">${escapeHtml(f.label)}</div>
           </div>
           <div class="switch locked-feature-toggle ${cfg.lockedFeatures[f.id] ? 'on' : ''}" data-feature="${f.id}"><div class="knob"></div></div>
         </div>
-      `).join('');
+      `;
+      $('#lockedFeaturesBody').innerHTML = `
+        <div class="hint" style="font-weight:700;margin:6px 0;">Trang chủ (giáo viên &amp; học sinh đều thấy)</div>
+        ${any.map(rowHtml).join('')}
+        <div class="hint" style="font-weight:700;margin:14px 0 6px;">Chỉ dành cho giáo viên</div>
+        ${teacherOnly.map(rowHtml).join('')}
+      `;
       $$('.locked-feature-toggle').forEach((el) => {
         el.addEventListener('click', async () => {
           const featureId = el.dataset.feature;

@@ -26,6 +26,7 @@
     <div class="logo-mark" id="heroLogoMark">⚗️</div>
     <h1 id="heroTitle">Trợ Lý Giáo Viên Hoá Học</h1>
     <p id="heroSubtitle">Công cụ học &amp; dạy Hoá — hoạt động hoàn toàn offline</p>
+    <div id="teacherStatusBadge" style="display:none;margin-top:6px;"></div>
     <div class="btn-row" style="margin-top:12px;">
       <div id="registerWithTeacherWrap" style="display:none;flex:1;min-width:180px;">
         <button class="btn primary block" id="registerToggleBtn" type="button">📝 Đăng ký học cùng thầy (cô)</button>
@@ -67,21 +68,21 @@
 
   <div class="section-label">Tính năng lõi</div>
   <div class="tile-grid">
-    <a class="tile is-active" href="pages/bang-tuan-hoan.html">
+    <a class="tile is-active" href="pages/bang-tuan-hoan.html" data-feature="periodicTable">
       <span class="badge free">Miễn phí</span>
       <div class="tile-icon">🧪</div>
       <div class="tile-title">Bảng tuần hoàn</div>
       <div class="tile-desc">Tra cứu 118 nguyên tố, cấu hình electron, tính chất, ứng dụng</div>
     </a>
 
-    <a class="tile is-active" href="pages/cong-cu-tinh-toan.html">
+    <a class="tile is-active" href="pages/cong-cu-tinh-toan.html" data-feature="calculator">
       <span class="badge free">Miễn phí</span>
       <div class="tile-icon">🧮</div>
       <div class="tile-title">Công cụ tính toán</div>
       <div class="tile-desc">Mol, nồng độ, pH, độ tan, hiệu suất phản ứng</div>
     </a>
 
-    <a class="tile is-active" href="pages/can-bang-phuong-trinh.html">
+    <a class="tile is-active" href="pages/can-bang-phuong-trinh.html" data-feature="equationBalancer">
       <span class="badge free">Miễn phí</span>
       <div class="tile-icon">⚖️</div>
       <div class="tile-title">Cân bằng phương trình</div>
@@ -143,9 +144,9 @@
     </div>
 
     <div class="card" id="studentUpgradeCard" style="display:none;">
-      <h2><span class="icon">⭐</span>Nâng cấp Premium</h2>
+      <h2><span class="icon">⭐</span>Gói của bạn</h2>
       <p class="hint" style="margin-top:-4px;" id="studentUpgradeDesc"></p>
-      <a class="btn primary block" href="pages/nang-cap.html">⭐ Nâng cấp ngay</a>
+      <a class="btn primary block" id="studentUpgradeBtn" href="pages/nang-cap.html" style="display:none;">⭐ Nâng cấp ngay</a>
     </div>
 
     <div class="card" id="studentShareCard" style="display:none;">
@@ -462,18 +463,26 @@
     if (isAdminUser(user)) $('#adminTile').style.display = '';
   } catch (e) { /* ignore */ }
 
-  // Banner "Nâng cấp Premium" cho học sinh — chỉ hiện khi admin đã bật công tắc tổng và học sinh
-  // chưa có gói Premium.
+  // Thẻ "Gói của bạn" cho học sinh — hiện "HS-mã-Premium/Miễn phí", chỉ khi admin đã bật công tắc
+  // tổng. Nút "Nâng cấp ngay" chỉ hiện khi chưa có Premium.
   try {
     const membership = typeof getMembership === 'function' ? getMembership() : null;
     if (!membership || !membership.groupCode) return;
     const cfg = await getMonetizationConfig();
     if (!cfg.enabled) return;
     const sub = await getStudentSubscription(getDeviceId());
-    if (sub.tier === 'premium') return;
-    $('#studentUpgradeDesc').textContent = `Mở khoá tính năng nâng cao — chỉ ${formatVnd(cfg.studentPlan.price)}/${cfg.studentPlan.periodDays} ngày.`;
+    const isPremium = sub.tier === 'premium';
+    const code = shortStudentCode(membership.studentId);
+    $('#studentUpgradeDesc').innerHTML = isPremium
+      ? `<strong>HS-${escapeHtml(code)}-Premium</strong> — hết hạn ${escapeHtml((sub.expiresAt || '').slice(0, 10))}.`
+      : `<strong>HS-${escapeHtml(code)}-Miễn phí</strong> — mở khoá tính năng nâng cao chỉ ${formatVnd(cfg.studentPlan.price)}/${cfg.studentPlan.periodDays} ngày.`;
+    $('#studentUpgradeBtn').style.display = isPremium ? 'none' : 'block';
     $('#studentUpgradeCard').style.display = 'block';
   } catch (e) { /* ignore */ }
+
+  // Khoá các tile "Tính năng lõi" (Bảng tuần hoàn, Công cụ tính toán, Cân bằng phương trình) nếu
+  // admin đã bật khoá cho tile đó và người xem chưa có gói trả phí (xem monetization.js).
+  try { await applyCoreFeatureLocks(); } catch (e) { /* ignore */ }
 })();
 </script>
 </body>

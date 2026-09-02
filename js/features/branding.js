@@ -76,7 +76,31 @@
   // Nút "Liên hệ" chỉ dành cho học sinh liên hệ giáo viên — ẩn khi chính giáo viên đang xem trang
   // của mình (không cần nút gọi/nhắn cho chính mình).
   if (!isOwnTeacher) renderContactButton(profile, honorific);
+
+  // Nhãn "GV-mã-Pro/Miễn phí" — hiện cho CẢ giáo viên (xem trang của mình) lẫn học sinh (xem trang
+  // giáo viên của nhóm mình), nhưng nút "Nâng cấp ngay" chỉ hiện cho chính giáo viên (chỉ họ nâng
+  // cấp được gói của mình). Ẩn hẳn nếu admin chưa mở chiến dịch kinh doanh (config.enabled=false).
+  if (profile.teacherCode && typeof getMonetizationConfig === 'function') renderTeacherStatusBadge(teacherUid, profile.teacherCode, isOwnTeacher);
 })();
+
+async function renderTeacherStatusBadge(teacherUid, teacherCode, isOwnTeacher) {
+  try {
+    const cfg = await getMonetizationConfig();
+    if (!cfg.enabled) return;
+    const sub = await getTeacherSubscription(teacherUid);
+    const isPro = sub.tier === 'pro';
+    const box = document.getElementById('teacherStatusBadge');
+    if (!box) return;
+    const badgeStyle = isPro
+      ? 'background:rgba(52,211,153,0.18);color:var(--ok);'
+      : 'background:rgba(245,158,11,0.18);color:var(--accent);';
+    box.innerHTML = `
+      <span style="display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;${badgeStyle}">GV-${escapeHtml(teacherCode)}-${isPro ? 'Pro' : 'Miễn phí'}</span>
+      ${isOwnTeacher && !isPro ? ` <a class="btn primary" href="pages/nang-cap.html" style="padding:3px 10px;font-size:12px;">⭐ Nâng cấp lên Pro</a>` : ''}
+    `;
+    box.style.display = 'block';
+  } catch (e) { /* ignore */ }
+}
 
 // Bấm ảnh đại diện ở trang chủ để xem toàn màn hình. Wiring đóng lại (bấm nền hoặc nút ✕) chạy
 // ngay khi nạp trang, không phụ thuộc việc có xác định được giáo viên hay không.
