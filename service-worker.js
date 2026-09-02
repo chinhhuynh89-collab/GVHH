@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v83';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v84';
 const ASSETS = [
   './',
   './index.html',
@@ -92,17 +92,24 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    // GHIM vào ĐÚNG cache của bản đang chạy (CACHE_NAME) — trước đây dùng caches.match(request) tìm
+    // xuyên qua TẤT CẢ cache đang có trong origin (không riêng bản mới nhất). Nếu cache CŨ của 1 bản
+    // trước đó vì lý do gì chưa kịp xoá (activate() xoá cache cũ chạy song song, không đảm bảo xong
+    // trước fetch đầu tiên) thì 1 vài file (VD style.css) có thể vẫn lấy nhầm bản CŨ trong khi các
+    // file khác (VD index.html) đã là bản MỚI — giao diện bị "nửa mới nửa cũ" rất khó nhận ra. Ghim
+    // cứng vào CACHE_NAME đảm bảo mọi file luôn đồng bộ CÙNG 1 phiên bản.
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.match(event.request).then((cached) => {
+        const network = fetch(event.request)
+          .then((response) => {
+            if (response && response.status === 200 && response.type === 'basic') {
+              cache.put(event.request, response.clone());
+            }
+            return response;
+          })
+          .catch(() => cached);
+        return cached || network;
+      })
+    )
   );
 });
