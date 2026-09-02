@@ -68,24 +68,21 @@ function resizeImageToDataUrl(file) {
     $('#profileFacebook').value = (profile && profile.facebookLink) || '';
     updatePhotoPreview((profile && profile.photoURL) || user.photoURL || '');
 
-    // Hồ sơ tạo trước khi có tính năng "mã giáo viên" sẽ chưa có teacherCode — sinh bù ngay đây.
+    // Hồ sơ tạo trước khi có tính năng "mã giáo viên" sẽ chưa có teacherCode lưu sẵn — mã này tính
+    // thẳng từ uid nên hiện được ngay lập tức, không cần chờ Firestore; chỉ cần lưu lại (nền, không
+    // chặn hiển thị) để lần đăng ký của học sinh tra cứu được bằng mã.
     let teacherCode = profile && profile.teacherCode;
-    if (teacherCode) {
-      $('#profileTeacherCode').textContent = teacherCode;
-    } else {
-      $('#profileTeacherCode').textContent = '⏳ đang tạo...';
+    if (!teacherCode) {
+      teacherCode = deriveTeacherCode(user.uid);
       try {
         const { db } = ensureFirebase();
-        teacherCode = await genUniqueTeacherCode(db);
         await Promise.all([
           db.collection('teachers').doc(user.uid).set({ teacherCode }, { merge: true }),
           db.collection('teacherProfiles').doc(user.uid).set({ teacherCode }, { merge: true })
         ]);
-        $('#profileTeacherCode').textContent = teacherCode;
-      } catch (e) {
-        $('#profileTeacherCode').textContent = '⚠️ chưa tạo được, tải lại trang để thử lại';
-      }
+      } catch (e) { /* mã vẫn hiện đúng (tính được ngay) — sẽ lưu lại ở lần ghé trang sau */ }
     }
+    $('#profileTeacherCode').textContent = teacherCode;
 
     $('#profilePhotoBtn').addEventListener('click', () => $('#profilePhotoInput').click());
 

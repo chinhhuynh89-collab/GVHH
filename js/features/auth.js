@@ -108,18 +108,20 @@ async function fetchTeacherProfile(uid) {
   return snap.exists ? snap.data() : null;
 }
 
-// Sinh 1 mã ngắn (6 ký tự, giống mã nhóm) rồi kiểm tra chưa ai dùng trong teacherProfiles.teacherCode
-// — dùng làm "mã giáo viên" riêng cho mỗi tài khoản để học sinh đăng ký thẳng (không cần mã nhóm).
-async function genUniqueTeacherCode(db) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // bỏ ký tự dễ nhầm (0,O,1,I)
-  let code, attempts = 0;
-  do {
-    code = '';
-    for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-    const clash = await db.collection('teacherProfiles').where('teacherCode', '==', code).limit(1).get();
-    if (clash.empty) break;
-    attempts++;
-  } while (attempts < 5);
+// Mã giáo viên CỐ ĐỊNH — tính thẳng từ uid tài khoản (không random, không cần dò trùng qua
+// Firestore, không có rủi ro 2 giáo viên đăng nhập cùng lúc bị trùng mã như cách random+kiểm tra cũ):
+// cùng 1 tài khoản luôn ra đúng 1 mã, vĩnh viễn không đổi. Vì uid Firebase vốn đã duy nhất tuyệt đối
+// nên 2 tài khoản khác nhau gần như không thể ra trùng mã (không gian mã 32^6 ≈ 1 tỷ tổ hợp, đủ an
+// toàn cho quy mô số giáo viên dùng app này).
+function deriveTeacherCode(uid) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 ký tự, bỏ ký tự dễ nhầm (0,O,1,I)
+  let hash = 5381;
+  for (let i = 0; i < uid.length; i++) hash = ((hash * 33) ^ uid.charCodeAt(i)) >>> 0;
+  // Cắt 6 lát 5-bit KHÔNG chồng nhau từ hash 32-bit (bit 0-4, 5-9, ... 25-29) thay vì lặp lại phép
+  // nhân/mod 32 nhiều vòng — vì 32 là luỹ thừa của 2, phép nhân/mod 32 lặp lại chỉ phụ thuộc 5 bit
+  // thấp nhất của hash (bỏ phí gần hết 32 bit), khiến toàn bộ mã chỉ còn 32 khả năng thay vì ~1 tỷ.
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars.charAt((hash >>> (i * 5)) & 31);
   return code;
 }
 
@@ -128,7 +130,7 @@ async function ensureTeacherProfile(user) {
   const ref = db.collection('teachers').doc(user.uid);
   const snap = await ref.get();
   if (!snap.exists) {
-    const teacherCode = await genUniqueTeacherCode(db);
+    const teacherCode = deriveTeacherCode(user.uid);
     await Promise.all([
       ref.set({
         displayName: user.displayName || '',
