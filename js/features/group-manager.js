@@ -104,6 +104,10 @@
               <button class="btn chapters-toggle" data-group="${escapeHtml(g.groupCode)}">📘 Sửa chương trình học</button>
               <a class="btn" href="tao-de-kiem-tra.html?group=${encodeURIComponent(g.groupCode)}">📝 Tạo đề kiểm tra</a>
               <a class="btn" href="thong-ke.html?group=${encodeURIComponent(g.groupCode)}">📈 Thống kê từng đợt</a>
+              ${g.zaloGroupLink
+                ? `<a class="btn" href="${escapeHtml(g.zaloGroupLink)}" target="_blank" rel="noopener">💬 Nhắn Zalo nhóm</a>
+                   <button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="${escapeHtml(g.zaloGroupLink)}">✏️ Sửa link Zalo</button>`
+                : `<button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="">💬 + Thêm link Zalo nhóm</button>`}
             </div>
             <div class="roster-box" id="roster-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
             <div class="results-box" id="results-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
@@ -115,6 +119,7 @@
       wireResultsToggles();
       wireChaptersEditToggles();
       wireFreeModeToggles();
+      wireZaloEditButtons();
     } catch (e) {
       box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
     }
@@ -154,6 +159,34 @@
         }
       });
     });
+  }
+
+  // Thêm/sửa link nhóm Zalo cho 1 nhóm đã tồn tại — dùng khi tạo nhóm chưa nhập, hoặc muốn đổi link
+  // (VD nhóm Zalo cũ giải tán, tạo nhóm mới). Chỉ giáo viên thấy nút này.
+  function wireZaloEditButtons() {
+    $$('.zalo-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const groupId = btn.dataset.groupId;
+        const current = btn.dataset.current || '';
+        const input = prompt('Link nhóm Zalo (dán link từ Zalo, để trống để xoá):', current);
+        if (input === null) return; // bấm Huỷ
+        const zaloGroupLink = normalizeGroupZaloUrl(input.trim());
+        try {
+          await updateGroupZaloLink(groupId, zaloGroupLink);
+          const group = groupsCache.find((g) => g.id === groupId);
+          if (group) group.zaloGroupLink = zaloGroupLink;
+          renderGroupList();
+        } catch (e) {
+          alert('Không lưu được: ' + e.message);
+        }
+      });
+    });
+  }
+
+  // Tự thêm https:// nếu giáo viên dán thiếu — Zalo thường cho sẵn link đầy đủ nhưng phòng khi gõ tay.
+  function normalizeGroupZaloUrl(v) {
+    if (!v) return '';
+    return /^https?:\/\//i.test(v) ? v : `https://${v}`;
   }
 
   function wireRosterToggles() {
@@ -332,11 +365,13 @@
     $('#groupCreateForm').style.display = 'none';
     $('#groupCreateToggleBtn').style.display = 'flex';
     $('#groupName').value = '';
+    $('#groupZaloLink').value = '';
     hideResult($('#groupCreateResult'));
   });
 
   $('#groupCreateBtn').addEventListener('click', async () => {
     const groupName = $('#groupName').value.trim();
+    const zaloGroupLink = normalizeGroupZaloUrl($('#groupZaloLink').value.trim());
     const chapterIds = $$('.chapter-check', $('#groupChapters')).filter((c) => c.checked).map((c) => c.value);
     const box = $('#groupCreateResult');
     if (!groupName) { showResult(box, 'Nhập tên nhóm.', true); return; }
@@ -344,9 +379,10 @@
     const grade = computeGradeLabel(chapterIds);
     showResult(box, '⏳ Đang tạo nhóm...');
     try {
-      const group = await createGroupForCurrentTeacher(groupName, grade, chapterIds);
+      const group = await createGroupForCurrentTeacher(groupName, grade, chapterIds, zaloGroupLink);
       showResult(box, `✓ Đã tạo nhóm "${escapeHtml(group.groupName)}" — mã nhóm: <strong style="color:var(--brand);">${escapeHtml(group.groupCode)}</strong>. Gửi mã này cho học sinh để các em tham gia.`);
       $('#groupName').value = '';
+      $('#groupZaloLink').value = '';
       renderGroupList();
       setTimeout(() => {
         $('#groupCreateForm').style.display = 'none';

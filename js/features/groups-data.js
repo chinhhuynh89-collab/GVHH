@@ -12,7 +12,7 @@ function genGroupCodeClient() {
   return code;
 }
 
-async function createGroupForCurrentTeacher(groupName, grade, chapterIds) {
+async function createGroupForCurrentTeacher(groupName, grade, chapterIds, zaloGroupLink) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
@@ -27,10 +27,20 @@ async function createGroupForCurrentTeacher(groupName, grade, chapterIds) {
 
   const group = {
     teacherUid: teacher.uid, groupCode: code, groupName, grade,
-    chapterIds: chapterIds || [], createdAt: new Date().toISOString()
+    chapterIds: chapterIds || [], zaloGroupLink: zaloGroupLink || '', createdAt: new Date().toISOString()
   };
   await db.collection('groups').add(group);
   return group;
+}
+
+// Sửa/thêm link nhóm Zalo cho 1 nhóm đã tồn tại (VD nhóm tạo trước khi có tính năng này, hoặc giáo
+// viên đổi link nhóm Zalo mới). Chỉ giáo viên dùng để nhắn tin nhanh cho cả nhóm — học sinh không
+// thấy link này trong app.
+async function updateGroupZaloLink(groupId, zaloGroupLink) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  await db.collection('groups').doc(groupId).update({ zaloGroupLink: zaloGroupLink || '' });
 }
 
 async function listGroupsForCurrentTeacher() {
