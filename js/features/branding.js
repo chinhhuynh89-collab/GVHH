@@ -39,6 +39,8 @@
     if (heroSub) heroSub.textContent = profile.bio;
   }
 
+  let hasCornerImg = false;
+
   if (profile.photoURL) {
     const topAvatar = document.getElementById('topHeaderAvatar');
     if (topAvatar) {
@@ -50,6 +52,7 @@
     if (heroAvatar) {
       heroAvatar.src = profile.photoURL;
       heroAvatar.style.display = 'block';
+      hasCornerImg = true;
     }
   }
 
@@ -59,7 +62,14 @@
     if (heroLogo) {
       heroLogo.src = profile.logoURL;
       heroLogo.style.display = 'block';
+      hasCornerImg = true;
     }
+  }
+
+  // Ảnh góc khá lớn — chừa thêm khoảng trống phía trên để không đè lên tiêu đề (xem css: .hero.has-corner-img).
+  if (hasCornerImg) {
+    const hero = document.querySelector('.hero');
+    if (hero) hero.classList.add('has-corner-img');
   }
 
   const honorific = getHonorific(profile);

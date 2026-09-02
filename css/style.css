@@ -101,17 +101,20 @@ main {
 }
 .hero-corner-img {
   position: absolute;
-  top: 14px;
-  width: 56px;
-  height: 56px;
+  top: 0;
+  width: 92px;
+  height: 92px;
   object-fit: cover;
+  border: 2px solid var(--surface);
   box-shadow: var(--shadow);
   background: var(--surface);
 }
-.hero-corner-img.logo { left: 4px; border-radius: 12px; }
+.hero-corner-img.logo { left: 4px; border-radius: 16px; }
 .hero-corner-img.avatar { right: 4px; border-radius: 50%; }
-@media (max-width: 380px) {
-  .hero-corner-img { width: 44px; height: 44px; }
+.hero.has-corner-img { padding-top: 100px; }
+@media (max-width: 420px) {
+  .hero-corner-img { width: 68px; height: 68px; }
+  .hero.has-corner-img { padding-top: 78px; }
 }
 .hero .logo-mark {
   width: 64px;
