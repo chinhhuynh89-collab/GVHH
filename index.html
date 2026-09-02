@@ -105,6 +105,7 @@
     </div>
 
     <div class="card" id="teacherExamNotifyCard" style="display:none;"></div>
+    <div class="card" id="teacherStudentsNotifyCard" style="display:none;"></div>
 
     <div class="tile-grid">
       <a class="tile is-active" href="pages/hoc-theo-chuong.html">
@@ -316,6 +317,15 @@
       if (badge) {
         badge.textContent = newCount > 99 ? '99+' : String(newCount);
         badge.style.display = 'inline-block';
+      }
+      const card = document.getElementById('teacherStudentsNotifyCard');
+      if (card) {
+        card.style.display = 'block';
+        card.innerHTML = `
+          <h2><span class="icon">🔔</span>Có học sinh mới đăng ký!</h2>
+          <p class="hint">${newCount} học sinh vừa đăng ký học cùng bạn kể từ lần bạn xem gần nhất.</p>
+          <a class="btn primary block" href="pages/quan-ly-hoc-sinh.html">Xem ngay</a>
+        `;
       }
     }
   } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
