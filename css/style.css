@@ -251,6 +251,7 @@ main {
   position: static;
   align-self: flex-end;
   order: -1;
+  margin: -4px -2px 0 0; /* kéo lên/sang phải 1 chút cho gọn, nhưng padding của .icon-tile (18px) vẫn đủ chừa chỗ — không còn ló ra ngoài viền bo tròn như trước */
   font-size: calc(10px * var(--font-scale));
   font-weight: 700;
   padding: 3px 8px;
@@ -290,7 +291,7 @@ main {
   align-items: center;
   text-align: center;
   gap: 6px;
-  padding: 16px 10px 14px;
+  padding: 18px 12px 14px;
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   border: 1px solid var(--border);
