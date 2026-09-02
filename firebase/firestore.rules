@@ -81,5 +81,12 @@ service cloud.firestore {
       allow create: if request.resource.data.keys().hasAll(['examId', 'studentId', 'answers', 'score', 'deviceId']);
       allow update, delete: if false;
     }
+
+    // ---------- Học sinh bắt đầu làm bài (để giáo viên theo dõi real-time ai đang làm bài) ----------
+    match /examStarts/{startId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['examId', 'studentId', 'studentName', 'deviceId', 'startedAt']);
+      allow update, delete: if false;
+    }
   }
 }

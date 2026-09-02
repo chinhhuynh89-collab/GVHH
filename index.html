@@ -77,6 +77,9 @@
       Khu vực Giáo viên
       <a href="#" id="switchRoleBtnTeacher" style="float:right;text-transform:none;font-weight:600;color:var(--text-faint);">Đổi vai trò</a>
     </div>
+
+    <div class="card" id="teacherExamNotifyCard" style="display:none;"></div>
+
     <div class="tile-grid">
       <a class="tile is-active" href="pages/nhom-hoc-sinh.html">
         <div class="tile-icon">👥</div>
@@ -168,8 +171,10 @@
 <script src="js/vendor/firebase/firebase-auth-compat.js"></script>
 <script src="js/vendor/firebase/firebase-firestore-compat.js"></script>
 <script src="js/features/firebase-init.js"></script>
+<script src="js/features/auth.js"></script>
 <script src="js/features/device-id.js"></script>
 <script src="js/features/join-group.js"></script>
+<script src="js/features/teacher-exam-monitor.js"></script>
 <script>
 (function () {
   function renderRoleSections() {

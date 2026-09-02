@@ -58,6 +58,17 @@
     startedAt = Date.now();
     renderQuestion();
     timerHandle = setInterval(updateTimer, 1000);
+
+    // Ghi lại việc bắt đầu làm bài (tách riêng khỏi "submissions" — chỉ ghi lúc nộp) để giáo viên
+    // theo dõi được có bao nhiêu học sinh đang làm bài ngay trên trang chủ. Không chặn học sinh
+    // làm bài nếu lượt ghi này lỗi (VD mất mạng thoáng qua).
+    try {
+      const { db } = ensureFirebase();
+      db.collection('examStarts').add({
+        examId: exam.examId, studentId: membership.studentId, studentName: membership.studentName,
+        deviceId: getDeviceId(), startedAt: new Date(startedAt).toISOString()
+      }).catch(() => {});
+    } catch (e) { /* ignore */ }
   }
 
   function remainingSeconds() {
