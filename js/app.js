@@ -55,3 +55,46 @@ function initTabs(root) {
     });
   });
 }
+
+// Nút tăng/giảm cỡ chữ nổi ở góc màn hình — áp dụng cho toàn bộ app qua biến CSS --font-scale,
+// lưu lựa chọn của người dùng vào localStorage nên giữ nguyên khi chuyển trang/mở lại app.
+(function () {
+  const FONT_SCALE_KEY = 'hoahoc_font_scale';
+  const MIN_SCALE = 0.85, MAX_SCALE = 1.6, STEP = 0.1;
+
+  function getFontScale() {
+    const v = parseFloat(localStorage.getItem(FONT_SCALE_KEY));
+    return isFinite(v) && v >= MIN_SCALE && v <= MAX_SCALE ? v : 1;
+  }
+
+  function applyFontScale(v) {
+    document.documentElement.style.setProperty('--font-scale', v);
+    const label = document.getElementById('fontSizeLabel');
+    if (label) label.textContent = Math.round(v * 100) + '%';
+  }
+
+  function setFontScale(v) {
+    const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(v * 100) / 100));
+    localStorage.setItem(FONT_SCALE_KEY, clamped);
+    applyFontScale(clamped);
+  }
+
+  applyFontScale(getFontScale());
+
+  function initFontSizeControl() {
+    if (document.getElementById('fontSizeControl')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'fontSizeControl';
+    wrap.innerHTML = `
+      <button id="fontSizeDown" title="Chữ nhỏ hơn" aria-label="Chữ nhỏ hơn">A-</button>
+      <span id="fontSizeLabel">${Math.round(getFontScale() * 100)}%</span>
+      <button id="fontSizeUp" title="Chữ lớn hơn" aria-label="Chữ lớn hơn">A+</button>
+    `;
+    document.body.appendChild(wrap);
+    document.getElementById('fontSizeDown').addEventListener('click', () => setFontScale(getFontScale() - STEP));
+    document.getElementById('fontSizeUp').addEventListener('click', () => setFontScale(getFontScale() + STEP));
+  }
+
+  if (document.body) initFontSizeControl();
+  else window.addEventListener('DOMContentLoaded', initFontSizeControl);
+})();
