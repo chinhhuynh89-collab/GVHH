@@ -49,4 +49,46 @@
       logoMark.innerHTML = `<img src="${escapeHtml(profile.photoURL)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:18px;" referrerpolicy="no-referrer" />`;
     }
   }
+
+  renderContactButton(profile);
 })();
+
+// Chuẩn hoá 1 giá trị người dùng nhập thành URL đầy đủ (tự thêm https:// nếu thiếu).
+function normalizeContactUrl(v) {
+  const trimmed = (v || '').trim();
+  if (!trimmed) return '';
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+// Link Zalo: nếu giáo viên nhập số điện thoại thì tự tạo link zalo.me/{số}; nếu đã nhập link thì giữ nguyên.
+function normalizeZaloUrl(v) {
+  const trimmed = (v || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const digits = trimmed.replace(/[^0-9]/g, '');
+  return digits ? `https://zalo.me/${digits}` : normalizeContactUrl(trimmed);
+}
+
+function renderContactButton(profile) {
+  const wrap = document.getElementById('contactTeacherWrap');
+  if (!wrap) return;
+  const phone = (profile.phone || '').trim();
+  const zalo = normalizeZaloUrl(profile.zaloLink);
+  const fb = normalizeContactUrl(profile.facebookLink);
+  if (!phone && !zalo && !fb) return;
+
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <button class="btn" id="contactToggleBtn" type="button">📞 Liên hệ với thầy (cô)</button>
+    <div class="btn-row" id="contactOptions" style="display:none;margin-top:10px;justify-content:center;flex-wrap:wrap;">
+      ${phone ? `<a class="btn primary" href="tel:${escapeHtml(phone)}">📞 Gọi điện</a>` : ''}
+      ${zalo ? `<a class="btn primary" href="${escapeHtml(zalo)}" target="_blank" rel="noopener">💬 Nhắn Zalo</a>` : ''}
+      ${fb ? `<a class="btn primary" href="${escapeHtml(fb)}" target="_blank" rel="noopener">📘 Nhắn Facebook</a>` : ''}
+    </div>
+  `;
+  const toggleBtn = document.getElementById('contactToggleBtn');
+  const options = document.getElementById('contactOptions');
+  toggleBtn.addEventListener('click', () => {
+    options.style.display = options.style.display === 'none' ? 'flex' : 'none';
+  });
+}

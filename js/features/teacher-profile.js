@@ -62,6 +62,9 @@ function resizeImageToDataUrl(file) {
     $('#profileName').value = (profile && profile.displayName) || user.displayName || '';
     $('#profileWorkplace').value = (profile && profile.workplace) || '';
     $('#profileBio').value = (profile && profile.bio) || '';
+    $('#profilePhone').value = (profile && profile.phone) || '';
+    $('#profileZalo').value = (profile && profile.zaloLink) || '';
+    $('#profileFacebook').value = (profile && profile.facebookLink) || '';
     updatePhotoPreview((profile && profile.photoURL) || user.photoURL || '');
 
     $('#profilePhotoBtn').addEventListener('click', () => $('#profilePhotoInput').click());
@@ -97,12 +100,18 @@ function resizeImageToDataUrl(file) {
           displayName: name,
           workplace: $('#profileWorkplace').value.trim(),
           bio: $('#profileBio').value.trim(),
+          phone: $('#profilePhone').value.trim(),
+          zaloLink: $('#profileZalo').value.trim(),
+          facebookLink: $('#profileFacebook').value.trim(),
           updatedAt: new Date().toISOString()
         };
         // Bản công khai (không có email) — dùng để cá nhân hoá trang chủ cho học sinh trong nhóm
-        // của giáo viên này xem (xem js/features/branding.js).
+        // của giáo viên này xem, và hiện nút liên hệ (xem js/features/branding.js). Số điện thoại/
+        // Zalo/Facebook cố ý công khai vì mục đích là để học sinh liên hệ được.
         const publicData = {
-          displayName: data.displayName, bio: data.bio, updatedAt: data.updatedAt
+          displayName: data.displayName, bio: data.bio,
+          phone: data.phone, zaloLink: data.zaloLink, facebookLink: data.facebookLink,
+          updatedAt: data.updatedAt
         };
         if (resetPhoto) {
           data.photoURL = firebase.firestore.FieldValue.delete();
