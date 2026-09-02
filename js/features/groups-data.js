@@ -2,6 +2,9 @@
 // exam-creator.js, exam-stats.js. KHÔNG chứa logic gắn với 1 trang cụ thể (không có IIFE thao tác DOM)
 // để có thể nạp an toàn trên nhiều trang khác nhau.
 
+// Khớp QUIZ_PASS_PERCENT trong progress.js — tách riêng vì trang Nhóm học sinh không luôn nạp progress.js.
+const QUIZ_PASS_PERCENT_DEFAULT = 70;
+
 function genGroupCodeClient() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // bỏ ký tự dễ nhầm (0,O,1,I)
   let code = '';
@@ -52,4 +55,62 @@ async function getStudentsForGroup(groupCode) {
   const snap = await db.collection('students').where('groupCode', '==', groupCode).get();
   return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
     .sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi'));
+}
+
+// Sửa chương trình học (chapterIds) của 1 nhóm đã tồn tại — dùng khi giáo viên muốn thêm/bớt
+// chương sau khi đã tạo nhóm (VD: bồi dưỡng thêm chương nâng cao giữa kỳ học).
+async function updateGroupChapters(groupId, chapterIds, grade) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  await db.collection('groups').doc(groupId).update({ chapterIds, grade });
+}
+
+// Kết quả học tập của 1 nhóm: với mỗi học sinh — số chương đã hoàn thành (bài giảng + flashcard +
+// trắc nghiệm đạt ≥70%), số đợt kiểm tra đã làm, điểm trung bình và điểm cao nhất (thang 10) —
+// sắp xếp theo điểm trung bình giảm dần (học sinh chưa làm bài kiểm tra nào xếp cuối).
+async function getGroupLearningResults(group) {
+  const { db } = ensureFirebase();
+  const [studentsSnap, examsSnap] = await Promise.all([
+    db.collection('students').where('groupCode', '==', group.groupCode).get(),
+    db.collection('exams').where('groupCode', '==', group.groupCode).get()
+  ]);
+  const students = studentsSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+  const examIds = examsSnap.docs.map((d) => d.id);
+
+  const [subsSnaps, progressSnaps] = await Promise.all([
+    Promise.all(examIds.map((examId) => db.collection('submissions').where('examId', '==', examId).get())),
+    Promise.all(students.map((s) => db.collection('progress').doc(s.id).get()))
+  ]);
+  const allSubmissions = subsSnaps.flatMap((snap) => snap.docs.map((d) => d.data()));
+  const progressByStudentId = new Map(students.map((s, i) => [s.id, progressSnaps[i].exists ? progressSnaps[i].data() : null]));
+  const totalAssigned = (group.chapterIds || []).length;
+
+  const results = students.map((s) => {
+    const subs = allSubmissions.filter((sub) => sub.studentId === s.id);
+    const scores10 = subs.map((sub) => Math.round(sub.score) / 10);
+    const avgScore10 = scores10.length ? Math.round((scores10.reduce((a, b) => a + b, 0) / scores10.length) * 10) / 10 : null;
+    const bestScore10 = scores10.length ? Math.max(...scores10) : null;
+
+    const prog = progressByStudentId.get(s.id);
+    const chaptersMap = prog && prog.chapters ? prog.chapters : {};
+    const chaptersDone = (group.chapterIds || []).filter((id) => {
+      const c = chaptersMap[id];
+      return c && c.lessonViewed && c.flashcardsViewed && (c.quizBestPercent || 0) >= QUIZ_PASS_PERCENT_DEFAULT;
+    }).length;
+
+    return {
+      studentId: s.id, studentName: s.studentName,
+      chaptersDone, totalAssigned,
+      examCount: subs.length, avgScore10, bestScore10
+    };
+  });
+
+  results.sort((a, b) => {
+    if (a.avgScore10 === null && b.avgScore10 === null) return a.studentName.localeCompare(b.studentName, 'vi');
+    if (a.avgScore10 === null) return 1;
+    if (b.avgScore10 === null) return -1;
+    return b.avgScore10 - a.avgScore10;
+  });
+  return results;
 }

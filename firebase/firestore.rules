@@ -90,5 +90,14 @@ service cloud.firestore {
       allow create: if request.resource.data.keys().hasAll(['examId', 'studentId', 'studentName', 'deviceId', 'startedAt']);
       allow update, delete: if false;
     }
+
+    // ---------- Tiến độ học theo chương của từng học sinh (để giáo viên xem "Kết quả học tập") ----------
+    // 1 doc/học sinh (id = studentId), tự cập nhật liên tục khi học sinh học — không dùng để chấm
+    // điểm/xác thực gì quan trọng nên cho phép ghi thoải mái, giống students/submissions/examStarts.
+    match /progress/{studentId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasAll(['studentId', 'groupCode']);
+      allow delete: if false;
+    }
   }
 }

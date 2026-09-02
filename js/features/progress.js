@@ -25,7 +25,30 @@ function setChapterProgress(chapterId, patch) {
   const all = loadAllProgress();
   all[chapterId] = Object.assign(getChapterProgress(chapterId), patch);
   saveAllProgress(all);
+  syncProgressToServer(chapterId, all[chapterId]);
   return all[chapterId];
+}
+
+// Đồng bộ tiến độ học lên Firestore để giáo viên xem được trong "Kết quả học tập" — chỉ đồng bộ
+// khi đang ở vai trò học sinh ĐÃ vào 1 nhóm (không đồng bộ khi tự học tự do, không có nhóm nào để
+// báo cáo). Lưu 1 doc/học sinh (id = studentId, khớp với doc trong collection "students") chứa
+// map tiến độ theo từng chương — set({merge:true}) chỉ cập nhật đúng chương vừa đổi, không đụng
+// đến tiến độ các chương khác đã đồng bộ trước đó. Lỗi mạng thì bỏ qua im lặng — dữ liệu vẫn còn
+// nguyên trong localStorage, không mất gì, lần thay đổi tiến độ tiếp theo sẽ tự đồng bộ lại.
+function syncProgressToServer(chapterId, progress) {
+  try {
+    if (typeof isFirebaseConfigured !== 'function' || !isFirebaseConfigured()) return;
+    if (typeof getMembership !== 'function') return;
+    const membership = getMembership();
+    if (!membership || !membership.studentId) return;
+    const { db } = ensureFirebase();
+    db.collection('progress').doc(membership.studentId).set({
+      studentId: membership.studentId,
+      groupCode: membership.groupCode,
+      studentName: membership.studentName,
+      chapters: { [chapterId]: Object.assign({}, progress, { updatedAt: new Date().toISOString() }) }
+    }, { merge: true }).catch(() => {});
+  } catch (e) { /* ignore */ }
 }
 
 function isChapterComplete(chapterId) {
