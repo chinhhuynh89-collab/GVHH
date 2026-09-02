@@ -98,29 +98,6 @@ main {
   padding: 28px 4px 22px;
   text-align: center;
 }
-.hero-images-row {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 20px;
-  margin-bottom: 18px;
-}
-.hero-corner-img {
-  width: 276px;
-  height: 276px;
-  object-fit: cover;
-  border: 3px solid var(--surface);
-  box-shadow: var(--shadow);
-  background: var(--surface);
-  cursor: zoom-in;
-}
-.hero-corner-img.logo { border-radius: 24px; }
-.hero-corner-img.avatar { border-radius: 50%; }
-@media (max-width: 480px) {
-  .hero-corner-img { width: 204px; height: 204px; }
-}
-
 .image-lightbox {
   position: fixed;
   inset: 0;
@@ -156,16 +133,26 @@ main {
   justify-content: center;
 }
 .hero .logo-mark {
-  width: 64px;
-  height: 64px;
+  width: 84px;
+  height: 84px;
   margin: 0 auto 14px;
   border-radius: 18px;
   background: linear-gradient(135deg, var(--brand-dark), var(--brand-2));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 30px;
+  font-size: 34px;
   box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.hero .logo-mark.has-photo {
+  border-radius: 50%;
+  cursor: zoom-in;
+}
+.hero .logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .hero h1 {
   margin: 0 0 6px;

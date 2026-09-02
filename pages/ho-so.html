@@ -28,26 +28,13 @@
     <h2><span class="icon">🙍</span>Thông tin cá nhân</h2>
     <p class="hint" style="margin-top:-4px;">Tên, ảnh và khẩu hiệu này hiện ở các trang giáo viên trong app, VÀ ở trang chủ cho học sinh trong nhóm của bạn xem ("Học cùng {tên bạn}") — dùng để xây dựng thương hiệu riêng.</p>
 
-    <div style="display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-bottom:16px;">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
-        <div class="hint" style="margin:0;">Ảnh đại diện (góc phải trang chủ)</div>
-        <div id="profilePhotoPreview" style="width:88px;height:88px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;"></div>
-        <div class="btn-row">
-          <button class="btn" id="profilePhotoBtn" type="button">🖼️ Đổi ảnh</button>
-          <button class="btn" id="profilePhotoResetBtn" type="button">Dùng lại ảnh Google</button>
-        </div>
-        <input type="file" id="profilePhotoInput" accept="image/*" style="display:none;" />
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:16px;">
+      <div id="profilePhotoPreview" style="width:88px;height:88px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;"></div>
+      <div class="btn-row">
+        <button class="btn" id="profilePhotoBtn" type="button">🖼️ Đổi ảnh</button>
+        <button class="btn" id="profilePhotoResetBtn" type="button">Dùng lại ảnh Google</button>
       </div>
-
-      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
-        <div class="hint" style="margin:0;">Logo (góc trái trang chủ)</div>
-        <div id="profileLogoPreview" style="width:88px;height:88px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;"></div>
-        <div class="btn-row">
-          <button class="btn" id="profileLogoBtn" type="button">🖼️ Đổi logo</button>
-          <button class="btn" id="profileLogoResetBtn" type="button">Xoá logo</button>
-        </div>
-        <input type="file" id="profileLogoInput" accept="image/*" style="display:none;" />
-      </div>
+      <input type="file" id="profilePhotoInput" accept="image/*" style="display:none;" />
     </div>
 
     <div class="field">

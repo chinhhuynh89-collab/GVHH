@@ -45,22 +45,13 @@
       topAvatar.src = profile.photoURL;
       topAvatar.style.display = 'block';
     }
-    // Ảnh đại diện lớn ở trang chủ — bấm vào xem toàn màn hình (xem openImageLightbox bên dưới).
-    const heroAvatar = document.getElementById('heroAvatarImg');
-    if (heroAvatar) {
-      heroAvatar.src = profile.photoURL;
-      heroAvatar.style.display = 'block';
-      heroAvatar.addEventListener('click', () => openImageLightbox(profile.photoURL));
-    }
-  }
-
-  // Logo riêng (VD: logo trường/trung tâm) — tách biệt với ảnh đại diện, cũng bấm để xem toàn màn hình.
-  if (profile.logoURL) {
-    const heroLogo = document.getElementById('heroLogoImg');
-    if (heroLogo) {
-      heroLogo.src = profile.logoURL;
-      heroLogo.style.display = 'block';
-      heroLogo.addEventListener('click', () => openImageLightbox(profile.logoURL));
+    // 1 ảnh đại diện duy nhất, tròn kiểu Facebook, đặt ngay vị trí biểu tượng mặc định của app —
+    // bấm vào xem toàn màn hình (xem openImageLightbox bên dưới).
+    const logoMark = document.getElementById('heroLogoMark');
+    if (logoMark) {
+      logoMark.classList.add('has-photo');
+      logoMark.innerHTML = `<img src="${escapeHtml(profile.photoURL)}" alt="" referrerpolicy="no-referrer" />`;
+      logoMark.addEventListener('click', () => openImageLightbox(profile.photoURL));
     }
   }
 
@@ -73,7 +64,7 @@
   if (!isOwnTeacher) renderContactButton(profile, honorific);
 })();
 
-// Bấm ảnh logo/đại diện ở trang chủ để xem toàn màn hình. Wiring đóng lại (bấm nền hoặc nút ✕) chạy
+// Bấm ảnh đại diện ở trang chủ để xem toàn màn hình. Wiring đóng lại (bấm nền hoặc nút ✕) chạy
 // ngay khi nạp trang, không phụ thuộc việc có xác định được giáo viên hay không.
 function openImageLightbox(src) {
   const box = document.getElementById('imageLightbox');

@@ -46,21 +46,12 @@ function resizeImageToDataUrl(file) {
 (function () {
   let newPhotoDataUrl = null; // ảnh mới chọn, chưa lưu
   let resetPhoto = false; // true nếu bấm "Dùng lại ảnh Google"
-  let newLogoDataUrl = null; // logo mới chọn, chưa lưu
-  let resetLogo = false; // true nếu bấm "Xoá logo"
 
   function updatePhotoPreview(url) {
     const el = $('#profilePhotoPreview');
     el.innerHTML = url
       ? `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" referrerpolicy="no-referrer" />`
       : `<span style="font-size:32px;">👤</span>`;
-  }
-
-  function updateLogoPreview(url) {
-    const el = $('#profileLogoPreview');
-    el.innerHTML = url
-      ? `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:14px;" referrerpolicy="no-referrer" />`
-      : `<span style="font-size:32px;">🏫</span>`;
   }
 
   requireTeacherAuth(async (user) => {
@@ -76,7 +67,6 @@ function resizeImageToDataUrl(file) {
     $('#profileZalo').value = (profile && profile.zaloLink) || '';
     $('#profileFacebook').value = (profile && profile.facebookLink) || '';
     updatePhotoPreview((profile && profile.photoURL) || user.photoURL || '');
-    updateLogoPreview((profile && profile.logoURL) || '');
 
     // Hồ sơ tạo trước khi có tính năng "mã giáo viên" sẽ chưa có teacherCode lưu sẵn — mã này tính
     // thẳng từ uid nên hiện được ngay lập tức, không cần chờ Firestore; chỉ cần lưu lại (nền, không
@@ -115,29 +105,6 @@ function resizeImageToDataUrl(file) {
       newPhotoDataUrl = null;
       resetPhoto = true;
       updatePhotoPreview(user.photoURL || '');
-    });
-
-    $('#profileLogoBtn').addEventListener('click', () => $('#profileLogoInput').click());
-
-    $('#profileLogoInput').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      e.target.value = '';
-      if (!file) return;
-      try {
-        showResult(box, '⏳ Đang xử lý logo...');
-        newLogoDataUrl = await resizeImageToDataUrl(file);
-        resetLogo = false;
-        updateLogoPreview(newLogoDataUrl);
-        hideResult(box);
-      } catch (err) {
-        showResult(box, `⚠️ ${escapeHtml(err.message)}`, true);
-      }
-    });
-
-    $('#profileLogoResetBtn').addEventListener('click', () => {
-      newLogoDataUrl = null;
-      resetLogo = true;
-      updateLogoPreview('');
     });
 
     $('#profileSaveBtn').addEventListener('click', async () => {
@@ -181,21 +148,12 @@ function resizeImageToDataUrl(file) {
           data.photoURL = newPhotoDataUrl;
           publicData.photoURL = newPhotoDataUrl;
         }
-        if (resetLogo) {
-          data.logoURL = firebase.firestore.FieldValue.delete();
-          publicData.logoURL = firebase.firestore.FieldValue.delete();
-        } else if (newLogoDataUrl) {
-          data.logoURL = newLogoDataUrl;
-          publicData.logoURL = newLogoDataUrl;
-        }
         await Promise.all([
           db.collection('teachers').doc(user.uid).set(data, { merge: true }),
           db.collection('teacherProfiles').doc(user.uid).set(publicData, { merge: true })
         ]);
         newPhotoDataUrl = null;
         resetPhoto = false;
-        newLogoDataUrl = null;
-        resetLogo = false;
         showResult(box, '✅ Đã lưu hồ sơ.');
       } catch (err) {
         showResult(box, `⚠️ ${escapeHtml(err.message)}`, true);
