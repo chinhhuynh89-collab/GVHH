@@ -1,15 +1,42 @@
 // Tiện ích dùng chung cho toàn bộ app + đăng ký service worker (offline).
 
+// Trước đây bản cập nhật mới chỉ được ÁP DỤNG khi trình duyệt tự ý kiểm tra lại service worker
+// (thường chỉ xảy ra khi mở lại app sau khi đã đóng hẳn) — vì vậy người tự tay xoá cache (VD tác
+// giả app) thấy bản mới ngay, còn giáo viên/học sinh khác cứ để app mở/chạy nền thì rất lâu mới
+// nhận được, có khi vài ngày. 2 việc dưới đây khắc phục: (1) CHỦ ĐỘNG hỏi trình duyệt kiểm tra bản
+// mới định kỳ + mỗi khi quay lại tab thay vì bị động chờ; (2) khi bản mới đã giành quyền kiểm soát
+// trang (service-worker.js đã gọi sẵn skipWaiting + clients.claim), báo ngay cho người dùng biết
+// bằng 1 banner để họ tự bấm tải lại — không cần biết cách xoá cache thủ công nữa.
 (function () {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      const base = window.APP_BASE_PATH || './';
-      navigator.serviceWorker
-        .register(base + 'service-worker.js')
-        .catch((err) => console.warn('Không đăng ký được service worker:', err));
-    });
-  }
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    const base = window.APP_BASE_PATH || './';
+    navigator.serviceWorker
+      .register(base + 'service-worker.js')
+      .then((reg) => {
+        const checkForUpdate = () => reg.update().catch(() => { /* offline — bỏ qua, thử lại lần sau */ });
+        setInterval(checkForUpdate, 5 * 60 * 1000);
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') checkForUpdate();
+        });
+      })
+      .catch((err) => console.warn('Không đăng ký được service worker:', err));
+
+    navigator.serviceWorker.addEventListener('controllerchange', showUpdateAvailableBanner);
+  });
 })();
+
+function showUpdateAvailableBanner() {
+  if (document.getElementById('updateAvailableBanner')) return;
+  const el = document.createElement('div');
+  el.id = 'updateAvailableBanner';
+  el.innerHTML = `
+    <div>🔄 <strong>Đã có bản cập nhật mới!</strong> Tải lại để dùng phiên bản mới nhất.</div>
+    <button class="btn primary" id="updateAvailableReloadBtn" type="button">Tải lại ngay</button>
+  `;
+  document.body.appendChild(el);
+  document.getElementById('updateAvailableReloadBtn').addEventListener('click', () => window.location.reload());
+}
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
