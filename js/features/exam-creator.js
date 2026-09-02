@@ -52,7 +52,17 @@ async function createExamForCurrentTeacher(examInput) {
     let currentGroup = null;
 
     async function loadGroups() {
-      groups = await listGroupsForCurrentTeacher();
+      try {
+        groups = await listGroupsForCurrentTeacher();
+      } catch (e) {
+        showResult($('#examLoadError'), `⚠️ Không tải được danh sách nhóm: ${escapeHtml(e.message)}`, true);
+        return;
+      }
+      if (!groups.length) {
+        showResult($('#examLoadError'), 'Bạn chưa có nhóm nào. Vào "Nhóm học sinh" để tạo nhóm trước.');
+        return;
+      }
+      hideResult($('#examLoadError'));
       $('#examGroup').innerHTML = groups.map((g) =>
         `<option value="${escapeHtml(g.groupCode)}" ${g.groupCode === preselectGroup ? 'selected' : ''}>${escapeHtml(g.groupName)} (Lớp ${escapeHtml(String(g.grade))} · mã ${escapeHtml(g.groupCode)})</option>`
       ).join('');
@@ -60,22 +70,31 @@ async function createExamForCurrentTeacher(examInput) {
     }
 
     async function onGroupChange() {
-      const code = $('#examGroup').value;
-      currentGroup = groups.find((g) => g.groupCode === code);
-      if (!currentGroup) { $('#examChapters').innerHTML = ''; return; }
-      // Chương của 1 nhóm có thể đến từ nhiều khối lớp khác nhau (chương trình riêng) — tra theo
-      // đúng chapterIds của nhóm thay vì lọc theo 1 khối duy nhất.
-      const chapters = currentGroup.chapterIds
-        .map((id) => findChapterAnywhere(id))
-        .filter(Boolean);
-      $('#examChapters').innerHTML = chapters.map(({ chapter, grade }) => `
-        <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
-          <input type="checkbox" class="exam-chapter-check" value="${chapter.id}" checked style="margin-top:3px;" />
-          <span>Lớp ${grade} - Chương ${chapter.order}. ${escapeHtml(chapter.title)}</span>
-        </label>
-      `).join('');
-      $$('.exam-chapter-check').forEach((cb) => cb.addEventListener('change', onChapterChange));
-      await onChapterChange();
+      try {
+        const code = $('#examGroup').value;
+        currentGroup = groups.find((g) => g.groupCode === code);
+        if (!currentGroup) { $('#examChapters').innerHTML = ''; return; }
+        // Chương của 1 nhóm có thể đến từ nhiều khối lớp khác nhau (chương trình riêng) — tra theo
+        // đúng chapterIds của nhóm thay vì lọc theo 1 khối duy nhất.
+        const chapters = (currentGroup.chapterIds || [])
+          .map((id) => findChapterAnywhere(id))
+          .filter(Boolean);
+        if (!chapters.length) {
+          $('#examChapters').innerHTML = '<p class="hint">Nhóm này chưa được giao chương nào — vào "Nhóm học sinh" sửa lại nhóm để giao chương trước.</p>';
+          $('#examPoolInfo').textContent = '';
+          return;
+        }
+        $('#examChapters').innerHTML = chapters.map(({ chapter, grade }) => `
+          <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" class="exam-chapter-check" value="${chapter.id}" checked style="margin-top:3px;" />
+            <span>Lớp ${grade} - Chương ${chapter.order}. ${escapeHtml(chapter.title)}</span>
+          </label>
+        `).join('');
+        $$('.exam-chapter-check').forEach((cb) => cb.addEventListener('change', onChapterChange));
+        await onChapterChange();
+      } catch (e) {
+        $('#examChapters').innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
+      }
     }
 
     function selectedChapterIds() {
