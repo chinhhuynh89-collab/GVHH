@@ -177,6 +177,7 @@
   }
 
   function renderResult(score, correctCount, total, alreadySubmitted) {
+    renderExamHistory(); // cập nhật ngay lịch sử để thấy đợt vừa nộp mà không cần tải lại trang
     const score10 = (Math.round(score) / 10).toFixed(1);
     main.innerHTML = `
       <div class="card">
@@ -185,6 +186,99 @@
           <div class="qr-label">${correctCount}/${total} câu đúng (${score}%) ${alreadySubmitted ? '· bạn đã nộp bài này trước đó' : '— Đã nộp bài thành công'}</div>
         </div>
         <a class="btn primary block" href="../index.html">Về trang chủ</a>
+      </div>
+    `;
+  }
+
+  // ---------- Lịch sử kiểm tra của học sinh này: đã làm (điểm/đúng-sai/thời gian), đang diễn ra,
+  // và ĐÃ BỎ LỠ (đợt giáo viên đã ra nhưng học sinh không tham gia, đã hết hạn) ----------
+  async function renderExamHistory() {
+    const box = $('#examHistoryBody');
+    if (!box) return;
+    try {
+      const { db } = ensureFirebase();
+      const deviceId = getDeviceId();
+      const now = new Date();
+      const [examsSnap, subsSnap] = await Promise.all([
+        db.collection('exams').where('groupCode', '==', membership.groupCode).get(),
+        db.collection('submissions').where('deviceId', '==', deviceId).get()
+      ]);
+      const exams = examsSnap.docs.map((d) => Object.assign({ examId: d.id }, d.data()));
+      if (!exams.length) { box.innerHTML = ''; return; }
+      const subByExamId = new Map(subsSnap.docs.map((d) => [d.data().examId, d.data()]));
+
+      const rows = exams.map((e) => {
+        const sub = subByExamId.get(e.examId);
+        const startTime = new Date(e.startTime);
+        const endTime = new Date(e.endTime);
+        let status;
+        if (sub) {
+          const durationSec = Math.max(0, Math.round((new Date(sub.submittedAt) - new Date(sub.startedAt)) / 1000));
+          status = {
+            kind: 'done',
+            score10: Math.round(sub.score) / 10,
+            correctCount: sub.correctCount,
+            total: sub.total,
+            duration: `${Math.floor(durationSec / 60)} phút ${durationSec % 60} giây`,
+            submittedAt: new Date(sub.submittedAt).toLocaleString('vi-VN')
+          };
+        } else if (now > endTime) {
+          status = { kind: 'missed', endTime };
+        } else if (now >= startTime) {
+          status = { kind: 'ongoing' };
+        } else {
+          status = { kind: 'upcoming' };
+        }
+        return { exam: e, status };
+      })
+        .filter((r) => r.status.kind !== 'upcoming')
+        .sort((a, b) => new Date(b.exam.createdAt) - new Date(a.exam.createdAt));
+
+      if (!rows.length) { box.innerHTML = ''; return; }
+
+      const doneRows = rows.filter((r) => r.status.kind === 'done');
+      const avgScore = doneRows.length
+        ? (doneRows.reduce((s, r) => s + r.status.score10, 0) / doneRows.length).toFixed(1)
+        : null;
+      const missedCount = rows.filter((r) => r.status.kind === 'missed').length;
+
+      box.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">📊</span>Lịch sử kiểm tra của bạn</h2>
+          <p class="hint" style="margin-top:-4px;">
+            Đã làm ${doneRows.length} đợt${avgScore !== null ? ` · Điểm trung bình: <strong style="color:var(--brand);">${avgScore}</strong>` : ''}${missedCount ? ` · Đã bỏ lỡ ${missedCount} đợt` : ''}
+          </p>
+          ${rows.map(renderHistoryRow).join('')}
+        </div>
+      `;
+    } catch (e) {
+      box.innerHTML = `<div class="result-box show error">⚠️ Không tải được lịch sử kiểm tra: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  function renderHistoryRow(r) {
+    const title = escapeHtml(r.exam.examTitle || (r.exam.chapterTitles || []).join(', '));
+    if (r.status.kind === 'done') {
+      return `
+        <div class="quiz-review-item ok" style="text-align:left;">
+          <div class="qi-q">✅ ${title}</div>
+          <div>${r.status.correctCount}/${r.status.total} câu đúng — <strong>${r.status.score10.toFixed(1)} điểm</strong></div>
+          <div class="hint">Thời gian làm bài: ${r.status.duration} · Nộp lúc: ${r.status.submittedAt}</div>
+        </div>
+      `;
+    }
+    if (r.status.kind === 'missed') {
+      return `
+        <div class="quiz-review-item bad" style="text-align:left;">
+          <div class="qi-q">⚠️ ${title}</div>
+          <div class="hint">Đã bỏ lỡ — không tham gia đợt kiểm tra này (hết hạn nộp lúc ${r.status.endTime.toLocaleString('vi-VN')}).</div>
+        </div>
+      `;
+    }
+    return `
+      <div class="quiz-review-item" style="text-align:left;">
+        <div class="qi-q">🔴 ${title}</div>
+        <div class="hint">Đang diễn ra — làm bài ngay bên dưới!</div>
       </div>
     `;
   }
@@ -217,5 +311,6 @@
     }
   }
 
+  renderExamHistory();
   loadExam();
 })();
