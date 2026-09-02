@@ -23,8 +23,10 @@
 
 <main>
   <section class="hero">
-    <img id="heroLogoImg" alt="Logo" class="hero-corner-img logo" style="display:none;" />
-    <img id="heroAvatarImg" alt="Ảnh đại diện" class="hero-corner-img avatar" style="display:none;" referrerpolicy="no-referrer" />
+    <div class="hero-images-row">
+      <img id="heroLogoImg" alt="Logo" class="hero-corner-img logo" style="display:none;" />
+      <img id="heroAvatarImg" alt="Ảnh đại diện" class="hero-corner-img avatar" style="display:none;" referrerpolicy="no-referrer" />
+    </div>
     <div class="logo-mark" id="heroLogoMark">⚗️</div>
     <h1 id="heroTitle">Trợ Lý Giáo Viên Hoá Học</h1>
     <p id="heroSubtitle">Công cụ học &amp; dạy Hoá — hoạt động hoàn toàn offline</p>
@@ -207,6 +209,11 @@
     Tác giả: Huỳnh Công Chính — Trường Quân sự Quân đoàn 34
   </p>
 </main>
+
+<div id="imageLightbox" class="image-lightbox" style="display:none;">
+  <button class="image-lightbox-close" id="imageLightboxClose" type="button" aria-label="Đóng">✕</button>
+  <img id="imageLightboxImg" src="" alt="" />
+</div>
 
 <script src="js/app.js"></script>
 <script src="js/features/role.js"></script>

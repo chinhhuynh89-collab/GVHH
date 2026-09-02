@@ -39,37 +39,29 @@
     if (heroSub) heroSub.textContent = profile.bio;
   }
 
-  let hasCornerImg = false;
-
   if (profile.photoURL) {
     const topAvatar = document.getElementById('topHeaderAvatar');
     if (topAvatar) {
       topAvatar.src = profile.photoURL;
       topAvatar.style.display = 'block';
     }
-    // Ảnh đại diện lớn ở góc phải trang chủ (khác ảnh nhỏ trên thanh tiêu đề).
+    // Ảnh đại diện lớn ở trang chủ — bấm vào xem toàn màn hình (xem openImageLightbox bên dưới).
     const heroAvatar = document.getElementById('heroAvatarImg');
     if (heroAvatar) {
       heroAvatar.src = profile.photoURL;
       heroAvatar.style.display = 'block';
-      hasCornerImg = true;
+      heroAvatar.addEventListener('click', () => openImageLightbox(profile.photoURL));
     }
   }
 
-  // Logo riêng (VD: logo trường/trung tâm) ở góc trái trang chủ — tách biệt với ảnh đại diện.
+  // Logo riêng (VD: logo trường/trung tâm) — tách biệt với ảnh đại diện, cũng bấm để xem toàn màn hình.
   if (profile.logoURL) {
     const heroLogo = document.getElementById('heroLogoImg');
     if (heroLogo) {
       heroLogo.src = profile.logoURL;
       heroLogo.style.display = 'block';
-      hasCornerImg = true;
+      heroLogo.addEventListener('click', () => openImageLightbox(profile.logoURL));
     }
-  }
-
-  // Ảnh góc khá lớn — chừa thêm khoảng trống phía trên để không đè lên tiêu đề (xem css: .hero.has-corner-img).
-  if (hasCornerImg) {
-    const hero = document.querySelector('.hero');
-    if (hero) hero.classList.add('has-corner-img');
   }
 
   const honorific = getHonorific(profile);
@@ -79,6 +71,24 @@
   // Nút "Liên hệ" chỉ dành cho học sinh liên hệ giáo viên — ẩn khi chính giáo viên đang xem trang
   // của mình (không cần nút gọi/nhắn cho chính mình).
   if (!isOwnTeacher) renderContactButton(profile, honorific);
+})();
+
+// Bấm ảnh logo/đại diện ở trang chủ để xem toàn màn hình. Wiring đóng lại (bấm nền hoặc nút ✕) chạy
+// ngay khi nạp trang, không phụ thuộc việc có xác định được giáo viên hay không.
+function openImageLightbox(src) {
+  const box = document.getElementById('imageLightbox');
+  const img = document.getElementById('imageLightboxImg');
+  if (!box || !img || !src) return;
+  img.src = src;
+  box.style.display = 'flex';
+}
+(function () {
+  const box = document.getElementById('imageLightbox');
+  const closeBtn = document.getElementById('imageLightboxClose');
+  if (!box) return;
+  const close = () => { box.style.display = 'none'; };
+  box.addEventListener('click', close);
+  if (closeBtn) closeBtn.addEventListener('click', close);
 })();
 
 // Giới tính giáo viên (đặt ở trang Hồ sơ) → xưng hô "Thầy"/"Cô" đúng cho các nút mời học sinh liên
