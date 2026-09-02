@@ -8,9 +8,10 @@
   if (!isFirebaseConfigured()) return;
 
   let teacherUid = null;
+  let isOwnTeacher = false; // true nếu người xem CHÍNH LÀ giáo viên đang đăng nhập (xem trang của mình)
   try {
     const teacher = await waitForAuthReady();
-    if (teacher) teacherUid = teacher.uid;
+    if (teacher) { teacherUid = teacher.uid; isOwnTeacher = true; }
   } catch (e) { /* ignore */ }
   if (!teacherUid) {
     const membership = typeof getMembership === 'function' ? getMembership() : null;
@@ -54,7 +55,9 @@
   const registerBtn = document.getElementById('registerToggleBtn');
   if (registerBtn) registerBtn.textContent = `📝 Đăng ký học cùng ${honorific}`;
 
-  renderContactButton(profile, honorific);
+  // Nút "Liên hệ" chỉ dành cho học sinh liên hệ giáo viên — ẩn khi chính giáo viên đang xem trang
+  // của mình (không cần nút gọi/nhắn cho chính mình).
+  if (!isOwnTeacher) renderContactButton(profile, honorific);
 })();
 
 // Giới tính giáo viên (đặt ở trang Hồ sơ) → xưng hô "Thầy"/"Cô" đúng cho các nút mời học sinh liên
