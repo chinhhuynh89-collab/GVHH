@@ -55,12 +55,20 @@ service cloud.firestore {
     }
 
     // ---------- Học sinh tham gia nhóm ----------
+    // teacherUid: gắn từ bản ghi tạo sau khi có tính năng xoá học sinh/nhóm, dùng để xác định đúng
+    // giáo viên sở hữu được xoá. Bản ghi CŨ (tạo trước đó) chưa có teacherUid — cho phép "nhận sở
+    // hữu" 1 lần (chỉ set được khi CHƯA có, và chỉ đổi đúng field này) để giáo viên xoá được cả học
+    // sinh cũ; xem getStudentsForGroup() tự làm việc này khi giáo viên xem đúng nhóm của mình.
     match /students/{studentId} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasAll(
         ['groupCode', 'deviceId', 'studentName', 'school', 'className', 'address', 'phone', 'joinedAt']
       );
-      allow update, delete: if false;
+      allow update: if request.auth != null
+                    && !('teacherUid' in resource.data)
+                    && request.resource.data.teacherUid == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherUid']);
+      allow delete: if request.auth != null && request.auth.uid == resource.data.teacherUid;
     }
 
     // ---------- Đề kiểm tra (câu hỏi, không có đáp án) ----------

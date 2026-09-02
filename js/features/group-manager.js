@@ -9,11 +9,14 @@
 (function () {
   let groupsCache = [];
   let ownProgramsWithChapters = []; // [{ program, chapters }] — chương trình riêng của giáo viên, để chọn giao cho nhóm
+  let knownStudents = []; // học sinh đã có sẵn trong danh sách (mọi nhóm) — để chọn thêm thẳng vào nhóm mới
 
   requireTeacherAuth(async () => {
     renderQuickGradeOptions();
     await loadOwnProgramsWithChapters();
     renderChapterChecklist();
+    await loadKnownStudents();
+    renderStudentsChecklist();
     renderGroupList();
   });
 
@@ -23,6 +26,28 @@
       const chaptersPerProgram = await Promise.all(programs.map((p) => getProgramChapters(p.id)));
       ownProgramsWithChapters = programs.map((p, i) => ({ program: p, chapters: chaptersPerProgram[i] }));
     } catch (e) { ownProgramsWithChapters = []; }
+  }
+
+  async function loadKnownStudents() {
+    try {
+      knownStudents = await getAllStudentsForCurrentTeacher();
+    } catch (e) { knownStudents = []; }
+  }
+
+  // Danh sách tick chọn học sinh đã có sẵn (từ nhóm khác) để thêm thẳng vào nhóm MỚI đang tạo —
+  // dùng deviceId làm khoá (khớp cách gộp học sinh ở groups-data.js).
+  function renderStudentsChecklist() {
+    const box = $('#groupStudentsChecklist');
+    if (!knownStudents.length) {
+      box.innerHTML = '<p class="hint">Chưa có học sinh nào trong danh sách của bạn.</p>';
+      return;
+    }
+    box.innerHTML = knownStudents.map((s) => `
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
+        <input type="checkbox" class="group-student-check" value="${escapeHtml(s.deviceId || s.id)}" style="margin-top:3px;" />
+        <span>${escapeHtml(s.studentName || '')} <span class="hint">— ${escapeHtml(s.school || '')} · ${escapeHtml(s.phone || '')}</span></span>
+      </label>
+    `).join('');
   }
 
   function renderQuickGradeOptions() {
@@ -108,6 +133,7 @@
                 ? `<a class="btn" href="${escapeHtml(g.zaloGroupLink)}" target="_blank" rel="noopener">💬 Nhắn Zalo nhóm</a>
                    <button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="${escapeHtml(g.zaloGroupLink)}">✏️ Sửa link Zalo</button>`
                 : `<button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="">💬 + Thêm link Zalo nhóm</button>`}
+              <button class="btn delete-group-btn" type="button" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}" data-name="${escapeHtml(g.groupName)}" style="color:#dc2626;">🗑️ Xoá nhóm</button>
             </div>
             <div class="roster-box" id="roster-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
             <div class="results-box" id="results-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
@@ -120,6 +146,7 @@
       wireChaptersEditToggles();
       wireFreeModeToggles();
       wireZaloEditButtons();
+      wireDeleteGroupButtons();
     } catch (e) {
       box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
     }
@@ -189,6 +216,92 @@
     return /^https?:\/\//i.test(v) ? v : `https://${v}`;
   }
 
+  // Xoá hẳn 1 nhóm — không thể hoàn tác nên bắt xác nhận rõ, kèm luôn cảnh báo số học sinh sẽ mất
+  // khỏi nhóm (bản thân học sinh vẫn còn nếu đang học nhóm khác).
+  function wireDeleteGroupButtons() {
+    $$('.delete-group-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const groupId = btn.dataset.groupId;
+        const groupCode = btn.dataset.group;
+        const groupName = btn.dataset.name;
+        const group = groupsCache.find((g) => g.id === groupId);
+        const studentCount = group ? group.studentCount : 0;
+        if (!confirm(`Xoá hẳn nhóm "${groupName}"? ${studentCount ? `${studentCount} học sinh sẽ mất khỏi nhóm này. ` : ''}Không thể hoàn tác.`)) return;
+        btn.disabled = true;
+        btn.textContent = '⏳ Đang xoá...';
+        try {
+          await deleteGroup(groupId, groupCode);
+          renderGroupList();
+        } catch (e) {
+          alert('Không xoá được: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = '🗑️ Xoá nhóm';
+        }
+      });
+    });
+  }
+
+  async function loadAndRenderRoster(box, groupCode) {
+    box.innerHTML = '<p class="hint">⏳ Đang tải...</p>';
+    try {
+      const students = await getStudentsForGroup(groupCode);
+      box.dataset.loaded = '1';
+      if (!students.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào tham gia.</p>'; return; }
+      box.innerHTML = `
+        <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
+        <div class="roster-table-wrap">
+          <table class="roster-table">
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Họ tên</th>
+                <th>Địa chỉ</th>
+                <th>Trường</th>
+                <th>Lớp</th>
+                <th>SĐT</th>
+                <th>Tham gia lúc</th>
+                <th>Xoá</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${students.map((s, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>${escapeHtml(s.studentName || '—')}</td>
+                  <td>${escapeHtml(s.address || '—')}</td>
+                  <td>${escapeHtml(s.school || '—')}</td>
+                  <td>${escapeHtml(s.className || '—')}</td>
+                  <td>${escapeHtml(s.phone || '—')}</td>
+                  <td>${s.joinedAt ? new Date(s.joinedAt).toLocaleString('vi-VN') : '—'}</td>
+                  <td><button class="btn delete-student-btn" type="button" data-student-id="${s.id}" data-name="${escapeHtml(s.studentName || '')}" style="color:#dc2626;">🗑️</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+      $$('.delete-student-btn', box).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const studentId = btn.dataset.studentId;
+          const name = btn.dataset.name;
+          if (!confirm(`Xoá "${name}" khỏi nhóm này? Không thể hoàn tác.`)) return;
+          btn.disabled = true;
+          try {
+            await deleteStudent(studentId);
+            await loadAndRenderRoster(box, groupCode);
+            const g = groupsCache.find((gr) => gr.groupCode === groupCode);
+            if (g) g.studentCount = Math.max(0, (g.studentCount || 1) - 1);
+          } catch (e) {
+            alert('Không xoá được: ' + e.message);
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (e) {
+      box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
   function wireRosterToggles() {
     $$('.roster-toggle').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -200,45 +313,7 @@
         box.style.display = 'block';
         btn.textContent = '👥 Ẩn danh sách học sinh';
         if (box.dataset.loaded) return; // đã tải trước đó, không tải lại
-        box.innerHTML = '<p class="hint">⏳ Đang tải...</p>';
-        try {
-          const students = await getStudentsForGroup(groupCode);
-          box.dataset.loaded = '1';
-          if (!students.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào tham gia.</p>'; return; }
-          box.innerHTML = `
-            <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
-            <div class="roster-table-wrap">
-              <table class="roster-table">
-                <thead>
-                  <tr>
-                    <th>STT</th>
-                    <th>Họ tên</th>
-                    <th>Địa chỉ</th>
-                    <th>Trường</th>
-                    <th>Lớp</th>
-                    <th>SĐT</th>
-                    <th>Tham gia lúc</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${students.map((s, i) => `
-                    <tr>
-                      <td>${i + 1}</td>
-                      <td>${escapeHtml(s.studentName || '—')}</td>
-                      <td>${escapeHtml(s.address || '—')}</td>
-                      <td>${escapeHtml(s.school || '—')}</td>
-                      <td>${escapeHtml(s.className || '—')}</td>
-                      <td>${escapeHtml(s.phone || '—')}</td>
-                      <td>${s.joinedAt ? new Date(s.joinedAt).toLocaleString('vi-VN') : '—'}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          `;
-        } catch (e) {
-          box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
-        }
+        await loadAndRenderRoster(box, groupCode);
       });
     });
   }
@@ -366,6 +441,7 @@
     $('#groupCreateToggleBtn').style.display = 'flex';
     $('#groupName').value = '';
     $('#groupZaloLink').value = '';
+    $$('.group-student-check', $('#groupStudentsChecklist')).forEach((c) => { c.checked = false; });
     hideResult($('#groupCreateResult'));
   });
 
@@ -373,6 +449,7 @@
     const groupName = $('#groupName').value.trim();
     const zaloGroupLink = normalizeGroupZaloUrl($('#groupZaloLink').value.trim());
     const chapterIds = $$('.chapter-check', $('#groupChapters')).filter((c) => c.checked).map((c) => c.value);
+    const selectedDeviceIds = $$('.group-student-check', $('#groupStudentsChecklist')).filter((c) => c.checked).map((c) => c.value);
     const box = $('#groupCreateResult');
     if (!groupName) { showResult(box, 'Nhập tên nhóm.', true); return; }
     if (!chapterIds.length) { showResult(box, 'Chọn ít nhất 1 chương cho nhóm.', true); return; }
@@ -380,15 +457,22 @@
     showResult(box, '⏳ Đang tạo nhóm...');
     try {
       const group = await createGroupForCurrentTeacher(groupName, grade, chapterIds, zaloGroupLink);
-      showResult(box, `✓ Đã tạo nhóm "${escapeHtml(group.groupName)}" — mã nhóm: <strong style="color:var(--brand);">${escapeHtml(group.groupCode)}</strong>. Gửi mã này cho học sinh để các em tham gia.`);
+      let addedCount = 0;
+      if (selectedDeviceIds.length) {
+        const selectedStudents = knownStudents.filter((s) => selectedDeviceIds.includes(s.deviceId || s.id));
+        const results = await Promise.allSettled(selectedStudents.map((s) => addStudentToGroup(group.groupCode, s)));
+        addedCount = results.filter((r) => r.status === 'fulfilled').length;
+      }
+      showResult(box, `✓ Đã tạo nhóm "${escapeHtml(group.groupName)}" — mã nhóm: <strong style="color:var(--brand);">${escapeHtml(group.groupCode)}</strong>.${addedCount ? ` Đã thêm ${addedCount} học sinh có sẵn vào nhóm.` : ''} Gửi mã này cho học sinh khác để các em xin vào nhóm.`);
       $('#groupName').value = '';
       $('#groupZaloLink').value = '';
+      $$('.group-student-check', $('#groupStudentsChecklist')).forEach((c) => { c.checked = false; });
       renderGroupList();
       setTimeout(() => {
         $('#groupCreateForm').style.display = 'none';
         $('#groupCreateToggleBtn').style.display = 'flex';
         hideResult(box);
-      }, 2200);
+      }, 2600);
     } catch (e) {
       showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
     }

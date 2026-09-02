@@ -43,6 +43,19 @@ async function updateGroupZaloLink(groupId, zaloGroupLink) {
   await db.collection('groups').doc(groupId).update({ zaloGroupLink: zaloGroupLink || '' });
 }
 
+// Xoá hẳn 1 nhóm — kèm dọn luôn các bản ghi "students" thuộc nhóm đó (nếu xoá được, dùng allSettled
+// vì bản ghi học sinh CŨ chưa có teacherUid sẽ không xoá được, bỏ qua chứ không chặn xoá nhóm). Đề
+// kiểm tra/kết quả cũ của nhóm KHÔNG bị xoá (không hiện ở đâu nữa vì nhóm đã mất, chấp nhận còn sót
+// lại — dọn hết đòi hỏi nhiều lượt đọc/ghi hơn, ngoài phạm vi cần thiết).
+async function deleteGroup(groupId, groupCode) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  const studentsSnap = await db.collection('students').where('groupCode', '==', groupCode).get();
+  await Promise.allSettled(studentsSnap.docs.map((d) => d.ref.delete()));
+  await db.collection('groups').doc(groupId).delete();
+}
+
 async function listGroupsForCurrentTeacher() {
   const teacher = getCurrentTeacher();
   if (!teacher) return [];
@@ -63,8 +76,42 @@ async function listGroupsForCurrentTeacher() {
 async function getStudentsForGroup(groupCode) {
   const { db } = ensureFirebase();
   const snap = await db.collection('students').where('groupCode', '==', groupCode).get();
-  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
+  const students = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
     .sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi'));
+  // Bản ghi cũ (tạo trước khi có trường teacherUid) tự "nhận sở hữu" ngay khi giáo viên xem đúng
+  // nhóm của mình — để nút Xoá học sinh dùng được cả với học sinh đăng ký từ trước (xem firestore.rules).
+  const teacher = getCurrentTeacher();
+  if (teacher) {
+    students.forEach((s) => {
+      if (!s.teacherUid) {
+        s.teacherUid = teacher.uid;
+        db.collection('students').doc(s.id).update({ teacherUid: teacher.uid }).catch(() => {});
+      }
+    });
+  }
+  return students;
+}
+
+// Giáo viên thêm thẳng 1 học sinh đã có sẵn trong danh sách (VD từ nhóm khác) vào 1 nhóm CỤ THỂ —
+// dùng lúc tạo nhóm (chọn học sinh có sẵn) và khi duyệt đăng ký (assignRegistrationToGroup bên dưới).
+async function addStudentToGroup(groupCode, student) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  await db.collection('students').add({
+    groupCode, teacherUid: teacher.uid, deviceId: student.deviceId, joinedAt: new Date().toISOString(),
+    studentName: student.studentName, school: student.school,
+    className: student.className, address: student.address, phone: student.phone
+  });
+}
+
+// Xoá 1 học sinh khỏi 1 nhóm cụ thể (chỉ xoá bản ghi "students" đó — nếu học sinh này học nhiều
+// nhóm khác, các nhóm kia không bị ảnh hưởng).
+async function deleteStudent(studentId) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  await db.collection('students').doc(studentId).delete();
 }
 
 // Sửa chương trình học (chapterIds) của 1 nhóm đã tồn tại — dùng khi giáo viên muốn thêm/bớt
@@ -197,14 +244,8 @@ function watchPendingRegistrationsForCurrentTeacher(teacherUid, callback) {
 // Giáo viên xếp 1 học sinh đang chờ vào 1 nhóm cụ thể: tạo bản ghi "students" bình thường (giống hệt
 // học sinh tự vào nhóm bằng mã) rồi xoá khỏi danh sách chờ.
 async function assignRegistrationToGroup(registration, groupCode) {
-  const teacher = getCurrentTeacher();
-  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  await addStudentToGroup(groupCode, registration);
   const { db } = ensureFirebase();
-  await db.collection('students').add({
-    groupCode, deviceId: registration.deviceId, joinedAt: new Date().toISOString(),
-    studentName: registration.studentName, school: registration.school,
-    className: registration.className, address: registration.address, phone: registration.phone
-  });
   await db.collection('studentRegistrations').doc(registration.id).delete();
 }
 
