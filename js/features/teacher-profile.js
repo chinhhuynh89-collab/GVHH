@@ -155,6 +155,7 @@ function resizeImageToDataUrl(file) {
         newPhotoDataUrl = null;
         resetPhoto = false;
         showResult(box, '✅ Đã lưu hồ sơ.');
+        setTimeout(() => { window.location.href = '../index.html'; }, 1200);
       } catch (err) {
         showResult(box, `⚠️ ${escapeHtml(err.message)}`, true);
       }
