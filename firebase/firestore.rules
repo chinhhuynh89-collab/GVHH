@@ -114,15 +114,16 @@ service cloud.firestore {
       allow update, delete: if request.auth != null && resource.data.teacherUid == request.auth.uid;
     }
 
-    // ---------- Học sinh đăng ký bằng MÃ GIÁO VIÊN, chờ giáo viên xếp vào 1 nhóm cụ thể ----------
-    // Khác với "students" (đăng ký thẳng vào 1 nhóm bằng mã nhóm): đây là bước "liên hệ trước" —
-    // học sinh chỉ cần mã giáo viên (không cần biết mã nhóm cụ thể), giáo viên nhận thông báo rồi
-    // mới tự xếp học sinh vào đúng nhóm. Có SĐT/địa chỉ nên CHỈ giáo viên sở hữu đọc được (khác với
-    // "students" vốn cho đọc công khai) — an toàn hơn vì mã giáo viên có thể được chia sẻ rộng rãi.
+    // ---------- Học sinh xin vào nhóm, chờ giáo viên duyệt ----------
+    // Dùng cho 2 luồng: (1) đăng ký bằng MÃ GIÁO VIÊN — chưa biết nhóm cụ thể, giáo viên tự xếp sau
+    // (có teacherCode, không có groupCode); (2) xin vào 1 nhóm cụ thể bằng MÃ NHÓM — đã biết nhóm,
+    // giáo viên chỉ cần duyệt/từ chối (có groupCode, không có teacherCode). Khác với "students" (vào
+    // thẳng không cần duyệt): đây LUÔN cần giáo viên xác nhận trước khi có bản ghi "students" thật.
+    // Có SĐT/địa chỉ nên CHỈ giáo viên sở hữu đọc được (khác với "students" vốn cho đọc công khai).
     match /studentRegistrations/{regId} {
       allow read: if request.auth != null && request.auth.uid == resource.data.teacherUid;
       allow create: if request.resource.data.keys().hasAll(
-        ['teacherUid', 'teacherCode', 'studentName', 'school', 'className', 'address', 'phone', 'deviceId', 'status', 'createdAt']
+        ['teacherUid', 'studentName', 'school', 'className', 'address', 'phone', 'deviceId', 'status', 'createdAt']
       );
       allow update, delete: if request.auth != null && request.auth.uid == resource.data.teacherUid;
     }
