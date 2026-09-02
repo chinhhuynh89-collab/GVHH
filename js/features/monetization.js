@@ -58,10 +58,25 @@ function shortStudentCode(studentId) {
 
 // Cache trong bộ nhớ (không phải localStorage) — chỉ để tránh đọc lại Firestore nhiều lần trong
 // CÙNG 1 lượt tải trang khi nhiều đoạn script trên cùng trang đều cần đọc cấu hình.
+// LUÔN trả về 1 object MỚI (không bao giờ trả thẳng MONETIZATION_DEFAULTS) — nơi gọi (VD admin.js)
+// thường gán "cfg = await getMonetizationConfig()" rồi sau đó SỬA TRỰC TIẾP field trên cfg (VD
+// "cfg.enabled = next"); nếu lỡ trả thẳng object hằng số dùng chung, sửa như vậy sẽ làm hỏng luôn
+// giá trị mặc định cho phần còn lại của trang.
+function cloneDefaults() {
+  return {
+    enabled: MONETIZATION_DEFAULTS.enabled,
+    teacherPlan: Object.assign({}, MONETIZATION_DEFAULTS.teacherPlan),
+    studentPlan: Object.assign({}, MONETIZATION_DEFAULTS.studentPlan),
+    commission: Object.assign({}, MONETIZATION_DEFAULTS.commission),
+    payment: Object.assign({}, MONETIZATION_DEFAULTS.payment),
+    lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures)
+  };
+}
+
 let _monetizationConfigCache = null;
 async function getMonetizationConfig(forceRefresh) {
   if (_monetizationConfigCache && !forceRefresh) return _monetizationConfigCache;
-  if (!isFirebaseConfigured()) return MONETIZATION_DEFAULTS;
+  if (!isFirebaseConfigured()) return cloneDefaults();
   try {
     const { db } = ensureFirebase();
     const snap = await db.collection('config').doc('monetization').get();
@@ -75,7 +90,7 @@ async function getMonetizationConfig(forceRefresh) {
       lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures, data.lockedFeatures)
     };
   } catch (e) {
-    _monetizationConfigCache = MONETIZATION_DEFAULTS;
+    _monetizationConfigCache = cloneDefaults();
   }
   return _monetizationConfigCache;
 }

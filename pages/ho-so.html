@@ -17,83 +17,14 @@
   <h1>Hồ sơ giáo viên</h1>
 </header>
 
-<main>
-  <div class="card">
-    <h2><span class="icon">🔑</span>Mã giáo viên của bạn</h2>
-    <p class="hint" style="margin-top:-4px;">Gửi mã này cho học sinh — các em bấm "Đăng ký học cùng thầy (cô)" ở trang chủ và nhập đúng mã này để đăng ký. Bạn sẽ nhận thông báo và tự xếp học sinh vào nhóm phù hợp.</p>
-    <div style="text-align:center;font-size:28px;font-weight:700;letter-spacing:0.1em;color:var(--brand);padding:10px 0;" id="profileTeacherCode">...</div>
-    <div class="btn-row">
-      <button class="btn primary" id="shareToStudentBtn" type="button" style="flex:1;">📤 Chia sẻ cho học sinh</button>
-      <button class="btn" id="shareToTeacherBtn" type="button" style="flex:1;">📤 Chia sẻ cho giáo viên khác</button>
-    </div>
-    <div class="hint" style="margin-top:8px;">"Chia sẻ cho học sinh" gửi kèm mã của bạn — học sinh mở link sẽ thấy ngay trang của bạn và không cần nhập mã khi đăng ký. "Chia sẻ cho giáo viên khác" mời đồng nghiệp dùng thử app, kèm mã giới thiệu của bạn.</div>
-    <div class="result-box" id="shareResult"></div>
+<main id="profileMain">
+  <div class="action-grid">
+    <button class="btn profile-menu-btn" type="button" data-section="code">🔑 Mã &amp; chia sẻ</button>
+    <button class="btn profile-menu-btn" type="button" data-section="info">🙍 Thông tin cá nhân</button>
+    <button class="btn profile-menu-btn" type="button" data-section="plan">⭐ Gói &amp; hoa hồng</button>
   </div>
 
-  <div class="card">
-    <h2><span class="icon">🙍</span>Thông tin cá nhân</h2>
-    <p class="hint" style="margin-top:-4px;">Tên, ảnh và khẩu hiệu này hiện ở các trang giáo viên trong app, VÀ ở trang chủ cho học sinh trong nhóm của bạn xem ("Học cùng {tên bạn}") — dùng để xây dựng thương hiệu riêng.</p>
-
-    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:16px;">
-      <div id="profilePhotoPreview" style="width:88px;height:88px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;"></div>
-      <div class="btn-row">
-        <button class="btn" id="profilePhotoBtn" type="button">🖼️ Đổi ảnh</button>
-        <button class="btn" id="profilePhotoResetBtn" type="button">Dùng lại ảnh Google</button>
-      </div>
-      <input type="file" id="profilePhotoInput" accept="image/*" style="display:none;" />
-    </div>
-
-    <div class="field">
-      <label for="profileName">Tên hiển thị</label>
-      <input type="text" id="profileName" placeholder="VD: Thầy Chính" />
-    </div>
-    <div class="field">
-      <label for="profileGender">Giới tính *</label>
-      <select id="profileGender">
-        <option value="">-- Chọn để xưng hô đúng Thầy/Cô --</option>
-        <option value="male">Nam (Thầy)</option>
-        <option value="female">Nữ (Cô)</option>
-      </select>
-      <div class="hint" style="margin-top:4px;">Dùng để các nút mời học sinh (Liên hệ, Đăng ký...) tự xưng hô đúng "Thầy" hoặc "Cô".</div>
-    </div>
-    <div class="field">
-      <label for="profileWorkplace">Đơn vị công tác</label>
-      <input type="text" id="profileWorkplace" placeholder="VD: Trường Quân sự Quân đoàn 34" />
-    </div>
-    <div class="field">
-      <label for="profileBio">Khẩu hiệu / giới thiệu ngắn</label>
-      <textarea id="profileBio" rows="2" placeholder="VD: Học Hoá dễ hiểu, thi đâu trúng đó!" maxlength="120"></textarea>
-      <div class="hint" style="margin-top:4px;">Hiện ngay dưới tên bạn trên trang chủ (thay cho dòng mô tả mặc định).</div>
-    </div>
-
-    <div class="field">
-      <label for="profilePhone">Số điện thoại</label>
-      <input type="tel" id="profilePhone" placeholder="VD: 0912345678" />
-    </div>
-    <div class="field">
-      <label for="profileZalo">Link Zalo</label>
-      <input type="text" id="profileZalo" placeholder="VD: 0912345678 hoặc https://zalo.me/0912345678" />
-    </div>
-    <div class="field">
-      <label for="profileFacebook">Link Facebook</label>
-      <input type="text" id="profileFacebook" placeholder="VD: facebook.com/ten.thay.co" />
-    </div>
-    <div class="hint" style="margin-top:-6px;margin-bottom:10px;">Học sinh trong nhóm của bạn sẽ thấy nút "Liên hệ với thầy (cô)" ở trang chủ để gọi điện/nhắn tin cho bạn. Để trống mục nào thì học sinh sẽ không thấy nút đó.</div>
-
-    <button class="btn primary block" id="profileSaveBtn">Lưu hồ sơ</button>
-    <div class="result-box" id="profileResult"></div>
-  </div>
-
-  <div class="card" id="subscriptionCard" style="display:none;">
-    <h2><span class="icon">⭐</span>Gói của bạn</h2>
-    <div id="subscriptionBody"><p class="hint">⏳ Đang tải...</p></div>
-  </div>
-
-  <div class="card" id="commissionsCard" style="display:none;">
-    <h2><span class="icon">💰</span>Hoa hồng của tôi</h2>
-    <p class="hint" style="margin-top:-4px;">Giới thiệu giáo viên khác dùng app (nút "Chia sẻ cho giáo viên khác" ở trên) để nhận hoa hồng khi họ nâng cấp gói Pro. Học sinh trong nhóm của bạn mua gói Premium cũng tự tính hoa hồng cho bạn.</p>
-    <div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div>
-  </div>
+  <div id="profileSectionPanel" style="display:none;margin-top:12px;"></div>
 </main>
 
 <script src="../js/app.js"></script>

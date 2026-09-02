@@ -21,11 +21,26 @@
     }
 
     const { db } = ensureFirebase();
-    let cfg = await getMonetizationConfig(true);
     let openSection = null;
 
-    $('#monetizationEnabledToggle').classList.toggle('on', cfg.enabled);
+    // cfg tải NỀN (không await ở đây) — nút bấm phải gắn được NGAY, không chờ mạng, để tránh cảnh
+    // "bấm nút vài giây đầu không thấy phản ứng gì" nếu mạng chậm. Các mục cần cfg (plans/payment/
+    // locked) tự "await cfgReady" bên trong khi mở, mục khác (stats/roster/pending/commissions) không
+    // cần chờ gì cả.
+    let cfg = null;
+    const cfgReady = getMonetizationConfig(true).then((c) => {
+      cfg = c;
+      $('#monetizationEnabledToggle').classList.toggle('on', cfg.enabled);
+      return c;
+    }).catch((e) => {
+      cfg = { teacherPlan: {}, studentPlan: {}, commission: {}, payment: {}, lockedFeatures: {}, enabled: false };
+      throw e;
+    });
+
     $('#monetizationEnabledToggle').addEventListener('click', async () => {
+      try {
+        await cfgReady;
+      } catch (e) { alert('Chưa tải được cấu hình: ' + e.message); return; }
       const next = !cfg.enabled;
       $('#monetizationEnabledToggle').classList.toggle('on', next); // phản hồi ngay
       try {
@@ -37,18 +52,20 @@
       }
     });
 
-    // Số yêu cầu đang chờ duyệt — hiện chấm đỏ trên nút "Duyệt thanh toán" để admin biết có việc cần làm
-    // mà không cần mở ra xem.
-    try {
-      const pendingSnap = await db.collection('paymentSubmissions').where('status', '==', 'pending').get();
+    // Số yêu cầu đang chờ duyệt — hiện chấm đỏ trên nút "Duyệt thanh toán" để admin biết có việc cần
+    // làm mà không cần mở ra xem. Chạy NỀN (không await), không chặn việc gắn nút bấm bên dưới.
+    db.collection('paymentSubmissions').where('status', '==', 'pending').get().then((pendingSnap) => {
       if (pendingSnap.size) {
         const badge = $('#pendingCountBadge');
         badge.textContent = pendingSnap.size > 99 ? '99+' : String(pendingSnap.size);
         badge.style.display = 'flex';
       }
-    } catch (e) { /* ignore */ }
+    }).catch(() => { /* ignore */ });
 
     // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
+    // Gắn nút bấm NGAY LẬP TỨC (đồng bộ, không chờ awit nào ở trên) — đây là phần quan trọng nhất
+    // của trang nên phải chắc chắn hoạt động dù mạng chậm hay cfg tải lỗi.
+    const NEEDS_CFG = { plans: true, payment: true, locked: true };
     const SECTION_BUILDERS = {
       stats: buildStatsSection,
       roster: buildRosterSection,
@@ -75,7 +92,14 @@
         openSection = key;
         panel.style.display = 'block';
         panel.innerHTML = '<div class="card"><p class="hint">⏳ Đang tải...</p></div>';
-        await SECTION_BUILDERS[key](panel);
+        // Bọc try/catch quanh TOÀN BỘ bước dựng khung — lỗi bất ngờ nào cũng phải hiện ra thấy được,
+        // không được để khung bị kẹt mãi ở "Đang tải..." mà không rõ vì sao.
+        try {
+          if (NEEDS_CFG[key]) await cfgReady;
+          await SECTION_BUILDERS[key](panel);
+        } catch (e) {
+          panel.innerHTML = `<div class="card"><p class="hint">⚠️ ${escapeHtml(e.message)}</p></div>`;
+        }
       });
     });
 
