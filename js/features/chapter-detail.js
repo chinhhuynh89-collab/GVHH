@@ -458,7 +458,154 @@
     });
   }
 
-  // ---------- Trắc nghiệm (làm bài) ----------
+  // ---------- Tự kiểm tra: học sinh tự chọn số câu + thời gian, chấm theo thang điểm 10 ----------
+  // Khác với phần "Ôn tập" bên dưới (làm hết câu hỏi, thấy đáp án ngay từng câu): đây mô phỏng 1
+  // bài kiểm tra thật — rút ngẫu nhiên N câu, có đồng hồ đếm ngược, không lộ đáp án cho tới khi nộp.
+  const SELF_TEST_COUNT_OPTIONS = [5, 10, 15, 20, 25, 30];
+  let stQuestions = [];
+  let stIndex = 0;
+  let stAnswers = [];
+  let stFinished = false;
+  let stDeadline = 0;
+  let stTimerId = null;
+
+  function shuffleForSelfTest(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function formatCountdown(ms) {
+    const totalSec = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function initSelfTest() {
+    const total = effectiveQuiz.length;
+    if (total < 5) {
+      $('#selfTestCard').style.display = 'block';
+      $('#selfTestSetup').style.display = 'none';
+      $('#selfTestNotEnough').style.display = 'block';
+      return;
+    }
+    $('#selfTestCard').style.display = 'block';
+    const validCounts = SELF_TEST_COUNT_OPTIONS.filter((n) => n <= total);
+    if (!validCounts.includes(total)) validCounts.push(total);
+    const defaultCount = validCounts.includes(10) ? 10 : validCounts[validCounts.length - 1];
+    $('#selfTestCount').innerHTML = validCounts.map((n) =>
+      `<option value="${n}" ${n === defaultCount ? 'selected' : ''}>${n} câu</option>`
+    ).join('');
+    $('#selfTestStartBtn').addEventListener('click', startSelfTest);
+  }
+
+  function startSelfTest() {
+    const count = parseInt($('#selfTestCount').value, 10);
+    const durationMin = parseInt($('#selfTestDuration').value, 10);
+    stQuestions = shuffleForSelfTest(effectiveQuiz).slice(0, count);
+    stIndex = 0;
+    stAnswers = new Array(stQuestions.length).fill(null);
+    stFinished = false;
+    stDeadline = Date.now() + durationMin * 60 * 1000;
+    $('#selfTestSetup').style.display = 'none';
+    $('#selfTestRunning').style.display = 'block';
+    clearInterval(stTimerId);
+    stTimerId = setInterval(() => {
+      if (stFinished) { clearInterval(stTimerId); return; }
+      const remaining = stDeadline - Date.now();
+      const el = $('#selfTestTimer');
+      if (el) el.textContent = formatCountdown(remaining);
+      if (remaining <= 0) {
+        clearInterval(stTimerId);
+        stFinished = true;
+        renderSelfTestResult();
+      }
+    }, 1000);
+    renderSelfTestQuestion();
+  }
+
+  function renderSelfTestQuestion() {
+    if (stFinished) { renderSelfTestResult(); return; }
+    const total = stQuestions.length;
+    const item = stQuestions[stIndex];
+    const answered = stAnswers[stIndex] !== null && stAnswers[stIndex] !== undefined;
+    $('#selfTestRunning').innerHTML = `
+      <div class="quiz-progress" style="display:flex;justify-content:space-between;">
+        <span>Câu ${stIndex + 1}/${total}</span>
+        <span id="selfTestTimer" style="font-weight:700;color:var(--brand);">${formatCountdown(stDeadline - Date.now())}</span>
+      </div>
+      <div class="quiz-question">${escapeHtml(item.q)}</div>
+      <div class="quiz-options" id="selfTestOptions"></div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn" id="stPrevBtn" ${stIndex === 0 ? 'disabled' : ''}>← Câu trước</button>
+        ${stIndex === total - 1
+          ? `<button class="btn primary" id="stSubmitBtn" style="flex:1;">Nộp bài</button>`
+          : `<button class="btn primary" id="stNextBtn" style="flex:1;">Câu tiếp →</button>`}
+      </div>
+    `;
+    const optWrap = $('#selfTestOptions');
+    item.options.forEach((opt, i) => {
+      const b = document.createElement('button');
+      b.className = 'quiz-option' + (answered && i === stAnswers[stIndex] ? ' selected' : '');
+      b.textContent = opt;
+      b.addEventListener('click', () => { stAnswers[stIndex] = i; renderSelfTestQuestion(); });
+      optWrap.appendChild(b);
+    });
+    $('#stPrevBtn').addEventListener('click', () => { if (stIndex > 0) { stIndex--; renderSelfTestQuestion(); } });
+    const nextBtn = $('#stNextBtn');
+    if (nextBtn) nextBtn.addEventListener('click', () => { if (stIndex < total - 1) { stIndex++; renderSelfTestQuestion(); } });
+    const submitBtn = $('#stSubmitBtn');
+    if (submitBtn) submitBtn.addEventListener('click', () => {
+      const unanswered = stAnswers.filter((a) => a === null || a === undefined).length;
+      if (unanswered > 0 && !confirm(`Còn ${unanswered} câu chưa trả lời. Nộp bài luôn?`)) return;
+      stFinished = true;
+      clearInterval(stTimerId);
+      renderSelfTestResult();
+    });
+  }
+
+  function renderSelfTestResult() {
+    clearInterval(stTimerId);
+    const total = stQuestions.length;
+    let correctCount = 0;
+    const reviewHtml = stQuestions.map((item, i) => {
+      const isOk = stAnswers[i] === item.correct;
+      if (isOk) correctCount++;
+      return `
+        <div class="quiz-review-item ${isOk ? 'ok' : 'bad'}">
+          <div class="qi-q">${i + 1}. ${escapeHtml(item.q)}</div>
+          <div>Đáp án đúng: ${escapeHtml(item.options[item.correct])}</div>
+          <div class="qi-status">${isOk ? '✓ Bạn trả lời đúng' : '✗ Bạn chọn: ' + (stAnswers[i] != null ? escapeHtml(item.options[stAnswers[i]]) : '(chưa trả lời)')}</div>
+        </div>
+      `;
+    }).join('');
+    const score10 = Math.round((correctCount / total) * 100) / 10;
+    const percent = Math.round((correctCount / total) * 100);
+
+    const prev = getChapterProgress(chapter.id);
+    const best = Math.max(prev.quizBestPercent || 0, percent);
+    setChapterProgress(chapter.id, { quizBestPercent: best });
+    refreshDots();
+
+    $('#selfTestRunning').innerHTML = `
+      <div class="quiz-result">
+        <div class="qr-score">${score10.toFixed(1)} điểm</div>
+        <div class="qr-label">${correctCount}/${total} câu đúng (${percent}%)</div>
+      </div>
+      ${reviewHtml}
+      <button class="btn primary block" id="stRetryBtn" style="margin-top:6px;">Tự kiểm tra lại (đề khác)</button>
+    `;
+    $('#stRetryBtn').addEventListener('click', () => {
+      $('#selfTestRunning').style.display = 'none';
+      $('#selfTestSetup').style.display = 'block';
+    });
+  }
+
+  // ---------- Trắc nghiệm: ôn tập (làm hết câu hỏi, thấy đáp án ngay từng câu) ----------
   let qIndex = 0;
   let qAnswers = [];
   let qFinished = false;
@@ -736,6 +883,7 @@
     renderAllLessons();
     renderFlash();
     rebuildEffectiveQuiz();
+    initSelfTest();
     renderQuiz();
 
     if (owner.isOwner) {
