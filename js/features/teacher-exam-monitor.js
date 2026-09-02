@@ -2,6 +2,21 @@
 // diễn ra hay vừa kết thúc — còn bao nhiêu thời gian, bao nhiêu học sinh đã nộp/đang làm bài, bấm
 // vào xem danh sách chi tiết từng học sinh. Chỉ hiện khi đã đăng nhập giáo viên VÀ có đợt kiểm tra
 // đang diễn ra hoặc vừa kết thúc trong 24 giờ qua (quá thời gian đó coi như không còn liên quan).
+//
+// Khi đợt đã kết thúc và giáo viên đã bấm "Xem thống kê" 1 lần, đợt đó được ghi nhớ là "đã xem"
+// (localStorage, riêng theo máy) — lần sau mở trang chủ sẽ không nhắc lại đợt đó nữa.
+
+const EXAM_STATS_SEEN_KEY = 'hoahoc_exam_stats_seen';
+function getSeenExamIds() {
+  try { return JSON.parse(localStorage.getItem(EXAM_STATS_SEEN_KEY)) || []; } catch (e) { return []; }
+}
+function markExamStatsSeen(examId) {
+  const seen = getSeenExamIds();
+  if (seen.includes(examId)) return;
+  seen.push(examId);
+  if (seen.length > 50) seen.splice(0, seen.length - 50); // tránh phình to vô hạn theo thời gian
+  localStorage.setItem(EXAM_STATS_SEEN_KEY, JSON.stringify(seen));
+}
 
 (async function () {
   if (!isFirebaseConfigured()) return;
@@ -24,7 +39,10 @@
   const endTime = new Date(exam.endTime);
   const isOngoing = Date.now() <= endTime.getTime();
   const hoursSinceEnd = (Date.now() - endTime.getTime()) / 3600000;
-  if (!isOngoing && hoursSinceEnd > 24) return; // đã cũ, không còn liên quan để hiện nữa
+  if (!isOngoing) {
+    if (hoursSinceEnd > 24) return; // đã cũ, không còn liên quan để hiện nữa
+    if (getSeenExamIds().includes(exam.examId)) return; // đã xem thống kê đợt này rồi, không nhắc lại
+  }
 
   let group = null;
   let roster = [];
@@ -111,8 +129,9 @@
     card.innerHTML = `
       <h2><span class="icon">✅</span>Đã kết thúc: ${escapeHtml(exam.examTitle || (exam.chapterTitles || []).join(', '))}</h2>
       <p class="hint" style="margin-top:-4px;">${groupLabel} · ${doneCount}/${total} học sinh đã nộp bài</p>
-      <a class="btn primary block" href="pages/thong-ke.html?group=${encodeURIComponent(exam.groupCode)}">Xem thống kê →</a>
+      <a class="btn primary block" id="teacherExamStatsLink" href="pages/thong-ke.html?group=${encodeURIComponent(exam.groupCode)}">Xem thống kê →</a>
     `;
+    $('#teacherExamStatsLink').addEventListener('click', () => markExamStatsSeen(exam.examId));
   }
 
   if (isOngoing) renderOngoing(); else renderFinished();
