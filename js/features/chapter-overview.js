@@ -1,9 +1,21 @@
 // Trang tổng quan "Học theo chương": chọn lớp, tiến độ toàn chương trình + danh sách chương.
+//
+// Ngữ cảnh người xem (xác định 1 lần lúc tải trang, xem initContext()):
+// - Giáo viên đã đăng nhập: hiện thêm "N nhóm đang học · M học sinh" trên mỗi chương có học sinh
+//   động tới, gộp từ tất cả nhóm của giáo viên đó — để dễ quan sát mà không cần vào từng nhóm.
+// - Học sinh đã vào 1 nhóm: "Học tự do" do giáo viên của nhóm quyết định (xem groups-data.js:
+//   updateGroupFreeMode), không tự bật/tắt được nữa — nút chuyển thành hiển thị trạng thái, không
+//   bấm được.
+// - Ngoài ra (duyệt tự do, chưa đăng nhập/chưa vào nhóm): giữ nguyên hành vi cũ, tự bật/tắt được.
 
 (function () {
   const GRADE_KEY = 'hoahoc_selected_grade';
   let currentGrade = parseInt(localStorage.getItem(GRADE_KEY), 10) || 10;
   if (!GRADES.some((g) => g.grade === currentGrade)) currentGrade = 10;
+
+  let freeModeLockedByGroup = false; // true nếu học sinh đang ở trong 1 nhóm (không tự bật/tắt được)
+  let isTeacherViewer = false;
+  let chapterActivity = {}; // chỉ có dữ liệu nếu isTeacherViewer
 
   function ringSVG(percent, size = 66, stroke = 6) {
     const r = (size - stroke) / 2;
@@ -50,7 +62,12 @@
   }
 
   function renderFreeModeToggle() {
-    $('#freeModeSwitch').classList.toggle('on', isFreeMode());
+    const el = $('#freeModeSwitch');
+    el.classList.toggle('on', isFreeMode());
+    el.classList.toggle('locked', freeModeLockedByGroup);
+    $('#freeModeSub').textContent = freeModeLockedByGroup
+      ? 'Do giáo viên của nhóm bạn thiết lập — không tự bật/tắt được.'
+      : 'Cho phép mở tất cả chương, không cần học tuần tự';
   }
 
   function renderChapterList(chapters) {
@@ -67,6 +84,7 @@
       if (!withContent) badge = '<div class="cc-lock" title="Đang biên soạn">📝</div>';
       else if (!unlocked) badge = '<div class="cc-lock">🔒</div>';
       else if (complete) badge = '<div class="cc-check">✓ Xong</div>';
+      const activity = chapterActivity[c.id];
       return `
         <div class="chapter-card ${unlocked ? '' : 'locked'}">
           ${unlocked ? `<a class="cc-link" href="chuong.html?id=${c.id}" aria-label="${c.title}"></a>` : ''}
@@ -79,6 +97,9 @@
               <div class="cc-progress-bar"><div class="cc-progress-fill" style="width:${percent}%;"></div></div>
               <div class="cc-progress-label">${percent}% hoàn thành</div>
             ` : `<div class="cc-progress-label">Nội dung chi tiết đang được biên soạn</div>`}
+            ${isTeacherViewer && activity ? `
+              <div class="cc-activity">🧑‍🤝‍🧑 ${activity.groupCount} nhóm đang học · ${activity.studentCount} học sinh</div>
+            ` : ''}
           </div>
           ${badge}
         </div>
@@ -95,9 +116,37 @@
   }
 
   $('#freeModeSwitch').addEventListener('click', () => {
+    if (freeModeLockedByGroup) return; // giáo viên nhóm quyết định, học sinh không tự đổi được
     setFreeMode(!isFreeMode());
     renderAll();
   });
 
-  renderAll();
+  async function initContext() {
+    if (typeof isFirebaseConfigured !== 'function' || !isFirebaseConfigured()) return;
+    try {
+      const teacher = await waitForAuthReady();
+      if (teacher) {
+        isTeacherViewer = true;
+        try { chapterActivity = await getTeacherChapterActivity(); } catch (e) { chapterActivity = {}; }
+        return;
+      }
+    } catch (e) { /* ignore */ }
+
+    const membership = typeof getMembership === 'function' ? getMembership() : null;
+    if (membership && membership.groupCode) {
+      try {
+        const { db } = ensureFirebase();
+        const snap = await db.collection('groups').where('groupCode', '==', membership.groupCode).limit(1).get();
+        if (!snap.empty) {
+          setGroupFreeModeOverride(!!snap.docs[0].data().freeMode);
+          freeModeLockedByGroup = true;
+        }
+      } catch (e) { /* ignore, dùng lựa chọn cá nhân như bình thường */ }
+    }
+  }
+
+  (async function init() {
+    await initContext();
+    renderAll();
+  })();
 })();

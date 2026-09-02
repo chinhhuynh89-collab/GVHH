@@ -66,6 +66,15 @@ async function updateGroupChapters(groupId, chapterIds, grade) {
   await db.collection('groups').doc(groupId).update({ chapterIds, grade });
 }
 
+// Bật/tắt "Học tự do" cho cả 1 nhóm — do giáo viên quyết định thay vì để từng học sinh tự bật/tắt
+// (xem progress.js: setGroupFreeModeOverride). Mặc định (chưa từng đặt) coi như tắt, tức học tuần tự.
+async function updateGroupFreeMode(groupId, freeMode) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  await db.collection('groups').doc(groupId).update({ freeMode });
+}
+
 // Kết quả học tập của 1 nhóm: với mỗi học sinh — số chương đã hoàn thành (bài giảng + flashcard +
 // trắc nghiệm đạt ≥70%), số đợt kiểm tra đã làm, điểm trung bình và điểm cao nhất (thang 10) —
 // sắp xếp theo điểm trung bình giảm dần (học sinh chưa làm bài kiểm tra nào xếp cuối).
@@ -113,4 +122,46 @@ async function getGroupLearningResults(group) {
     return b.avgScore10 - a.avgScore10;
   });
   return results;
+}
+
+// Hoạt động học tập theo từng chương, GỘP TẤT CẢ NHÓM của giáo viên hiện tại — dùng để hiện
+// "N nhóm đang học · M học sinh" ngay trên trang "Học theo chương" khi giáo viên xem, để dễ quan
+// sát nhóm nào đang học chương nào mà không cần vào từng nhóm riêng lẻ.
+// Trả về { [chapterId]: { groupCount, studentCount } } — chỉ gồm chương có ít nhất 1 học sinh đã
+// động tới (xem bài giảng, xem flashcard, hoặc làm ít nhất 1 câu trắc nghiệm).
+async function getTeacherChapterActivity() {
+  const groups = await listGroupsForCurrentTeacher();
+  if (!groups.length) return {};
+  const { db } = ensureFirebase();
+
+  const studentsPerGroup = await Promise.all(groups.map((g) => getStudentsForGroup(g.groupCode)));
+  const allStudentIds = [];
+  const studentGroupCode = new Map();
+  groups.forEach((g, i) => {
+    studentsPerGroup[i].forEach((s) => { allStudentIds.push(s.id); studentGroupCode.set(s.id, g.groupCode); });
+  });
+  if (!allStudentIds.length) return {};
+
+  const progressSnaps = await Promise.all(allStudentIds.map((id) => db.collection('progress').doc(id).get()));
+
+  const activity = {};
+  allStudentIds.forEach((studentId, i) => {
+    const snap = progressSnaps[i];
+    if (!snap.exists) return;
+    const chapters = snap.data().chapters || {};
+    const groupCode = studentGroupCode.get(studentId);
+    Object.keys(chapters).forEach((chapterId) => {
+      const c = chapters[chapterId];
+      const touched = c.lessonViewed || c.flashcardsViewed || (c.quizBestPercent || 0) > 0;
+      if (!touched) return;
+      if (!activity[chapterId]) activity[chapterId] = { groupCodes: new Set(), studentCount: 0 };
+      activity[chapterId].groupCodes.add(groupCode);
+      activity[chapterId].studentCount++;
+    });
+  });
+  Object.keys(activity).forEach((id) => {
+    activity[id].groupCount = activity[id].groupCodes.size;
+    delete activity[id].groupCodes;
+  });
+  return activity;
 }

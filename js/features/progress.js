@@ -66,7 +66,17 @@ function chapterPercent(chapterId) {
   return Math.round((done / 3) * 100);
 }
 
+// Nếu học sinh đang ở trong 1 nhóm, "Học tự do" do GIÁO VIÊN quyết định cho cả nhóm (xem
+// groups-data.js: updateGroupFreeMode) thay vì mỗi học sinh tự bật/tắt — chapter-overview.js gọi
+// setGroupFreeModeOverride() 1 lần lúc tải trang sau khi biết nhóm có bật hay không. Học sinh/giáo
+// viên KHÔNG ở trong nhóm nào (tự học tự do) vẫn dùng lựa chọn cá nhân như trước.
+let _groupFreeModeOverride = null;
+function setGroupFreeModeOverride(v) {
+  _groupFreeModeOverride = v;
+}
+
 function isFreeMode() {
+  if (_groupFreeModeOverride !== null) return _groupFreeModeOverride;
   return localStorage.getItem(FREE_MODE_KEY) === '1';
 }
 

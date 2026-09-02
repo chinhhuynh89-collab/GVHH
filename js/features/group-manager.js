@@ -67,6 +67,13 @@
             <div class="cc-order">Lớp ${escapeHtml(String(g.grade))} · Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
             <div class="cc-title">${escapeHtml(g.groupName)}</div>
             <div class="cc-desc">${g.studentCount} học sinh đã tham gia · ${g.chapterIds.length} chương được giao</div>
+            <div class="free-mode-row" style="margin:8px 0;padding:10px 12px;">
+              <div class="fm-text">
+                <div class="fm-title">Học tự do cho nhóm này</div>
+                <div class="fm-sub">Bật: học sinh mở được mọi chương ngay. Tắt: phải học tuần tự, xong chương trước mới mở chương sau.</div>
+              </div>
+              <div class="switch free-mode-toggle ${g.freeMode ? 'on' : ''}" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}"><div class="knob"></div></div>
+            </div>
             <div class="btn-row" style="margin-top:8px;">
               <button class="btn roster-toggle" data-group="${escapeHtml(g.groupCode)}">👥 Danh sách học sinh</button>
               <button class="btn results-toggle" data-group="${escapeHtml(g.groupCode)}">📊 Kết quả học tập</button>
@@ -83,9 +90,29 @@
       wireRosterToggles();
       wireResultsToggles();
       wireChaptersEditToggles();
+      wireFreeModeToggles();
     } catch (e) {
       box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
     }
+  }
+
+  function wireFreeModeToggles() {
+    $$('.free-mode-toggle').forEach((el) => {
+      el.addEventListener('click', async () => {
+        const groupId = el.dataset.groupId;
+        const groupCode = el.dataset.group;
+        const group = groupsCache.find((g) => g.groupCode === groupCode);
+        const next = !group.freeMode;
+        el.classList.toggle('on', next); // phản hồi ngay, không chờ mạng
+        try {
+          await updateGroupFreeMode(groupId, next);
+          group.freeMode = next;
+        } catch (e) {
+          el.classList.toggle('on', !next); // lỗi thì trả lại trạng thái cũ
+          alert('Không lưu được: ' + e.message);
+        }
+      });
+    });
   }
 
   function wireRosterToggles() {
