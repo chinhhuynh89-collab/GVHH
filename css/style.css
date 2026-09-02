@@ -173,6 +173,12 @@ main {
   text-transform: uppercase;
   color: var(--text-faint);
   margin: 22px 4px 10px;
+  /* "display: flow-root" bao trọn phần tử con dùng float (VD nút "Xem với vai trò học sinh của tôi"
+     ở #teacherSection) — thiếu dòng này, khi float xuống dòng (chữ dài, màn hẹp), chiều cao khung
+     .section-label KHÔNG tính phần đã xuống dòng đó vào, khiến khối .icon-grid ngay sau bị đẩy lên
+     đè ngay lên phần chữ float còn đang hiện — đúng lỗi chỉ xảy ra ở "Dành cho giáo viên" (mục duy
+     nhất có float) mà "Dành cho học sinh" không có. */
+  display: flow-root;
 }
 
 .tile-grid {
