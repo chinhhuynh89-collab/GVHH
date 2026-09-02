@@ -73,15 +73,19 @@ function cloneDefaults() {
   };
 }
 
-let _monetizationConfigCache = null;
-async function getMonetizationConfig(forceRefresh) {
-  if (_monetizationConfigCache && !forceRefresh) return _monetizationConfigCache;
+// Trước đây có cache trong bộ nhớ (giữ lại giữa các lượt gọi trong CÙNG 1 lần tải trang) — bỏ hẳn:
+// đây là cấu hình DÙNG ĐỂ KHOÁ TÍNH NĂNG, nếu giáo viên/học sinh mở app rồi để đó lâu (không tải lại
+// trang) thì mọi lượt kiểm tra khoá sau đó vẫn dùng đúng giá trị CŨ đọc lần đầu, khiến admin bật khoá
+// ở trang quản trị nhưng phía người dùng "rất lâu vẫn chưa khoá" dù họ có bấm thử lại. Đọc thẳng
+// Firestore mỗi lần gọi — doc này rất nhỏ, không có enablePersistence (xem firebase-init.js) nên
+// luôn lấy đúng giá trị mới nhất từ server, tốn thêm cùng lắm vài trăm mili-giây mỗi lượt kiểm tra.
+async function getMonetizationConfig() {
   if (!isFirebaseConfigured()) return cloneDefaults();
   try {
     const { db } = ensureFirebase();
     const snap = await db.collection('config').doc('monetization').get();
     const data = snap.exists ? snap.data() : {};
-    _monetizationConfigCache = {
+    return {
       enabled: !!data.enabled,
       teacherPlan: Object.assign({}, MONETIZATION_DEFAULTS.teacherPlan, data.teacherPlan),
       studentPlan: Object.assign({}, MONETIZATION_DEFAULTS.studentPlan, data.studentPlan),
@@ -90,16 +94,14 @@ async function getMonetizationConfig(forceRefresh) {
       lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures, data.lockedFeatures)
     };
   } catch (e) {
-    _monetizationConfigCache = cloneDefaults();
+    return cloneDefaults();
   }
-  return _monetizationConfigCache;
 }
 
 // Chỉ admin gọi được (rules chặn phía sau) — dùng ở trang quản trị.
 async function saveMonetizationConfig(partial) {
   const { db } = ensureFirebase();
   await db.collection('config').doc('monetization').set(partial, { merge: true });
-  _monetizationConfigCache = null;
 }
 
 // Gói hiện tại của 1 giáo viên. Hết hạn (expiresAt đã qua) coi như đã rớt về free — không cần admin
@@ -198,27 +200,46 @@ async function isViewerPremium() {
 }
 
 // Áp khoá lên các tile trang chủ có gắn data-feature="..." khớp 1 mục audience:'any' trong
-// LOCKABLE_FEATURES đang bị admin khoá: đổi badge "Miễn phí" thành "⭐", chặn click (hiện thông báo
-// cần nâng cấp thay vì mở tính năng). Gọi 1 lần lúc tải trang chủ — xem index.html.
-async function applyCoreFeatureLocks() {
-  if (!isFirebaseConfigured()) return;
-  const cfg = await getMonetizationConfig();
-  if (!cfg.enabled) return;
-  const lockedAny = LOCKABLE_FEATURES.filter((f) => f.audience === 'any' && cfg.lockedFeatures[f.id]);
-  if (!lockedAny.length) return;
-  const premium = await isViewerPremium();
-  if (premium) return;
-  lockedAny.forEach((f) => {
-    const tile = document.querySelector(`[data-feature="${f.id}"]`);
-    if (!tile) return;
-    const badge = tile.querySelector('.badge');
-    if (badge) { badge.textContent = '⭐'; badge.classList.remove('free'); }
-    tile.addEventListener('click', (e) => {
+// LOCKABLE_FEATURES. Tách làm 2 việc rõ ràng (xem index.html):
+// - wireCoreFeatureTileClicks(): gắn 1 LẦN lúc tải trang, nhưng bên TRONG luôn tra cứu cấu hình +
+//   gói MỚI NHẤT ngay tại thời điểm bấm (không dùng trạng thái đã tính sẵn từ trước) — nên dù admin
+//   vừa đổi công tắc khoá xong, bấm thử ngay sau đó (kể cả không tải lại trang) vẫn chặn/không chặn
+//   ĐÚNG theo cấu hình hiện tại, không bị "chờ lâu mới có tác dụng".
+// - refreshCoreFeatureBadges(): chỉ đổi HIỂN THỊ badge ("Miễn phí" ⇄ "⭐") cho đúng mắt nhìn — gọi
+//   lại định kỳ (giống cách app.js tự kiểm tra bản cập nhật mới) để người đang mở sẵn trang chủ cũng
+//   thấy thay đổi ngay, không cần tự bấm thử mới biết.
+function wireCoreFeatureTileClicks() {
+  document.querySelectorAll('[data-feature]').forEach((tile) => {
+    const featureId = tile.dataset.feature;
+    const feature = LOCKABLE_FEATURES.find((f) => f.id === featureId && f.audience === 'any');
+    if (!feature) return;
+    tile.addEventListener('click', async (e) => {
+      if (!isFirebaseConfigured()) return;
+      const cfg = await getMonetizationConfig();
+      if (!cfg.enabled || !cfg.lockedFeatures[featureId]) return; // không khoá -> mở bình thường
+      const premium = await isViewerPremium();
+      if (premium) return;
       e.preventDefault();
-      if (confirm(`⭐ "${f.label}" chỉ dành cho gói trả phí. Nâng cấp ngay?`)) {
+      if (confirm(`⭐ "${feature.label}" chỉ dành cho gói trả phí. Nâng cấp ngay?`)) {
         window.location.href = (window.APP_BASE_PATH || './') + 'pages/nang-cap.html';
       }
     });
+  });
+}
+
+async function refreshCoreFeatureBadges() {
+  if (!isFirebaseConfigured()) return;
+  const anyTiles = LOCKABLE_FEATURES.filter((f) => f.audience === 'any');
+  if (!anyTiles.some((f) => document.querySelector(`[data-feature="${f.id}"]`))) return;
+  const cfg = await getMonetizationConfig();
+  const premium = cfg.enabled ? await isViewerPremium() : true; // tắt công tắc tổng -> coi như luôn "mở"
+  anyTiles.forEach((f) => {
+    const tile = document.querySelector(`[data-feature="${f.id}"]`);
+    const badge = tile && tile.querySelector('.badge');
+    if (!badge) return;
+    const locked = cfg.enabled && cfg.lockedFeatures[f.id] && !premium;
+    badge.textContent = locked ? '⭐' : 'Miễn phí';
+    badge.classList.toggle('free', !locked);
   });
 }
 

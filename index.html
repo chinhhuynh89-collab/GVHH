@@ -455,17 +455,22 @@
 </script>
 <script>
 (async function () {
+  if (!isFirebaseConfigured()) return;
+
   // Tile "Quản trị" chỉ hiện cho đúng tài khoản admin (bảo mật thật nằm ở firestore.rules, đây chỉ
   // là ẩn/hiện giao diện cho gọn — xem js/features/monetization.js).
-  if (!isFirebaseConfigured()) return;
   try {
     const user = await waitForAuthReady();
     if (isAdminUser(user)) $('#adminTile').style.display = '';
   } catch (e) { /* ignore */ }
 
   // Thẻ "Gói của bạn" cho học sinh — hiện "HS-mã-Premium/Miễn phí", chỉ khi admin đã bật công tắc
-  // tổng. Nút "Nâng cấp ngay" chỉ hiện khi chưa có Premium.
-  try {
+  // tổng. Nút "Nâng cấp ngay" chỉ hiện khi chưa có Premium. QUAN TRỌNG: đặt trong hàm riêng (không
+  // dùng "return" thẳng trong IIFE ngoài) — trước đây "return" ở đây lỡ thoát LUÔN cả hàm ngoài,
+  // khiến đoạn khoá tile bên dưới KHÔNG BAO GIỜ chạy được với giáo viên/khách (chỉ ai đã có membership
+  // học sinh mới chạy tới đoạn dưới) — đây là lý do chính khiến khoá tính năng "rất lâu không thấy
+  // tác dụng": với giáo viên, nó chưa từng chạy chứ không phải chạy chậm.
+  async function renderStudentPlanCard() {
     const membership = typeof getMembership === 'function' ? getMembership() : null;
     if (!membership || !membership.groupCode) return;
     const cfg = await getMonetizationConfig();
@@ -478,11 +483,22 @@
       : `<strong>HS-${escapeHtml(code)}-Miễn phí</strong> — mở khoá tính năng nâng cao chỉ ${formatVnd(cfg.studentPlan.price)}/${cfg.studentPlan.periodDays} ngày.`;
     $('#studentUpgradeBtn').style.display = isPremium ? 'none' : 'block';
     $('#studentUpgradeCard').style.display = 'block';
-  } catch (e) { /* ignore */ }
+  }
+  try { await renderStudentPlanCard(); } catch (e) { /* ignore */ }
 
   // Khoá các tile "Tính năng lõi" (Bảng tuần hoàn, Công cụ tính toán, Cân bằng phương trình) nếu
-  // admin đã bật khoá cho tile đó và người xem chưa có gói trả phí (xem monetization.js).
-  try { await applyCoreFeatureLocks(); } catch (e) { /* ignore */ }
+  // admin đã bật khoá cho tile đó và người xem chưa có gói trả phí (xem monetization.js). Việc CHẶN
+  // click gắn 1 lần nhưng luôn tra cứu cấu hình MỚI NHẤT ngay lúc bấm; badge (⭐/Miễn phí) thì tự làm
+  // mới định kỳ để ai đang mở sẵn trang chủ cũng thấy thay đổi ngay, không cần tải lại trang.
+  try {
+    wireCoreFeatureTileClicks();
+    await refreshCoreFeatureBadges();
+    const refreshAll = () => Promise.all([refreshCoreFeatureBadges(), renderStudentPlanCard()]).catch(() => {});
+    setInterval(refreshAll, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') refreshAll();
+    });
+  } catch (e) { /* ignore */ }
 })();
 </script>
 </body>
