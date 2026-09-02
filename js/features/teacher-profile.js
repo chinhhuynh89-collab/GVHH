@@ -99,12 +99,22 @@ function resizeImageToDataUrl(file) {
           bio: $('#profileBio').value.trim(),
           updatedAt: new Date().toISOString()
         };
+        // Bản công khai (không có email) — dùng để cá nhân hoá trang chủ cho học sinh trong nhóm
+        // của giáo viên này xem (xem js/features/branding.js).
+        const publicData = {
+          displayName: data.displayName, bio: data.bio, updatedAt: data.updatedAt
+        };
         if (resetPhoto) {
           data.photoURL = firebase.firestore.FieldValue.delete();
+          publicData.photoURL = firebase.firestore.FieldValue.delete();
         } else if (newPhotoDataUrl) {
           data.photoURL = newPhotoDataUrl;
+          publicData.photoURL = newPhotoDataUrl;
         }
-        await db.collection('teachers').doc(user.uid).set(data, { merge: true });
+        await Promise.all([
+          db.collection('teachers').doc(user.uid).set(data, { merge: true }),
+          db.collection('teacherProfiles').doc(user.uid).set(publicData, { merge: true })
+        ]);
         newPhotoDataUrl = null;
         resetPhoto = false;
         showResult(box, '✅ Đã lưu hồ sơ.');

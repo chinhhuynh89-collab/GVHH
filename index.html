@@ -17,14 +17,15 @@
 <body>
 
 <header class="app-header">
-  <h1>Trợ Lý Giáo Viên Hoá Học</h1>
+  <h1 id="topHeaderTitle" style="flex:1;">Trợ Lý Giáo Viên Hoá Học</h1>
+  <img id="topHeaderAvatar" alt="" style="display:none;width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" referrerpolicy="no-referrer" />
 </header>
 
 <main>
   <section class="hero">
-    <div class="logo-mark">⚗️</div>
-    <h1>Trợ Lý Giáo Viên Hoá Học</h1>
-    <p>Công cụ học &amp; dạy Hoá — hoạt động hoàn toàn offline</p>
+    <div class="logo-mark" id="heroLogoMark">⚗️</div>
+    <h1 id="heroTitle">Trợ Lý Giáo Viên Hoá Học</h1>
+    <p id="heroSubtitle">Công cụ học &amp; dạy Hoá — hoạt động hoàn toàn offline</p>
   </section>
 
   <div class="section-label">Tính năng lõi</div>
@@ -177,6 +178,7 @@
 <script src="js/features/device-id.js"></script>
 <script src="js/features/join-group.js"></script>
 <script src="js/features/teacher-exam-monitor.js"></script>
+<script src="js/features/branding.js"></script>
 <script>
 (function () {
   function renderRoleSections() {

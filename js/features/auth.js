@@ -113,12 +113,20 @@ async function ensureTeacherProfile(user) {
   const ref = db.collection('teachers').doc(user.uid);
   const snap = await ref.get();
   if (!snap.exists) {
-    await ref.set({
-      displayName: user.displayName || '',
-      email: user.email || '',
-      photoURL: user.photoURL || '',
-      createdAt: new Date().toISOString()
-    });
+    await Promise.all([
+      ref.set({
+        displayName: user.displayName || '',
+        email: user.email || '',
+        photoURL: user.photoURL || '',
+        createdAt: new Date().toISOString()
+      }),
+      // Gieo sẵn bản công khai (không có email) bằng tên/ảnh Google — để trang chủ cá nhân hoá
+      // được ngay từ lần đăng nhập đầu tiên, giáo viên có thể tự đổi sau ở trang "Hồ sơ".
+      db.collection('teacherProfiles').doc(user.uid).set({
+        displayName: user.displayName || '', photoURL: user.photoURL || '', bio: '',
+        createdAt: new Date().toISOString()
+      })
+    ]);
   }
 }
 

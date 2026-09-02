@@ -20,7 +20,7 @@
 <main>
   <div class="card">
     <h2><span class="icon">🙍</span>Thông tin cá nhân</h2>
-    <p class="hint" style="margin-top:-4px;">Tên và ảnh này hiện ở các trang giáo viên trong app để cá nhân hoá — học sinh không nhìn thấy.</p>
+    <p class="hint" style="margin-top:-4px;">Tên, ảnh và khẩu hiệu này hiện ở các trang giáo viên trong app, VÀ ở trang chủ cho học sinh trong nhóm của bạn xem ("Học cùng {tên bạn}") — dùng để xây dựng thương hiệu riêng.</p>
 
     <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:16px;">
       <div id="profilePhotoPreview" style="width:88px;height:88px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;"></div>
@@ -40,8 +40,9 @@
       <input type="text" id="profileWorkplace" placeholder="VD: Trường Quân sự Quân đoàn 34" />
     </div>
     <div class="field">
-      <label for="profileBio">Giới thiệu ngắn</label>
-      <textarea id="profileBio" rows="3" placeholder="VD: Giáo viên Hoá học, phụ trách khối 10-12"></textarea>
+      <label for="profileBio">Khẩu hiệu / giới thiệu ngắn</label>
+      <textarea id="profileBio" rows="2" placeholder="VD: Học Hoá dễ hiểu, thi đâu trúng đó!" maxlength="120"></textarea>
+      <div class="hint" style="margin-top:4px;">Hiện ngay dưới tên bạn trên trang chủ (thay cho dòng mô tả mặc định).</div>
     </div>
 
     <button class="btn primary block" id="profileSaveBtn">Lưu hồ sơ</button>
