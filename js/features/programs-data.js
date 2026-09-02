@@ -10,6 +10,7 @@
 async function createProgram(name, icon, description) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  if (typeof enforceFeatureLock === 'function') await enforceFeatureLock(teacher.uid, 'customPrograms');
   const { db } = ensureFirebase();
   const ref = await db.collection('programs').add({
     teacherUid: teacher.uid, name, icon: icon || '🎓', description: description || '',

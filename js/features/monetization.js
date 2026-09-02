@@ -15,8 +15,20 @@ const MONETIZATION_DEFAULTS = {
   teacherPlan: { price: 199000, periodDays: 30, maxGroupsFree: 2, maxStudentsFree: 40, maxCustomChaptersFree: 3 },
   studentPlan: { price: 49000, periodDays: 30 },
   commission: { teacherReferralPercent: 20, studentReferralPercent: 10 },
-  payment: { bankName: '', accountNumber: '', accountHolder: '', momoNumber: '', note: '' }
+  payment: { bankName: '', accountNumber: '', accountHolder: '', momoNumber: '', note: '' },
+  // Tính năng CHỈ giáo viên gói Pro dùng được khi bật (khác giới hạn SỐ LƯỢNG ở teacherPlan phía
+  // trên — đây là khoá HẲN cả tính năng). Mặc định TẤT CẢ đang tắt (false) — bật/tắt từng cái ở
+  // trang quản trị, đổi được bất cứ lúc nào không cần deploy lại.
+  lockedFeatures: { customPrograms: false, examCreator: false, advancedStats: false }
 };
+
+// Danh mục tính năng có thể khoá — id khớp key trong lockedFeatures ở trên, label hiện ở trang
+// quản trị VÀ trong thông báo chặn khi giáo viên gói miễn phí cố dùng.
+const LOCKABLE_FEATURES = [
+  { id: 'customPrograms', label: 'Tạo chương trình giảng dạy riêng (ngoài lớp 6-12 mặc định)' },
+  { id: 'examCreator', label: 'Tạo đề kiểm tra tự động' },
+  { id: 'advancedStats', label: 'Thống kê điểm theo từng đợt kiểm tra' }
+];
 
 function isAdminUser(user) {
   return !!(user && user.email === MONETIZATION_ADMIN_EMAIL);
@@ -41,7 +53,8 @@ async function getMonetizationConfig(forceRefresh) {
       teacherPlan: Object.assign({}, MONETIZATION_DEFAULTS.teacherPlan, data.teacherPlan),
       studentPlan: Object.assign({}, MONETIZATION_DEFAULTS.studentPlan, data.studentPlan),
       commission: Object.assign({}, MONETIZATION_DEFAULTS.commission, data.commission),
-      payment: Object.assign({}, MONETIZATION_DEFAULTS.payment, data.payment)
+      payment: Object.assign({}, MONETIZATION_DEFAULTS.payment, data.payment),
+      lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures, data.lockedFeatures)
     };
   } catch (e) {
     _monetizationConfigCache = MONETIZATION_DEFAULTS;
@@ -95,6 +108,40 @@ async function submitPaymentRequest(payload) {
   await db.collection('paymentSubmissions').add(Object.assign({
     status: 'pending', createdAt: new Date().toISOString()
   }, payload));
+}
+
+// Chặn 1 HÀNH ĐỘNG cụ thể (VD: tạo chương trình riêng, tạo đề kiểm tra) nếu tính năng đó đang bị
+// admin khoá VÀ giáo viên vẫn ở gói miễn phí — ném lỗi để nơi gọi hiện thông báo (giống hệt cách
+// enforceTeacherGroupLimit/enforceTeacherStudentLimit trong groups-data.js đang làm).
+async function enforceFeatureLock(teacherUid, featureKey) {
+  if (!isFirebaseConfigured()) return;
+  const cfg = await getMonetizationConfig();
+  if (!cfg.enabled || !cfg.lockedFeatures[featureKey]) return;
+  const sub = await getTeacherSubscription(teacherUid);
+  if (sub.tier === 'pro') return;
+  const feature = LOCKABLE_FEATURES.find((f) => f.id === featureKey);
+  throw new Error(`"${feature ? feature.label : featureKey}" chỉ dành cho gói Pro. Vào trang "Nâng cấp gói" để nâng cấp.`);
+}
+
+// Chặn NGUYÊN 1 TRANG (VD: trang Thống kê) nếu tính năng đó đang bị khoá — vẽ thẳng thông báo +
+// nút nâng cấp vào mainEl rồi trả về true để nơi gọi dừng lại, không tải/hiện phần còn lại của
+// trang nữa. Dùng cho trang không có phần "dùng thử trước khi chặn" hợp lý (khác với
+// enforceFeatureLock — chặn ngay lúc bấm hành động, còn cái này chặn ngay khi mở trang).
+async function renderFeatureLockGate(mainEl, teacherUid, featureKey) {
+  if (!isFirebaseConfigured()) return false;
+  const cfg = await getMonetizationConfig();
+  if (!cfg.enabled || !cfg.lockedFeatures[featureKey]) return false;
+  const sub = await getTeacherSubscription(teacherUid);
+  if (sub.tier === 'pro') return false;
+  const feature = LOCKABLE_FEATURES.find((f) => f.id === featureKey);
+  mainEl.innerHTML = `
+    <div class="card">
+      <h2><span class="icon">⭐</span>Tính năng gói Pro</h2>
+      <p class="hint">"${escapeHtml(feature ? feature.label : featureKey)}" chỉ dành cho gói Pro.</p>
+      <a class="btn primary block" href="nang-cap.html">⭐ Nâng cấp ngay</a>
+    </div>
+  `;
+  return true;
 }
 
 // Tra uid giáo viên từ MÃ giáo viên (dùng lại đúng cách branding.js đang tra "?tc=" — teacherProfiles

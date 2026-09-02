@@ -1,7 +1,8 @@
 // Giáo viên xem thống kê điểm học sinh theo từng đề kiểm tra đã tạo.
 
 (function () {
-  requireTeacherAuth(async () => {
+  requireTeacherAuth(async (user) => {
+    if (typeof renderFeatureLockGate === 'function' && await renderFeatureLockGate($('#statsContent'), user.uid, 'advancedStats')) return;
     const params = new URLSearchParams(location.search);
     const preselectGroup = params.get('group') || '';
     let groups = [];

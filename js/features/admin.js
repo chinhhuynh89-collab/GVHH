@@ -37,6 +37,33 @@
     }
     fillForm();
 
+    function renderLockedFeatures() {
+      $('#lockedFeaturesBody').innerHTML = LOCKABLE_FEATURES.map((f) => `
+        <div class="free-mode-row" style="margin:8px 0;padding:10px 12px;">
+          <div class="fm-text">
+            <div class="fm-title">${escapeHtml(f.label)}</div>
+          </div>
+          <div class="switch locked-feature-toggle ${cfg.lockedFeatures[f.id] ? 'on' : ''}" data-feature="${f.id}"><div class="knob"></div></div>
+        </div>
+      `).join('');
+      $$('.locked-feature-toggle').forEach((el) => {
+        el.addEventListener('click', async () => {
+          const featureId = el.dataset.feature;
+          const next = !cfg.lockedFeatures[featureId];
+          el.classList.toggle('on', next);
+          try {
+            const lockedFeatures = Object.assign({}, cfg.lockedFeatures, { [featureId]: next });
+            await saveMonetizationConfig({ lockedFeatures });
+            cfg.lockedFeatures = lockedFeatures;
+          } catch (e) {
+            el.classList.toggle('on', !next);
+            alert('Không lưu được: ' + e.message);
+          }
+        });
+      });
+    }
+    renderLockedFeatures();
+
     $('#monetizationEnabledToggle').addEventListener('click', async () => {
       const next = !cfg.enabled;
       $('#monetizationEnabledToggle').classList.toggle('on', next); // phản hồi ngay
@@ -123,6 +150,108 @@
       }
     }
 
+    // ---------- Danh sách giáo viên (báo cáo tổng hợp) ----------
+    // Đọc từ các collection CÔNG KHAI (teacherProfiles/subscriptions/groups/students) + commissions
+    // (chỉ admin đọc được toàn bộ) — KHÔNG đọc "teachers" (có email, chỉ chính chủ đọc được) vì
+    // không cần thiết, mọi thứ cần cho báo cáo đã có ở các collection công khai.
+    let rosterGroupsSnap = null, rosterStudentsSnap = null;
+    async function renderTeacherRoster() {
+      const box = $('#teacherRosterBody');
+      try {
+        const [profilesSnap, subsSnap, groupsSnap, studentsSnap, commissionsSnap] = await Promise.all([
+          db.collection('teacherProfiles').get(),
+          db.collection('subscriptions').get(),
+          db.collection('groups').get(),
+          db.collection('students').get(),
+          db.collection('commissions').get()
+        ]);
+        rosterGroupsSnap = groupsSnap;
+        rosterStudentsSnap = studentsSnap;
+
+        const subsByUid = new Map(subsSnap.docs.map((d) => [d.id, d.data()]));
+        const groupTeacherByCode = new Map(groupsSnap.docs.map((d) => [d.data().groupCode, d.data().teacherUid]));
+        const studentCountByUid = new Map();
+        studentsSnap.docs.forEach((d) => {
+          const s = d.data();
+          const uid = s.teacherUid || groupTeacherByCode.get(s.groupCode);
+          if (!uid) return;
+          studentCountByUid.set(uid, (studentCountByUid.get(uid) || 0) + 1);
+        });
+        const commissionByUid = new Map();
+        commissionsSnap.docs.forEach((d) => {
+          const c = d.data();
+          const cur = commissionByUid.get(c.beneficiaryTeacherUid) || { paid: 0, pending: 0 };
+          if (c.status === 'paid') cur.paid += Number(c.amount) || 0; else cur.pending += Number(c.amount) || 0;
+          commissionByUid.set(c.beneficiaryTeacherUid, cur);
+        });
+
+        const rows = profilesSnap.docs.map((d) => {
+          const p = d.data();
+          const sub = subsByUid.get(d.id) || { tier: 'free' };
+          const comm = commissionByUid.get(d.id) || { paid: 0, pending: 0 };
+          return {
+            uid: d.id, teacherCode: p.teacherCode || '—', name: p.displayName || '(chưa đặt tên)',
+            tier: sub.tier || 'free', expiresAt: sub.expiresAt || '',
+            studentCount: studentCountByUid.get(d.id) || 0, comm
+          };
+        }).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+        if (!rows.length) { box.innerHTML = '<p class="hint">Chưa có giáo viên nào đăng nhập.</p>'; return; }
+
+        box.innerHTML = `
+          <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
+          <div class="roster-table-wrap">
+            <table class="roster-table">
+              <thead>
+                <tr><th>Mã GV</th><th>Tên</th><th>Trạng thái gói</th><th>Số học sinh</th><th>Hoa hồng đã trả</th><th>Hoa hồng chờ trả</th><th></th></tr>
+              </thead>
+              <tbody>
+                ${rows.map((r) => `
+                  <tr>
+                    <td>${escapeHtml(r.teacherCode)}</td>
+                    <td>${escapeHtml(r.name)}</td>
+                    <td>${r.tier === 'pro' ? `Pro (hết hạn ${escapeHtml(r.expiresAt.slice(0, 10))})` : 'Miễn phí'}</td>
+                    <td>${r.studentCount}</td>
+                    <td>${formatVnd(r.comm.paid)}</td>
+                    <td>${formatVnd(r.comm.pending)}</td>
+                    <td><button class="btn roster-expand-btn" type="button" data-uid="${r.uid}">👥 Xem học sinh</button></td>
+                  </tr>
+                  <tr id="roster-students-${r.uid}" style="display:none;"><td colspan="7"></td></tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        $$('.roster-expand-btn', box).forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const uid = btn.dataset.uid;
+            const row = document.getElementById(`roster-students-${uid}`);
+            const open = row.style.display !== 'none';
+            if (open) { row.style.display = 'none'; btn.textContent = '👥 Xem học sinh'; return; }
+            row.style.display = 'table-row';
+            btn.textContent = '👥 Ẩn học sinh';
+            const cell = row.querySelector('td');
+            if (row.dataset.loaded) return;
+            row.dataset.loaded = '1';
+            cell.innerHTML = '<p class="hint">⏳ Đang tải...</p>';
+            const teacherGroupCodes = new Set(rosterGroupsSnap.docs.filter((d) => d.data().teacherUid === uid).map((d) => d.data().groupCode));
+            const students = rosterStudentsSnap.docs.filter((d) => teacherGroupCodes.has(d.data().groupCode))
+              .map((d) => Object.assign({ id: d.id }, d.data()));
+            if (!students.length) { cell.innerHTML = '<p class="hint">Chưa có học sinh nào.</p>'; return; }
+            const subs = await Promise.all(students.map((s) => getStudentSubscription(s.deviceId)));
+            cell.innerHTML = students.map((s, i) => `
+              <div class="hint" style="padding:6px 0;border-top:1px solid var(--border);">
+                ${escapeHtml(s.studentName || '')} · ${escapeHtml(s.school || '')} · ${escapeHtml(s.phone || '')} · ${subs[i].tier === 'premium' ? '⭐ Premium' : 'Miễn phí'}
+              </div>
+            `).join('');
+          });
+        });
+      } catch (e) {
+        box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+      }
+    }
+
     // ---------- Duyệt thanh toán ----------
     async function approvePayment(sub) {
       const freshCfg = await getMonetizationConfig(true);
@@ -190,7 +319,7 @@
             try {
               await approvePayment(sub);
               showResult(resultBox, '✅ Đã duyệt — gói đã được cấp.');
-              await Promise.all([renderPendingPayments(), renderCommissions(), renderStats()]);
+              await Promise.all([renderPendingPayments(), renderCommissions(), renderStats(), renderTeacherRoster()]);
             } catch (e) {
               showResult(resultBox, `⚠️ ${escapeHtml(e.message)}`, true);
               btn.disabled = false;
@@ -239,7 +368,7 @@
             btn.textContent = '⏳ Đang lưu...';
             try {
               await db.collection('commissions').doc(btn.dataset.id).update({ status: 'paid', paidAt: new Date().toISOString() });
-              await Promise.all([renderCommissions(), renderStats()]);
+              await Promise.all([renderCommissions(), renderStats(), renderTeacherRoster()]);
             } catch (e) {
               alert('Không lưu được: ' + e.message);
               btn.disabled = false;
@@ -252,6 +381,6 @@
       }
     }
 
-    await Promise.all([renderStats(), renderPendingPayments(), renderCommissions()]);
+    await Promise.all([renderStats(), renderTeacherRoster(), renderPendingPayments(), renderCommissions()]);
   });
 })();

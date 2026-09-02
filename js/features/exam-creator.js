@@ -21,6 +21,7 @@ function shuffleArray(arr) {
 async function createExamForCurrentTeacher(examInput) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  if (typeof enforceFeatureLock === 'function') await enforceFeatureLock(teacher.uid, 'examCreator');
   const { db } = ensureFirebase();
   const examRef = db.collection('exams').doc();
   // 2 tài liệu độc lập (câu hỏi + đáp án) — ghi CÙNG LÚC thay vì lần lượt để đỡ mất 1 round-trip mạng.
