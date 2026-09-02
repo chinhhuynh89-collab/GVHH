@@ -280,10 +280,13 @@
     window.location.reload();
   });
 
-  $('#exitPreviewBtn').addEventListener('click', (e) => {
+  $('#exitPreviewBtn').addEventListener('click', async (e) => {
     e.preventDefault();
     localStorage.removeItem(PREVIEW_KEY);
     setRole('teacher');
+    // Trước đó đã đăng xuất Google khi vào chế độ xem thử (xem previewAsStudentBtn) — phải chủ động
+    // đăng nhập lại ngay đây, không chỉ đổi vai trò, thì dữ liệu giáo viên mới tải lại được.
+    try { if (isFirebaseConfigured()) await signInWithGoogle(); } catch (err) { /* vẫn quay lại giao diện GV dù đăng nhập lỗi/bị huỷ — các trang sẽ tự hiện nút đăng nhập khi cần */ }
     window.location.reload();
   });
 
