@@ -98,12 +98,12 @@
               </div>
               <div class="switch free-mode-toggle ${g.freeMode ? 'on' : ''}" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}"><div class="knob"></div></div>
             </div>
-            <div class="btn-row" style="margin-top:8px;">
+            <div class="action-grid" style="margin-top:8px;">
               <button class="btn roster-toggle" data-group="${escapeHtml(g.groupCode)}">👥 Danh sách học sinh</button>
               <button class="btn results-toggle" data-group="${escapeHtml(g.groupCode)}">📊 Kết quả học tập</button>
               <button class="btn chapters-toggle" data-group="${escapeHtml(g.groupCode)}">📘 Sửa chương trình học</button>
-              <a class="btn" href="tao-de-kiem-tra.html?group=${encodeURIComponent(g.groupCode)}">Tạo đề kiểm tra</a>
-              <a class="btn" href="thong-ke.html?group=${encodeURIComponent(g.groupCode)}">Thống kê từng đợt</a>
+              <a class="btn" href="tao-de-kiem-tra.html?group=${encodeURIComponent(g.groupCode)}">📝 Tạo đề kiểm tra</a>
+              <a class="btn" href="thong-ke.html?group=${encodeURIComponent(g.groupCode)}">📈 Thống kê từng đợt</a>
             </div>
             <div class="roster-box" id="roster-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
             <div class="results-box" id="results-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
@@ -118,6 +118,23 @@
     } catch (e) {
       box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
     }
+  }
+
+  // Kiểu accordion: mỗi nhóm chỉ mở 1 trong 3 mục (danh sách học sinh / kết quả học tập / sửa
+  // chương trình học) cùng lúc — bấm mở mục nào thì mục đang mở của nhóm đó tự đóng lại, đỡ rối
+  // mắt trên màn hình nhỏ.
+  function closeOtherPanels(groupCode, exceptBoxId) {
+    [
+      { boxId: 'roster-' + groupCode, selector: `.roster-toggle[data-group="${groupCode}"]`, label: '👥 Danh sách học sinh' },
+      { boxId: 'results-' + groupCode, selector: `.results-toggle[data-group="${groupCode}"]`, label: '📊 Kết quả học tập' },
+      { boxId: 'chapters-edit-' + groupCode, selector: `.chapters-toggle[data-group="${groupCode}"]`, label: '📘 Sửa chương trình học' }
+    ].forEach(({ boxId, selector, label }) => {
+      if (boxId === exceptBoxId) return;
+      const otherBox = document.getElementById(boxId);
+      const otherBtn = document.querySelector(selector);
+      if (otherBox) otherBox.style.display = 'none';
+      if (otherBtn) otherBtn.textContent = label;
+    });
   }
 
   function wireFreeModeToggles() {
@@ -146,6 +163,7 @@
         const box = $('#roster-' + groupCode);
         const open = box.style.display !== 'none';
         if (open) { box.style.display = 'none'; btn.textContent = '👥 Danh sách học sinh'; return; }
+        closeOtherPanels(groupCode, box.id);
         box.style.display = 'block';
         btn.textContent = '👥 Ẩn danh sách học sinh';
         if (box.dataset.loaded) return; // đã tải trước đó, không tải lại
@@ -155,6 +173,7 @@
           box.dataset.loaded = '1';
           if (!students.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào tham gia.</p>'; return; }
           box.innerHTML = `
+            <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
             <div class="roster-table-wrap">
               <table class="roster-table">
                 <thead>
@@ -198,6 +217,7 @@
         const box = $('#results-' + groupCode);
         const open = box.style.display !== 'none';
         if (open) { box.style.display = 'none'; btn.textContent = '📊 Kết quả học tập'; return; }
+        closeOtherPanels(groupCode, box.id);
         box.style.display = 'block';
         btn.textContent = '📊 Ẩn kết quả học tập';
         if (box.dataset.loaded) return;
@@ -208,6 +228,7 @@
           box.dataset.loaded = '1';
           if (!results.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào tham gia.</p>'; return; }
           box.innerHTML = `
+            <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
             <div class="roster-table-wrap">
               <table class="roster-table">
                 <thead>
@@ -250,6 +271,7 @@
         const box = $('#chapters-edit-' + groupCode);
         const open = box.style.display !== 'none';
         if (open) { box.style.display = 'none'; btn.textContent = '📘 Sửa chương trình học'; return; }
+        closeOtherPanels(groupCode, box.id);
         box.style.display = 'block';
         btn.textContent = '📘 Đóng sửa chương trình học';
         if (box.dataset.built) return; // đã dựng sẵn, không cần dựng lại
