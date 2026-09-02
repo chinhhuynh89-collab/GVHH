@@ -262,11 +262,12 @@
   // Không còn hỏi "Bạn là ai?" nữa — tự xác định vai trò:
   // 1) Đã có link chia sẻ (?tc=/?ref=) hoặc đã từng chọn trước đó -> giữ nguyên (setRole đã chạy ở
   //    script phía trên, hoặc getRole() còn nhớ từ lần trước).
-  // 2) Lần đầu mở, chưa có gì -> đang đăng nhập Google (giáo viên) thì mặc định Giáo viên, ngược lại
-  //    mặc định Học sinh (đa số người mở app lần đầu qua link của giáo viên là học sinh).
+  // 2) Lần đầu mở, chưa có gì -> đang đăng nhập ĐÚNG tài khoản giáo viên (resolveEffectiveTeacherUid
+  //    — không tính học sinh lỡ đăng nhập Google bằng tài khoản riêng của các em) thì mặc định Giáo
+  //    viên, ngược lại mặc định Học sinh (đa số người mở app lần đầu qua link của giáo viên là học sinh).
   if (!getRole()) {
     let isTeacher = false;
-    try { isTeacher = isFirebaseConfigured() && !!(await waitForAuthReady()); } catch (e) { /* ignore */ }
+    try { isTeacher = isFirebaseConfigured() && !!(await resolveEffectiveTeacherUid()); } catch (e) { /* ignore */ }
     setRole(isTeacher ? 'teacher' : 'student');
   }
 

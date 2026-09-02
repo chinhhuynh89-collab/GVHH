@@ -77,25 +77,37 @@ function waitForAuthReady() {
   });
 }
 
+// Tài khoản Google ĐANG đăng nhập trên thiết bị này có thực sự là giáo viên đang xem/sửa nội dung
+// của CHÍNH HỌ hay không — không chỉ đơn thuần "có đăng nhập Google hay không". Lý do cần hàm riêng:
+// bất kỳ ai cũng có thể đăng nhập Google (kể cả học sinh dùng tài khoản Google riêng của các em) —
+// nếu thiết bị đã vào nhóm của 1 giáo viên khác (membership.teacherUid khác với uid đang đăng nhập),
+// đó chắc chắn là học sinh, KHÔNG được xem là giáo viên dù đang đăng nhập Google thật.
+async function resolveEffectiveTeacherUid() {
+  const user = await waitForAuthReady();
+  if (!user) return null;
+  const membership = (typeof getMembership === 'function') ? getMembership() : null;
+  if (membership && membership.teacherUid && membership.teacherUid !== user.uid) return null;
+  return user.uid;
+}
+
 // Xác định nội dung biên soạn (bài giảng/câu hỏi tự thêm) đang xem là của giáo viên nào, và có
 // được SỬA hay không:
-// - Nếu đang đăng nhập giáo viên VÀ vai trò hiện tại (xem index.html) không phải "học sinh"
-//   -> chính họ, được sửa.
+// - Nếu đang đăng nhập ĐÚNG giáo viên (resolveEffectiveTeacherUid) VÀ vai trò hiện tại (xem
+//   index.html) không phải "học sinh" -> chính họ, được sửa.
 // - Nếu vai trò đang chọn là "học sinh" (kể cả khi trình duyệt này vẫn đang đăng nhập Google của
 //   giáo viên — VD chính giáo viên bật thử giao diện học sinh để xem trước) -> KHÔNG được sửa.
 //   Vai trò chỉ là lựa chọn giao diện (role.js), không phải đăng nhập thật, nhưng phải tôn trọng nó
 //   ở đây để giáo viên xem thử vai trò học sinh thấy đúng trải nghiệm chỉ-xem như học sinh thật.
-// - Nếu là học sinh đã vào nhóm -> giáo viên của nhóm đó (chỉ xem, không sửa).
-// - Nếu giáo viên đang xem thử ở vai trò học sinh nhưng chưa vào nhóm nào -> vẫn hiện đúng nội dung
-//   của chính họ để xem thử, nhưng không sửa được (isOwner: false).
+// - Nếu là học sinh đã vào nhóm -> LUÔN hiện nội dung của giáo viên nhóm đó (chỉ xem, không sửa),
+//   kể cả khi thiết bị này đang đăng nhập Google bằng 1 tài khoản KHÁC (không phải giáo viên đó).
 // - Ngoài ra (duyệt tự do, chưa vào nhóm, chưa đăng nhập) -> không có nội dung tự biên soạn nào để hiện.
 async function resolveContentOwner() {
   const role = (typeof getRole === 'function') ? getRole() : null;
-  const user = await waitForAuthReady();
-  if (user && role !== 'student') return { uid: user.uid, isOwner: true };
+  const effectiveTeacherUid = await resolveEffectiveTeacherUid();
+  if (effectiveTeacherUid && role !== 'student') return { uid: effectiveTeacherUid, isOwner: true };
   const membership = (typeof getMembership === 'function') ? getMembership() : null;
   if (membership && membership.teacherUid) return { uid: membership.teacherUid, isOwner: false };
-  if (user) return { uid: user.uid, isOwner: false };
+  if (effectiveTeacherUid) return { uid: effectiveTeacherUid, isOwner: false };
   return { uid: null, isOwner: false };
 }
 

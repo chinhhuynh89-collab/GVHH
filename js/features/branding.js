@@ -10,8 +10,11 @@
   let teacherUid = null;
   let isOwnTeacher = false; // true nếu người xem CHÍNH LÀ giáo viên đang đăng nhập (xem trang của mình)
   try {
-    const teacher = await waitForAuthReady();
-    if (teacher) { teacherUid = teacher.uid; isOwnTeacher = true; }
+    // resolveEffectiveTeacherUid (auth.js) tự trả về null nếu thiết bị đã vào nhóm của 1 giáo viên
+    // KHÁC với tài khoản Google đang đăng nhập — tránh học sinh có tài khoản Google riêng bị hiểu
+    // nhầm thành "chính giáo viên", che mất thương hiệu/nút liên hệ thật của giáo viên nhóm đó.
+    const effectiveUid = await resolveEffectiveTeacherUid();
+    if (effectiveUid) { teacherUid = effectiveUid; isOwnTeacher = true; }
   } catch (e) { /* ignore */ }
   if (!teacherUid) {
     const membership = typeof getMembership === 'function' ? getMembership() : null;
