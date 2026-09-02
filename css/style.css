@@ -226,7 +226,7 @@ main {
   line-height: 1.4;
   margin-top: -4px;
 }
-.tile .badge {
+.tile .badge, .icon-tile .badge {
   position: absolute;
   top: 12px;
   right: 12px;
@@ -237,9 +237,58 @@ main {
   background: rgba(245, 158, 11, 0.18);
   color: var(--accent);
 }
-.tile .badge.free {
+.tile .badge.free, .icon-tile .badge.free {
   background: rgba(52, 211, 153, 0.18);
   color: var(--ok);
+}
+
+/* Lưới điều hướng chính trang chủ — kiểu màn hình ứng dụng: nhiều ô nhỏ, chỉ icon + tên ngắn (không
+   mô tả dài dòng như .tile), nhiều cột hơn để "vừa mắt" trên mọi kích thước màn hình. */
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (min-width: 420px) {
+  .icon-grid { grid-template-columns: repeat(4, 1fr); }
+}
+@media (min-width: 720px) {
+  .icon-grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+.icon-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 14px 6px 12px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  border: 1px solid var(--border);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.icon-tile:active { transform: scale(0.95); }
+.icon-tile.is-active { cursor: pointer; }
+.icon-tile.is-active:hover { border-color: var(--brand); }
+.icon-tile.is-locked { opacity: 0.55; }
+
+.icon-tile .icon-tile-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 23px;
+  background: rgba(20, 184, 166, 0.14);
+  color: var(--brand);
+}
+.icon-tile .icon-tile-title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .footer-note {

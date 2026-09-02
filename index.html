@@ -27,7 +27,22 @@
     <h1 id="heroTitle">Trợ Lý Giáo Viên Hoá Học</h1>
     <p id="heroSubtitle">Công cụ học &amp; dạy Hoá — hoạt động hoàn toàn offline</p>
     <div id="teacherStatusBadge" style="display:none;margin-top:6px;"></div>
-    <div class="btn-row" style="margin-top:12px;">
+  </section>
+
+  <div class="card" id="examNotifyCard" style="display:none;"></div>
+
+  <div id="teacherSection" style="display:none;">
+    <div class="card" id="teacherExamNotifyCard" style="display:none;"></div>
+    <div class="card" id="teacherStudentsNotifyCard" style="display:none;"></div>
+  </div>
+
+  <div id="studentSection" style="display:none;">
+    <div class="card" id="exitPreviewBanner" style="display:none;">
+      <p class="hint" style="margin:0;">👁️ Bạn (giáo viên) đang xem thử với vai trò học sinh.</p>
+      <a class="btn primary block" href="#" id="exitPreviewBtn" style="margin-top:8px;">🔙 Quay lại vai trò giáo viên</a>
+    </div>
+
+    <div class="btn-row">
       <div id="registerWithTeacherWrap" style="display:none;flex:1;min-width:180px;">
         <button class="btn primary block" id="registerToggleBtn" type="button">📝 Đăng ký học cùng thầy (cô)</button>
       </div>
@@ -64,84 +79,6 @@
       <div class="result-box" id="registerResult"></div>
     </div>
     <div class="btn-row" id="contactOptionsRow" style="display:none;margin-top:10px;justify-content:center;flex-wrap:wrap;"></div>
-  </section>
-
-  <div class="section-label">Tính năng lõi</div>
-  <div class="tile-grid">
-    <a class="tile is-active" href="pages/bang-tuan-hoan.html" data-feature="periodicTable">
-      <span class="badge free">Miễn phí</span>
-      <div class="tile-icon">🧪</div>
-      <div class="tile-title">Bảng tuần hoàn</div>
-      <div class="tile-desc">Tra cứu 118 nguyên tố, cấu hình electron, tính chất, ứng dụng</div>
-    </a>
-
-    <a class="tile is-active" href="pages/cong-cu-tinh-toan.html" data-feature="calculator">
-      <span class="badge free">Miễn phí</span>
-      <div class="tile-icon">🧮</div>
-      <div class="tile-title">Công cụ tính toán</div>
-      <div class="tile-desc">Mol, nồng độ, pH, độ tan, hiệu suất phản ứng</div>
-    </a>
-
-    <a class="tile is-active" href="pages/can-bang-phuong-trinh.html" data-feature="equationBalancer">
-      <span class="badge free">Miễn phí</span>
-      <div class="tile-icon">⚖️</div>
-      <div class="tile-title">Cân bằng phương trình</div>
-      <div class="tile-desc">Nhập chất phản ứng, tự động cân bằng hệ số</div>
-    </a>
-  </div>
-
-  <div class="card" id="examNotifyCard" style="display:none;"></div>
-
-  <div id="teacherSection" style="display:none;">
-    <div class="section-label">
-      Khu vực Giáo viên
-      <a href="#" id="previewAsStudentBtn" style="float:right;text-transform:none;font-weight:600;color:var(--text-faint);">👁️ Xem với vai trò học sinh của tôi</a>
-    </div>
-
-    <div class="card" id="teacherExamNotifyCard" style="display:none;"></div>
-    <div class="card" id="teacherStudentsNotifyCard" style="display:none;"></div>
-
-    <div class="tile-grid">
-      <a class="tile is-active" href="pages/hoc-theo-chuong.html">
-        <div class="tile-icon">🎓</div>
-        <div class="tile-title">Tạo chương trình giảng dạy</div>
-        <div class="tile-desc">Soạn chương lớp 6-12 hoặc tạo chương trình riêng, thêm bài giảng/flashcard/câu hỏi</div>
-      </a>
-
-      <a class="tile is-active" href="pages/nhom-hoc-sinh.html">
-        <div class="tile-icon">👥</div>
-        <div class="tile-title">Nhóm học sinh</div>
-        <div class="tile-desc">Tạo nhóm, giao chương, tạo đề kiểm tra tự động, xem thống kê</div>
-      </a>
-
-      <a class="tile is-active" href="pages/quan-ly-hoc-sinh.html">
-        <span class="badge" id="manageStudentsBadge" style="display:none;background:#dc2626;color:#fff;">0</span>
-        <div class="tile-icon">🧑‍🎓</div>
-        <div class="tile-title">Quản lý học sinh</div>
-        <div class="tile-desc">Danh sách học sinh đã đăng ký học cùng bạn ở tất cả các nhóm</div>
-      </a>
-
-      <a class="tile is-active" href="pages/ho-so.html">
-        <div class="tile-icon">🙍</div>
-        <div class="tile-title">Hồ sơ cá nhân</div>
-        <div class="tile-desc">Tên hiển thị, đơn vị công tác, ảnh đại diện riêng</div>
-      </a>
-
-      <a class="tile is-active" href="pages/quan-tri.html" id="adminTile" style="display:none;">
-        <div class="tile-icon">⚙️</div>
-        <div class="tile-title">Quản trị</div>
-        <div class="tile-desc">Cài đặt gói, giá, hoa hồng, duyệt thanh toán</div>
-      </a>
-    </div>
-  </div>
-
-  <div id="studentSection" style="display:none;">
-    <div class="section-label">Khu vực Học sinh</div>
-
-    <div class="card" id="exitPreviewBanner" style="display:none;">
-      <p class="hint" style="margin:0;">👁️ Bạn (giáo viên) đang xem thử với vai trò học sinh.</p>
-      <a class="btn primary block" href="#" id="exitPreviewBtn" style="margin-top:8px;">🔙 Quay lại vai trò giáo viên</a>
-    </div>
 
     <div class="card" id="studentUpgradeCard" style="display:none;">
       <h2><span class="icon">⭐</span>Gói của bạn</h2>
@@ -158,63 +95,91 @@
       </div>
       <div class="result-box" id="studentShareResult"></div>
     </div>
+  </div>
 
-    <div class="tile-grid">
-      <a class="tile is-active" href="pages/hoc-theo-chuong.html">
-        <div class="tile-icon">📘</div>
-        <div class="tile-title">Chương trình học tập</div>
-        <div class="tile-desc">Bài giảng, flashcard, trắc nghiệm theo chương trình giáo viên đã giao</div>
-      </a>
+  <div class="section-label">
+    Điều hướng nhanh
+    <a href="#" id="previewAsStudentBtn" style="display:none;float:right;text-transform:none;font-weight:600;color:var(--text-faint);">👁️ Xem với vai trò học sinh của tôi</a>
+  </div>
+  <div class="icon-grid">
+    <a class="icon-tile is-active" href="pages/bang-tuan-hoan.html" data-feature="periodicTable">
+      <span class="badge free">Miễn phí</span>
+      <div class="icon-tile-icon">🧪</div>
+      <div class="icon-tile-title">Bảng tuần hoàn</div>
+    </a>
+    <a class="icon-tile is-active" href="pages/cong-cu-tinh-toan.html" data-feature="calculator">
+      <span class="badge free">Miễn phí</span>
+      <div class="icon-tile-icon">🧮</div>
+      <div class="icon-tile-title">Công cụ tính toán</div>
+    </a>
+    <a class="icon-tile is-active" href="pages/can-bang-phuong-trinh.html" data-feature="equationBalancer">
+      <span class="badge free">Miễn phí</span>
+      <div class="icon-tile-icon">⚖️</div>
+      <div class="icon-tile-title">Cân bằng phương trình</div>
+    </a>
 
-      <a class="tile is-active" href="pages/vao-nhom.html">
-        <div class="tile-icon">🎓</div>
-        <div class="tile-title">Vào nhóm học tập</div>
-        <div class="tile-desc">Nhập tên + mã nhóm giáo viên cung cấp</div>
-      </a>
+    <a class="icon-tile is-active" data-role="teacher" href="pages/hoc-theo-chuong.html" style="display:none;">
+      <div class="icon-tile-icon">🎓</div>
+      <div class="icon-tile-title">Chương trình giảng dạy</div>
+    </a>
+    <a class="icon-tile is-active" data-role="teacher" href="pages/nhom-hoc-sinh.html" style="display:none;">
+      <div class="icon-tile-icon">👥</div>
+      <div class="icon-tile-title">Nhóm học sinh</div>
+    </a>
+    <a class="icon-tile is-active" data-role="teacher" href="pages/quan-ly-hoc-sinh.html" style="display:none;">
+      <span class="badge" id="manageStudentsBadge" style="display:none;background:#dc2626;color:#fff;">0</span>
+      <div class="icon-tile-icon">🧑‍🎓</div>
+      <div class="icon-tile-title">Quản lý học sinh</div>
+    </a>
+    <a class="icon-tile is-active" data-role="teacher" href="pages/ho-so.html" style="display:none;">
+      <div class="icon-tile-icon">🙍</div>
+      <div class="icon-tile-title">Hồ sơ cá nhân</div>
+    </a>
+    <a class="icon-tile is-active" href="pages/quan-tri.html" id="adminTile" style="display:none;">
+      <div class="icon-tile-icon">⚙️</div>
+      <div class="icon-tile-title">Quản trị</div>
+    </a>
 
-      <a class="tile is-active" href="pages/kiem-tra.html">
-        <div class="tile-icon">📝</div>
-        <div class="tile-title">Bài kiểm tra</div>
-        <div class="tile-desc">Xem và làm bài kiểm tra giáo viên giao</div>
-      </a>
-    </div>
+    <a class="icon-tile is-active" data-role="student" href="pages/hoc-theo-chuong.html" style="display:none;">
+      <div class="icon-tile-icon">📘</div>
+      <div class="icon-tile-title">Chương trình học tập</div>
+    </a>
+    <a class="icon-tile is-active" data-role="student" href="pages/vao-nhom.html" style="display:none;">
+      <div class="icon-tile-icon">🎓</div>
+      <div class="icon-tile-title">Vào nhóm học tập</div>
+    </a>
+    <a class="icon-tile is-active" data-role="student" href="pages/kiem-tra.html" style="display:none;">
+      <div class="icon-tile-icon">📝</div>
+      <div class="icon-tile-title">Bài kiểm tra</div>
+    </a>
   </div>
 
   <div class="section-label">Sắp ra mắt</div>
-  <div class="tile-grid">
-    <div class="tile is-locked">
+  <div class="icon-grid">
+    <div class="icon-tile is-locked">
       <span class="badge">Sắp có</span>
-      <div class="tile-icon">🎮</div>
-      <div class="tile-title">Mini-game &amp; đố vui</div>
-      <div class="tile-desc">Ghép nguyên tố, xếp dãy hoạt động, đố hoá học hằng ngày</div>
+      <div class="icon-tile-icon">🎮</div>
+      <div class="icon-tile-title">Mini-game &amp; đố vui</div>
     </div>
-
-    <div class="tile is-locked">
+    <div class="icon-tile is-locked">
       <span class="badge">Sắp có</span>
-      <div class="tile-icon">🧫</div>
-      <div class="tile-title">Thí nghiệm ảo</div>
-      <div class="tile-desc">Trộn hoá chất, xem màu sắc, kết tủa, khí thoát ra</div>
+      <div class="icon-tile-icon">🧫</div>
+      <div class="icon-tile-title">Thí nghiệm ảo</div>
     </div>
-
-    <div class="tile is-locked">
+    <div class="icon-tile is-locked">
       <span class="badge">Sắp có</span>
-      <div class="tile-icon">🏆</div>
-      <div class="tile-title">Bảng xếp hạng lớp</div>
-      <div class="tile-desc">Điểm số, huy hiệu, streak học tập</div>
+      <div class="icon-tile-icon">🏆</div>
+      <div class="icon-tile-title">Bảng xếp hạng lớp</div>
     </div>
-
-    <div class="tile is-locked">
+    <div class="icon-tile is-locked">
       <span class="badge">Sắp có</span>
-      <div class="tile-icon">📖</div>
-      <div class="tile-title">Từ điển Hoá Việt-Anh</div>
-      <div class="tile-desc">Tra thuật ngữ hoá học song ngữ</div>
+      <div class="icon-tile-icon">📖</div>
+      <div class="icon-tile-title">Từ điển Hoá Việt-Anh</div>
     </div>
-
-    <div class="tile is-locked">
+    <div class="icon-tile is-locked">
       <span class="badge">Sắp có</span>
-      <div class="tile-icon">👩‍🏫</div>
-      <div class="tile-title">Trang giáo viên</div>
-      <div class="tile-desc">Giới thiệu, bài giảng &amp; mẹo học riêng của giáo viên</div>
+      <div class="icon-tile-icon">👩‍🏫</div>
+      <div class="icon-tile-title">Trang giáo viên</div>
     </div>
   </div>
 
@@ -271,6 +236,10 @@
     $('#studentSection').style.display = role === 'student' ? 'block' : 'none';
     $('#registerWithTeacherWrap').style.display = role === 'student' ? 'block' : 'none';
     $('#exitPreviewBanner').style.display = (role === 'student' && localStorage.getItem(PREVIEW_KEY)) ? 'block' : 'none';
+    $('#previewAsStudentBtn').style.display = role === 'teacher' ? '' : 'none';
+    // Tile điều hướng của đúng vai trò trong lưới chung (xem css .icon-grid) — tile không gắn
+    // data-role (VD 3 công cụ lõi) không bị đụng tới, luôn hiện sẵn.
+    $$('.icon-tile[data-role]').forEach((tile) => { tile.style.display = tile.dataset.role === role ? '' : 'none'; });
   }
 
   // Không còn hỏi "Bạn là ai?" nữa — tự xác định vai trò:
