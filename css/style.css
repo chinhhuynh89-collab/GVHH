@@ -177,8 +177,11 @@ main {
 
 .tile-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: 12px;
+}
+@media (min-width: 480px) {
+  .tile-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (min-width: 620px) {
   .tile-grid { grid-template-columns: repeat(3, 1fr); }
