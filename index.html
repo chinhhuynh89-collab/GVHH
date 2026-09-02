@@ -27,6 +27,8 @@
     <h1 id="heroTitle">Trợ Lý Giáo Viên Hoá Học</h1>
     <p id="heroSubtitle">Công cụ học &amp; dạy Hoá — hoạt động hoàn toàn offline</p>
     <div id="teacherStatusBadge" style="display:none;margin-top:6px;"></div>
+    <!-- display "none" mặc định, JS đổi thành "inline-block" khi vai trò là giáo viên (renderRoleSections) -->
+    <a href="#" id="previewAsStudentBtn" style="display:none;margin-top:10px;font-size:12.5px;font-weight:600;color:var(--text-faint);">👁️ Xem với vai trò học sinh của tôi</a>
   </section>
 
   <div class="section-label">Tính năng lõi</div>
@@ -57,10 +59,7 @@
     <div class="card" id="teacherExamNotifyCard" style="display:none;"></div>
     <div class="card" id="teacherStudentsNotifyCard" style="display:none;"></div>
 
-    <div class="section-label">
-      Dành cho giáo viên
-      <a href="#" id="previewAsStudentBtn" style="float:right;text-transform:none;font-weight:600;color:var(--text-faint);">👁️ Xem với vai trò học sinh của tôi</a>
-    </div>
+    <div class="section-label">Dành cho giáo viên</div>
     <div class="icon-grid">
       <a class="icon-tile is-active" href="pages/hoc-theo-chuong.html">
         <div class="icon-tile-icon">🎓</div>
@@ -258,6 +257,7 @@
     $('#studentSection').style.display = role === 'student' ? 'block' : 'none';
     $('#registerWithTeacherWrap').style.display = role === 'student' ? 'block' : 'none';
     $('#exitPreviewBanner').style.display = (role === 'student' && localStorage.getItem(PREVIEW_KEY)) ? 'block' : 'none';
+    $('#previewAsStudentBtn').style.display = role === 'teacher' ? 'inline-block' : 'none';
   }
 
   // Không còn hỏi "Bạn là ai?" nữa — tự xác định vai trò:
