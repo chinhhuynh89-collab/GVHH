@@ -121,6 +121,28 @@
       `;
     }
 
+    $('#pendingCreateGroupToggleBtn').addEventListener('click', () => {
+      const form = $('#pendingCreateGroupForm');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    });
+
+    $('#pendingCreateGroupBtn').addEventListener('click', async () => {
+      const name = $('#pendingNewGroupName').value.trim();
+      const grade = Number($('#pendingNewGroupGrade').value);
+      const box = $('#pendingCreateGroupResult');
+      if (!name) { showResult(box, '⚠️ Nhập tên nhóm.', true); return; }
+      showResult(box, '⏳ Đang tạo nhóm...');
+      try {
+        const group = await createGroupForCurrentTeacher(name, grade, []);
+        groups.push(group);
+        showResult(box, `✓ Đã tạo nhóm "${escapeHtml(name)}" — mã ${escapeHtml(group.groupCode)}. Đã có thể xếp học sinh vào nhóm này.`);
+        $('#pendingNewGroupName').value = '';
+        await renderPending();
+      } catch (e) {
+        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+      }
+    });
+
     await renderPending();
     await renderAssigned();
   });
