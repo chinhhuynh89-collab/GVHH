@@ -51,35 +51,31 @@
   </div>
 
   <div class="tab-panel active" id="tabLesson">
-    <div id="lessonContent"></div>
-    <div id="customLessonContent"></div>
+    <div class="btn-row" id="lessonToolbar" style="display:none;margin-bottom:12px;">
+      <button class="btn" id="manualLessonAddBtn" style="flex:1;">✍️ Viết bài giảng</button>
+      <button class="btn" id="docUploadBtn" style="flex:1;" title="Hỗ trợ file .docx, .pdf">📎 Nạp file</button>
+    </div>
+    <input type="file" id="docFileInput" accept=".docx,.pdf" style="display:none;" />
 
-    <div class="card" id="manualLessonCard" style="display:none;">
-      <h2><span class="icon">✍️</span>Viết bài giảng thủ công</h2>
-      <button class="btn block" id="manualLessonAddBtn">+ Viết bài giảng mới</button>
-      <div id="manualLessonForm" style="display:none;margin-top:14px;">
-        <div class="field">
-          <label for="manualLessonTitle">Tiêu đề</label>
-          <input type="text" id="manualLessonTitle" placeholder="VD: Bài 7. Quy tắc octet" />
-        </div>
-        <div class="field">
-          <label for="manualLessonPoints">Nội dung (mỗi ý một dòng)</label>
-          <textarea id="manualLessonPoints" rows="6" style="width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg-soft);color:var(--text);font-size:14px;font-family:inherit;"></textarea>
-        </div>
-        <div class="btn-row">
-          <button class="btn primary" id="manualLessonSave">Lưu bài giảng</button>
-          <button class="btn" id="manualLessonCancel">Huỷ</button>
-        </div>
+    <div class="card" id="manualLessonForm" style="display:none;margin-bottom:14px;">
+      <div class="field">
+        <label for="manualLessonTitle">Tiêu đề</label>
+        <input type="text" id="manualLessonTitle" placeholder="VD: Bài 7. Quy tắc octet" />
+      </div>
+      <div class="field">
+        <label for="manualLessonPoints">Nội dung (mỗi ý một dòng)</label>
+        <textarea id="manualLessonPoints" rows="6"></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="manualLessonSave">Lưu bài giảng</button>
+        <button class="btn" id="manualLessonCancel">Huỷ</button>
       </div>
     </div>
 
-    <div class="card" id="uploadCard" style="display:none;">
-      <h2><span class="icon">📎</span>Nạp tài liệu bài giảng từ file</h2>
-      <p class="hint" style="margin-top:-4px;">Hỗ trợ file .docx (Word) và .pdf. Nội dung trích xuất được thêm vào bài giảng của chương này, chỉ lưu trên thiết bị này (không đồng bộ lên GitHub).</p>
-      <input type="file" id="docFileInput" accept=".docx,.pdf" style="display:none;" />
-      <button class="btn block" id="docUploadBtn">+ Chọn file để nạp</button>
-      <div id="docImportPreview"></div>
-    </div>
+    <div id="docImportPreview"></div>
+
+    <div id="lessonContent"></div>
+    <div id="customLessonContent"></div>
   </div>
 
   <div class="tab-panel" id="tabFlash">

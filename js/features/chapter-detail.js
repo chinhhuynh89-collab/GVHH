@@ -894,8 +894,7 @@
     renderQuiz();
 
     if (owner.isOwner) {
-      $('#manualLessonCard').style.display = 'block';
-      $('#uploadCard').style.display = 'block';
+      $('#lessonToolbar').style.display = 'flex';
       initManualLessonForm();
       initUploadControl();
       initFlashManager();
