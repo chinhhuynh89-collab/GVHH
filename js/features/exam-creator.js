@@ -25,6 +25,7 @@ async function createExamForCurrentTeacher(examInput) {
       groupCode: examInput.groupCode,
       chapterId: examInput.chapterId,
       chapterTitle: examInput.chapterTitle,
+      examTitle: examInput.examTitle,
       durationMinutes: examInput.durationMinutes,
       startTime: examInput.startTime,
       endTime: examInput.endTime,
@@ -85,6 +86,7 @@ async function createExamForCurrentTeacher(examInput) {
       const box = $('#examCreateResult');
       const groupCode = $('#examGroup').value;
       const chapterId = $('#examChapter').value;
+      const examTitle = $('#examTitle').value.trim();
       const count = parseInt($('#examCount').value, 10);
       const duration = parseInt($('#examDuration').value, 10);
       const startMode = $('#examStartMode').value;
@@ -107,16 +109,20 @@ async function createExamForCurrentTeacher(examInput) {
         if (!val) { showResult(box, 'Chọn thời điểm bắt đầu.', true); return; }
         startTime = new Date(val);
       }
-      const endTime = new Date(startTime.getTime() + (duration + 30) * 60000);
+      // Hạn nộp bài CỐ ĐỊNH = giờ bắt đầu + thời gian làm bài — không có thời gian đệm. Học sinh
+      // vào muộn vẫn làm được nhưng chỉ còn phần thời gian còn lại tới hạn này (xem exam-taker.js).
+      const endTime = new Date(startTime.getTime() + duration * 60000);
+      const finalTitle = examTitle || `${chapterInfo.title} - ${startTime.toLocaleDateString('vi-VN')}`;
 
       showResult(box, '⏳ Đang tạo đề kiểm tra...');
       try {
         await createExamForCurrentTeacher({
-          groupCode, chapterId, chapterTitle: chapterInfo.title,
+          groupCode, chapterId, chapterTitle: chapterInfo.title, examTitle: finalTitle,
           durationMinutes: duration, startTime: startTime.toISOString(), endTime: endTime.toISOString(),
           questions
         });
-        showResult(box, `✓ Đã tạo đề kiểm tra "${escapeHtml(chapterInfo.title)}" — ${questions.length} câu, ${duration} phút. Học sinh trong nhóm sẽ thấy thông báo khi mở app từ ${startTime.toLocaleString('vi-VN')}.`);
+        showResult(box, `✓ Đã tạo đợt kiểm tra "${escapeHtml(finalTitle)}" — ${questions.length} câu, ${duration} phút, hạn nộp lúc ${endTime.toLocaleString('vi-VN')}. Học sinh trong nhóm sẽ thấy thông báo khi mở app từ ${startTime.toLocaleString('vi-VN')}.`);
+        $('#examTitle').value = '';
       } catch (e) {
         showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
       }

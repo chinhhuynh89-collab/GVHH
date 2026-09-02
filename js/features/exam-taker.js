@@ -18,6 +18,9 @@
   let qIndex = 0;
   let answers = [];
   let startedAt = null;
+  let examDeadlineMs = null; // hạn nộp bài CỐ ĐỊNH (giờ bắt đầu đợt + thời gian làm bài) — như nhau
+                              // cho cả nhóm, không tính lại từ lúc từng học sinh bấm "Bắt đầu". Học
+                              // sinh vào muộn vẫn làm được nhưng chỉ còn phần thời gian tới hạn này.
   let timerHandle = null;
 
   function renderWaiting(message) {
@@ -32,11 +35,17 @@
   }
 
   function renderStart() {
+    const remainingNow = remainingSeconds();
+    if (remainingNow <= 0) {
+      renderWaiting('Đã hết giờ làm bài đợt kiểm tra này.');
+      return;
+    }
+    const m = Math.floor(remainingNow / 60);
     main.innerHTML = `
       <div class="card">
-        <h2><span class="icon">📝</span>${escapeHtml(exam.chapterTitle)}</h2>
-        <p class="hint">${exam.questions.length} câu hỏi · ${exam.durationMinutes} phút</p>
-        <p class="hint">Xin chào <strong>${escapeHtml(membership.studentName)}</strong>. Khi bấm "Bắt đầu", đồng hồ đếm ngược sẽ chạy — hết giờ bài sẽ tự động nộp.</p>
+        <h2><span class="icon">📝</span>${escapeHtml(exam.examTitle || exam.chapterTitle)}</h2>
+        <p class="hint">${exam.questions.length} câu hỏi · ${exam.durationMinutes} phút cho cả đợt</p>
+        <p class="hint">Xin chào <strong>${escapeHtml(membership.studentName)}</strong>. Đợt kiểm tra tính giờ chung từ lúc bắt đầu — bạn còn khoảng <strong>${m} phút</strong> để làm bài (vào muộn sẽ còn ít thời gian hơn). Khi bấm "Bắt đầu", đồng hồ đếm ngược sẽ chạy — hết giờ bài sẽ tự động nộp.</p>
         <button class="btn primary block" id="examStartBtn">Bắt đầu làm bài</button>
       </div>
     `;
@@ -52,8 +61,7 @@
   }
 
   function remainingSeconds() {
-    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-    return Math.max(0, exam.durationMinutes * 60 - elapsed);
+    return Math.max(0, Math.floor((examDeadlineMs - Date.now()) / 1000));
   }
 
   function updateTimer() {
@@ -140,11 +148,12 @@
   }
 
   function renderResult(score, correctCount, total, alreadySubmitted) {
+    const score10 = (Math.round(score) / 10).toFixed(1);
     main.innerHTML = `
       <div class="card">
         <div class="quiz-result">
-          <div class="qr-score">${score}%</div>
-          <div class="qr-label">${correctCount}/${total} câu đúng ${alreadySubmitted ? '(bạn đã nộp bài này trước đó)' : '— Đã nộp bài thành công'}</div>
+          <div class="qr-score">${score10} điểm</div>
+          <div class="qr-label">${correctCount}/${total} câu đúng (${score}%) ${alreadySubmitted ? '· bạn đã nộp bài này trước đó' : '— Đã nộp bài thành công'}</div>
         </div>
         <a class="btn primary block" href="../index.html">Về trang chủ</a>
       </div>
@@ -172,6 +181,7 @@
       if (!dupSnap.empty) { renderWaiting('Bạn đã hoàn thành bài kiểm tra gần nhất.'); return; }
 
       exam = active;
+      examDeadlineMs = new Date(exam.startTime).getTime() + exam.durationMinutes * 60000;
       renderStart();
     } catch (e) {
       main.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
