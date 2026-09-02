@@ -34,6 +34,17 @@
     `;
   }
 
+  // Vào trang này vì bấm 1 tile đang bị khoá ở trang chủ (?locked=featureId) — báo rõ lý do, tránh
+  // người dùng thấy lạ "tự nhiên nhảy sang trang nâng cấp".
+  const lockedFeatureId = new URLSearchParams(location.search).get('locked');
+  const lockedFeature = lockedFeatureId && LOCKABLE_FEATURES.find((f) => f.id === lockedFeatureId);
+  if (lockedFeature) {
+    const note = document.createElement('div');
+    note.className = 'card';
+    note.innerHTML = `<p class="hint">⭐ "${escapeHtml(lockedFeature.label)}" hiện chỉ dành cho gói trả phí.</p>`;
+    main.prepend(note);
+  }
+
   function paymentInfoHtml() {
     if (!cfg.payment.bankName && !cfg.payment.accountNumber && !cfg.payment.momoNumber) {
       return `<p class="hint">⚠️ Chưa có thông tin chuyển khoản — liên hệ admin để được hướng dẫn.</p>`;

@@ -227,9 +227,13 @@ function wireCoreFeatureTileClicks() {
         if (!cfg.enabled || !cfg.lockedFeatures[featureId]) { if (href) window.location.href = href; return; }
         const premium = await isViewerPremium();
         if (premium) { if (href) window.location.href = href; return; }
-        if (confirm(`⭐ "${feature.label}" chỉ dành cho gói trả phí. Nâng cấp ngay?`)) {
-          window.location.href = (window.APP_BASE_PATH || './') + 'pages/nang-cap.html';
-        }
+        // KHÔNG dùng confirm()/alert() ở đây — các hộp thoại này chỉ đảm bảo hoạt động đúng lúc khi
+        // gọi NGAY trong sự kiện bấm (còn "user activation"); gọi SAU 1 await như trên, trình duyệt
+        // (đặc biệt Chrome/Safari trên điện thoại) có thể ÂM THẦM HOÃN hộp thoại tới tận lần cử chỉ
+        // tiếp theo của người dùng (VD bấm nút "Quay lại") — đúng lỗi đã gặp: "bấm vào vẫn mở bình
+        // thường, chỉ báo nâng cấp khi bấm quay lại". Điều hướng thẳng bằng window.location.href
+        // không có giới hạn này, luôn chạy đúng ngay lập tức bất kể có await trước đó hay không.
+        window.location.href = (window.APP_BASE_PATH || './') + 'pages/nang-cap.html?locked=' + encodeURIComponent(featureId);
       })();
     });
   });
