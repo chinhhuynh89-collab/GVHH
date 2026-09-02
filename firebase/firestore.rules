@@ -55,7 +55,9 @@ service cloud.firestore {
     // ---------- Học sinh tham gia nhóm ----------
     match /students/{studentId} {
       allow read: if true;
-      allow create: if request.resource.data.keys().hasAll(['groupCode', 'deviceId', 'studentName', 'joinedAt']);
+      allow create: if request.resource.data.keys().hasAll(
+        ['groupCode', 'deviceId', 'studentName', 'school', 'className', 'address', 'phone', 'joinedAt']
+      );
       allow update, delete: if false;
     }
 

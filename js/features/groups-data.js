@@ -44,3 +44,12 @@ async function listGroupsForCurrentTeacher() {
   }));
   return groups;
 }
+
+// Danh sách đầy đủ học sinh của 1 nhóm (họ tên, trường, lớp, địa chỉ, SĐT...) — chỉ tải khi giáo
+// viên thực sự bấm xem, không tải kèm lúc liệt kê danh sách nhóm để tránh chậm không cần thiết.
+async function getStudentsForGroup(groupCode) {
+  const { db } = ensureFirebase();
+  const snap = await db.collection('students').where('groupCode', '==', groupCode).get();
+  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
+    .sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi'));
+}

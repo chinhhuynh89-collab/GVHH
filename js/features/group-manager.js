@@ -59,15 +59,49 @@
             <div class="cc-title">${escapeHtml(g.groupName)}</div>
             <div class="cc-desc">${g.studentCount} học sinh đã tham gia · ${g.chapterIds.length} chương được giao</div>
             <div class="btn-row" style="margin-top:8px;">
+              <button class="btn roster-toggle" data-group="${escapeHtml(g.groupCode)}">👥 Xem danh sách học sinh</button>
               <a class="btn" href="tao-de-kiem-tra.html?group=${encodeURIComponent(g.groupCode)}">Tạo đề kiểm tra</a>
               <a class="btn" href="thong-ke.html?group=${encodeURIComponent(g.groupCode)}">Thống kê</a>
             </div>
+            <div class="roster-box" id="roster-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
           </div>
         </div>
       `).join('');
+      wireRosterToggles();
     } catch (e) {
       box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
     }
+  }
+
+  function wireRosterToggles() {
+    $$('.roster-toggle').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const groupCode = btn.dataset.group;
+        const box = $('#roster-' + groupCode);
+        const open = box.style.display !== 'none';
+        if (open) { box.style.display = 'none'; btn.textContent = '👥 Xem danh sách học sinh'; return; }
+        box.style.display = 'block';
+        btn.textContent = '👥 Ẩn danh sách học sinh';
+        if (box.dataset.loaded) return; // đã tải trước đó, không tải lại
+        box.innerHTML = '<p class="hint">⏳ Đang tải...</p>';
+        try {
+          const students = await getStudentsForGroup(groupCode);
+          box.dataset.loaded = '1';
+          if (!students.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào tham gia.</p>'; return; }
+          box.innerHTML = students.map((s, i) => `
+            <div class="quiz-review-item" style="text-align:left;">
+              <div class="qi-q">${i + 1}. ${escapeHtml(s.studentName || '(chưa rõ tên)')}</div>
+              <div class="hint">Trường: ${escapeHtml(s.school || '—')} · Lớp: ${escapeHtml(s.className || '—')}</div>
+              <div class="hint">Địa chỉ: ${escapeHtml(s.address || '—')}</div>
+              <div class="hint">SĐT: ${escapeHtml(s.phone || '—')}</div>
+              <div class="hint">Tham gia lúc: ${s.joinedAt ? new Date(s.joinedAt).toLocaleString('vi-VN') : '—'}</div>
+            </div>
+          `).join('');
+        } catch (e) {
+          box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
+        }
+      });
+    });
   }
 
   $('#groupQuickSelectBtn').addEventListener('click', () => {

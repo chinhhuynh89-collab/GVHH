@@ -16,7 +16,8 @@ function clearMembership() {
 }
 
 // Tham gia nhóm bằng mã: tìm nhóm theo groupCode, tạo (hoặc lấy lại) bản ghi học sinh cho thiết bị này.
-async function joinGroupByCode(groupCode, studentName, deviceId) {
+// info = { studentName, school, className, address, phone } — đủ thông tin để giáo viên liên lạc.
+async function joinGroupByCode(groupCode, info, deviceId) {
   const { db } = ensureFirebase();
   const groupSnap = await db.collection('groups').where('groupCode', '==', groupCode).limit(1).get();
   if (groupSnap.empty) throw new Error(`Không tìm thấy nhóm với mã "${groupCode}"`);
@@ -29,9 +30,9 @@ async function joinGroupByCode(groupCode, studentName, deviceId) {
   if (!existingSnap.empty) {
     studentId = existingSnap.docs[0].id;
   } else {
-    const ref = await db.collection('students').add({
-      groupCode, deviceId, studentName, joinedAt: new Date().toISOString()
-    });
+    const ref = await db.collection('students').add(Object.assign(
+      { groupCode, deviceId, joinedAt: new Date().toISOString() }, info
+    ));
     studentId = ref.id;
   }
   return {
@@ -67,16 +68,25 @@ function initJoinGroupPage() {
 
   $('#joinGroupBtn').addEventListener('click', async () => {
     const studentName = $('#joinName').value.trim();
+    const school = $('#joinSchool').value.trim();
+    const className = $('#joinClassName').value.trim();
+    const address = $('#joinAddress').value.trim();
+    const phone = $('#joinPhone').value.trim();
     const groupCode = $('#joinCode').value.trim().toUpperCase();
     const box = $('#joinResult');
-    if (!studentName || !groupCode) { showResult(box, 'Nhập đủ tên và mã nhóm.', true); return; }
+    if (!studentName || !school || !className || !address || !phone || !groupCode) {
+      showResult(box, 'Điền đầy đủ tất cả các mục (đánh dấu *) trước khi tham gia.', true);
+      return;
+    }
     showResult(box, '⏳ Đang tham gia nhóm...');
     try {
-      const data = await joinGroupByCode(groupCode, studentName, getDeviceId());
-      setMembership({
-        studentId: data.studentId, groupCode: data.groupCode, groupName: data.groupName,
-        grade: data.grade, teacherUid: data.teacherUid, studentName
-      });
+      const info = { studentName, school, className, address, phone };
+      const data = await joinGroupByCode(groupCode, info, getDeviceId());
+      setMembership(Object.assign(
+        { studentId: data.studentId, groupCode: data.groupCode, groupName: data.groupName,
+          grade: data.grade, teacherUid: data.teacherUid },
+        info
+      ));
       showResult(box, `✓ Đã tham gia nhóm "${escapeHtml(data.groupName)}"!`);
       renderCurrentMembership();
     } catch (e) {
