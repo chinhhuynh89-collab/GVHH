@@ -789,6 +789,33 @@ sub { font-size: 0.72em; }
 .roster-table tbody tr:last-child td { border-bottom: none; }
 .roster-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
 
+/* Cảnh báo mở app trong trình duyệt nhúng của app khác (xem app.js) */
+#inAppBrowserWarning {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(245, 158, 11, 0.16);
+  border-bottom: 1px solid var(--accent);
+  color: var(--text);
+  padding: 10px 14px;
+  font-size: calc(12.5px * var(--font-scale));
+  line-height: 1.5;
+}
+#inAppBrowserWarning button {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
 /* Nút tăng/giảm cỡ chữ nổi (xem app.js) */
 #fontSizeControl {
   position: fixed;

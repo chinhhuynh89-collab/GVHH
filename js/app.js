@@ -98,3 +98,32 @@ function initTabs(root) {
   if (document.body) initFontSizeControl();
   else window.addEventListener('DOMContentLoaded', initFontSizeControl);
 })();
+
+// Cảnh báo khi mở app trong "trình duyệt trong ứng dụng" (Zalo, Messenger, Facebook...) — Google
+// chủ động chặn đăng nhập Google trong các trình duyệt nhúng này (lý do bảo mật, không phải lỗi
+// của app), khiến bước đăng nhập treo trắng không rõ nguyên nhân. Nhắc trước để giáo viên mở bằng
+// trình duyệt thật (Chrome/Safari) ngay từ đầu, tránh mất công đoán lỗi.
+(function () {
+  const ua = navigator.userAgent || '';
+  const isInAppBrowser = /Zalo|FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|TikTok/i.test(ua);
+  if (!isInAppBrowser) return;
+
+  function showWarning() {
+    if (document.getElementById('inAppBrowserWarning')) return;
+    const el = document.createElement('div');
+    el.id = 'inAppBrowserWarning';
+    el.innerHTML = `
+      <div>
+        <strong>⚠️ Bạn đang mở bằng trình duyệt trong ứng dụng khác</strong> (Zalo/Messenger/Facebook...).
+        Đăng nhập Google sẽ không hoạt động ở đây. Bấm nút <strong>"⋯"</strong> góc màn hình →
+        <strong>"Mở bằng trình duyệt"</strong> (Chrome/Safari) để dùng đầy đủ tính năng.
+      </div>
+      <button id="inAppBrowserWarningClose" aria-label="Đóng">✕</button>
+    `;
+    document.body.appendChild(el);
+    document.getElementById('inAppBrowserWarningClose').addEventListener('click', () => el.remove());
+  }
+
+  if (document.body) showWarning();
+  else window.addEventListener('DOMContentLoaded', showWarning);
+})();
