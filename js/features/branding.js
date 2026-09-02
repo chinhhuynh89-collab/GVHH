@@ -45,9 +45,20 @@
       topAvatar.src = profile.photoURL;
       topAvatar.style.display = 'block';
     }
-    const logoMark = document.getElementById('heroLogoMark');
-    if (logoMark) {
-      logoMark.innerHTML = `<img src="${escapeHtml(profile.photoURL)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:18px;" referrerpolicy="no-referrer" />`;
+    // Ảnh đại diện lớn ở góc phải trang chủ (khác ảnh nhỏ trên thanh tiêu đề).
+    const heroAvatar = document.getElementById('heroAvatarImg');
+    if (heroAvatar) {
+      heroAvatar.src = profile.photoURL;
+      heroAvatar.style.display = 'block';
+    }
+  }
+
+  // Logo riêng (VD: logo trường/trung tâm) ở góc trái trang chủ — tách biệt với ảnh đại diện.
+  if (profile.logoURL) {
+    const heroLogo = document.getElementById('heroLogoImg');
+    if (heroLogo) {
+      heroLogo.src = profile.logoURL;
+      heroLogo.style.display = 'block';
     }
   }
 
