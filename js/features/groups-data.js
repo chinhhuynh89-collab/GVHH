@@ -17,6 +17,8 @@ async function createGroupForCurrentTeacher(groupName, grade, chapterIds, zaloGr
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
 
+  await enforceTeacherGroupLimit(teacher.uid);
+
   let code, attempts = 0;
   do {
     code = genGroupCodeClient();
@@ -98,6 +100,9 @@ async function addStudentToGroup(groupCode, student) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
+
+  await enforceTeacherStudentLimit(teacher.uid);
+
   await db.collection('students').add({
     groupCode, teacherUid: teacher.uid, deviceId: student.deviceId, joinedAt: new Date().toISOString(),
     studentName: student.studentName, school: student.school,
@@ -297,4 +302,32 @@ async function getTeacherChapterActivity() {
     delete activity[id].groupCodes;
   });
   return activity;
+}
+
+// ---------- Giới hạn gói miễn phí (xem js/features/monetization.js) ----------
+// Chỉ áp dụng khi admin đã bật công tắc tổng VÀ giáo viên vẫn đang ở gói miễn phí — bật/tắt tự do,
+// không cần đợi deploy lại vì đọc thẳng config/monetization mỗi lần tạo nhóm/thêm học sinh.
+async function enforceTeacherGroupLimit(teacherUid) {
+  if (typeof getMonetizationConfig !== 'function') return; // trang chưa nạp monetization.js
+  const cfg = await getMonetizationConfig();
+  if (!cfg.enabled) return;
+  const sub = await getTeacherSubscription(teacherUid);
+  if (sub.tier === 'pro') return;
+  const groups = await listGroupsForCurrentTeacher();
+  if (groups.length >= cfg.teacherPlan.maxGroupsFree) {
+    throw new Error(`Gói miễn phí chỉ được tối đa ${cfg.teacherPlan.maxGroupsFree} nhóm. Vào trang "Hồ sơ" để nâng cấp gói Pro (không giới hạn).`);
+  }
+}
+
+async function enforceTeacherStudentLimit(teacherUid) {
+  if (typeof getMonetizationConfig !== 'function') return;
+  const cfg = await getMonetizationConfig();
+  if (!cfg.enabled) return;
+  const sub = await getTeacherSubscription(teacherUid);
+  if (sub.tier === 'pro') return;
+  const groups = await listGroupsForCurrentTeacher();
+  const totalStudents = groups.reduce((sum, g) => sum + (g.studentCount || 0), 0);
+  if (totalStudents >= cfg.teacherPlan.maxStudentsFree) {
+    throw new Error(`Gói miễn phí chỉ được tối đa ${cfg.teacherPlan.maxStudentsFree} học sinh. Vào trang "Hồ sơ" để nâng cấp gói Pro (không giới hạn).`);
+  }
 }

@@ -18,6 +18,53 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ---------- Kinh doanh: gói trả phí + hoa hồng giới thiệu (xem js/features/monetization.js) ----------
+    // Admin DUY NHẤT xác định bằng email tài khoản Google — hardcode vì app chỉ có 1 người quản trị,
+    // không cần vai trò/danh sách quyền phức tạp hơn.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'chinhhuynh89@gmail.com';
+    }
+
+    // Cấu hình chung: bật/tắt chiến dịch kinh doanh, giá gói, % hoa hồng, thông tin chuyển khoản —
+    // ai cũng đọc được (mọi trang cần biết để hiện đúng giá/giới hạn), chỉ admin sửa được.
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Trạng thái gói trả phí — TÁCH RIÊNG khỏi "teachers"/"studentSubscriptions" khỏi bản ghi khác vì
+    // rule "teachers" bên dưới cho phép chính giáo viên ghi toàn bộ doc của họ: nếu lưu chung, giáo
+    // viên có thể tự sửa field để tự cấp gói Pro. Ở đây CHỈ ADMIN ghi được, sau khi duyệt thanh toán
+    // thủ công (paymentSubmissions bên dưới) — không ai tự nâng gói được.
+    match /subscriptions/{uid} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /studentSubscriptions/{deviceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Yêu cầu "Tôi đã chuyển khoản" — ai cũng tạo được (giống mức tin cậy của "students"/"progress":
+    // không có tài khoản thật để xác thực nên chấp nhận đánh đổi, admin tự kiểm tra thực tế trước khi
+    // duyệt). Chỉ admin đọc được TOÀN BỘ danh sách (để duyệt) và sửa trạng thái; người gửi (nếu có
+    // tài khoản, tức giáo viên) đọc được đúng yêu cầu của mình để biết đã duyệt hay chưa.
+    match /paymentSubmissions/{id} {
+      allow read: if isAdmin() || (request.auth != null && resource.data.submitterUid == request.auth.uid);
+      allow create: if request.resource.data.keys().hasAll(['type', 'submitterName', 'amount', 'status', 'createdAt'])
+                    && request.resource.data.status == 'pending'
+                    && (request.resource.data.type != 'teacher_upgrade'
+                        || (request.auth != null && request.auth.uid == request.resource.data.submitterUid));
+      allow update, delete: if isAdmin();
+    }
+
+    // Hoa hồng phát sinh khi admin duyệt 1 yêu cầu có người giới thiệu — chỉ admin tạo/sửa (tự sinh
+    // lúc duyệt thanh toán); giáo viên hưởng hoa hồng đọc được đúng phần của mình.
+    match /commissions/{id} {
+      allow read: if isAdmin() || (request.auth != null && resource.data.beneficiaryTeacherUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
     // ---------- Dữ liệu riêng của giáo viên ----------
     // Hồ sơ giáo viên: chỉ chính họ đọc/ghi (chứa cả email — KHÔNG công khai). Phần cần hiện cho
     // học sinh (tên hiển thị, khẩu hiệu, ảnh đại diện) tách riêng ở collection teacherProfiles bên

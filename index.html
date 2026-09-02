@@ -125,6 +125,12 @@
         <div class="tile-title">Hồ sơ cá nhân</div>
         <div class="tile-desc">Tên hiển thị, đơn vị công tác, ảnh đại diện riêng</div>
       </a>
+
+      <a class="tile is-active" href="pages/quan-tri.html" id="adminTile" style="display:none;">
+        <div class="tile-icon">⚙️</div>
+        <div class="tile-title">Quản trị</div>
+        <div class="tile-desc">Cài đặt gói, giá, hoa hồng, duyệt thanh toán</div>
+      </a>
     </div>
   </div>
 
@@ -134,6 +140,12 @@
     <div class="card" id="exitPreviewBanner" style="display:none;">
       <p class="hint" style="margin:0;">👁️ Bạn (giáo viên) đang xem thử với vai trò học sinh.</p>
       <a class="btn primary block" href="#" id="exitPreviewBtn" style="margin-top:8px;">🔙 Quay lại vai trò giáo viên</a>
+    </div>
+
+    <div class="card" id="studentUpgradeCard" style="display:none;">
+      <h2><span class="icon">⭐</span>Nâng cấp Premium</h2>
+      <p class="hint" style="margin-top:-4px;" id="studentUpgradeDesc"></p>
+      <a class="btn primary block" href="pages/nang-cap.html">⭐ Nâng cấp ngay</a>
     </div>
 
     <div class="card" id="studentShareCard" style="display:none;">
@@ -242,6 +254,7 @@
 <script src="js/vendor/firebase/firebase-firestore-compat.js"></script>
 <script src="js/features/firebase-init.js"></script>
 <script src="js/features/auth.js"></script>
+<script src="js/features/monetization.js"></script>
 <script src="js/features/device-id.js"></script>
 <script src="js/features/join-group.js"></script>
 <script src="js/features/groups-data.js"></script>
@@ -437,6 +450,30 @@
       );
     });
   } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
+})();
+</script>
+<script>
+(async function () {
+  // Tile "Quản trị" chỉ hiện cho đúng tài khoản admin (bảo mật thật nằm ở firestore.rules, đây chỉ
+  // là ẩn/hiện giao diện cho gọn — xem js/features/monetization.js).
+  if (!isFirebaseConfigured()) return;
+  try {
+    const user = await waitForAuthReady();
+    if (isAdminUser(user)) $('#adminTile').style.display = '';
+  } catch (e) { /* ignore */ }
+
+  // Banner "Nâng cấp Premium" cho học sinh — chỉ hiện khi admin đã bật công tắc tổng và học sinh
+  // chưa có gói Premium.
+  try {
+    const membership = typeof getMembership === 'function' ? getMembership() : null;
+    if (!membership || !membership.groupCode) return;
+    const cfg = await getMonetizationConfig();
+    if (!cfg.enabled) return;
+    const sub = await getStudentSubscription(getDeviceId());
+    if (sub.tier === 'premium') return;
+    $('#studentUpgradeDesc').textContent = `Mở khoá tính năng nâng cao — chỉ ${formatVnd(cfg.studentPlan.price)}/${cfg.studentPlan.periodDays} ngày.`;
+    $('#studentUpgradeCard').style.display = 'block';
+  } catch (e) { /* ignore */ }
 })();
 </script>
 </body>

@@ -179,5 +179,52 @@ function resizeImageToDataUrl(file) {
         showResult(box, `⚠️ ${escapeHtml(err.message)}`, true);
       }
     });
+
+    await renderSubscriptionAndCommissions(user);
   });
 })();
+
+// "Gói của bạn" + "Hoa hồng của tôi" — chỉ hiện khi admin đã bật công tắc tổng (config/monetization).
+async function renderSubscriptionAndCommissions(user) {
+  const cfg = await getMonetizationConfig();
+  if (!cfg.enabled) return;
+
+  $('#subscriptionCard').style.display = 'block';
+  $('#commissionsCard').style.display = 'block';
+
+  const sub = await getTeacherSubscription(user.uid);
+  const subBody = $('#subscriptionBody');
+  if (sub.tier === 'pro') {
+    subBody.innerHTML = `
+      <p class="hint">Trạng thái: <strong style="color:var(--brand);">Pro</strong> — hết hạn ${escapeHtml((sub.expiresAt || '').slice(0, 10))}.</p>
+      <a class="btn block" href="nang-cap.html">Gia hạn / xem lại thông tin gói</a>
+    `;
+  } else {
+    subBody.innerHTML = `
+      <p class="hint">Trạng thái: <strong>Miễn phí</strong> — giới hạn ${cfg.teacherPlan.maxGroupsFree} nhóm, ${cfg.teacherPlan.maxStudentsFree} học sinh.</p>
+      <a class="btn primary block" href="nang-cap.html">⭐ Nâng cấp lên Pro</a>
+    `;
+  }
+
+  try {
+    const { db } = ensureFirebase();
+    const snap = await db.collection('commissions').where('beneficiaryTeacherUid', '==', user.uid).get();
+    const list = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const commBody = $('#commissionsBody');
+    if (!list.length) {
+      commBody.innerHTML = '<p class="hint">Chưa có hoa hồng nào — chia sẻ link giới thiệu để bắt đầu nhé!</p>';
+      return;
+    }
+    const totalPaid = list.filter((c) => c.status === 'paid').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const totalPending = list.filter((c) => c.status !== 'paid').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    commBody.innerHTML = `
+      <p class="hint">Đã trả: <strong>${formatVnd(totalPaid)}</strong> · Chờ trả: <strong>${formatVnd(totalPending)}</strong></p>
+      ${list.map((c) => `
+        <div class="hint" style="padding:8px 0;border-top:1px solid var(--border);">
+          ${formatVnd(c.amount)} · ${c.sourceType === 'teacher_referral' ? 'Giới thiệu giáo viên' : 'Học sinh mua Premium'} · ${escapeHtml(c.sourceName || '')} · ${c.status === 'paid' ? '✅ Đã trả' : '⏳ Chờ trả'}
+        </div>
+      `).join('')}
+    `;
+  } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
+}
