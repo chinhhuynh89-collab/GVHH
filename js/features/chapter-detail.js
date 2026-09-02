@@ -423,10 +423,9 @@
     if (!owner.isOwner) return;
     $('#flashManagerSection').style.display = 'block';
     $('#flashManagerToggle').addEventListener('click', () => {
-      const body = $('#flashManagerBody');
-      const open = body.style.display !== 'none';
-      body.style.display = open ? 'none' : 'block';
-      $('#flashFormWrap').style.display = open ? 'none' : 'block';
+      const wrap = $('#flashFormWrap');
+      const open = wrap.style.display !== 'none';
+      wrap.style.display = open ? 'none' : 'block';
       $('#flashManagerToggle').textContent = open ? '⚙️ Quản lý flashcard' : '⚙️ Ẩn quản lý flashcard';
     });
     $('#flashFormAddBtn').addEventListener('click', () => openFlashForm(null));
@@ -631,10 +630,9 @@
     if (!owner.isOwner) return;
     $('#quizManagerSection').style.display = 'block';
     $('#quizManagerToggle').addEventListener('click', () => {
-      const body = $('#quizManagerBody');
-      const open = body.style.display !== 'none';
-      body.style.display = open ? 'none' : 'block';
-      $('#quizFormWrap').style.display = open ? 'none' : 'block';
+      const wrap = $('#quizFormWrap');
+      const open = wrap.style.display !== 'none';
+      wrap.style.display = open ? 'none' : 'block';
       $('#quizManagerToggle').textContent = open ? '⚙️ Quản lý câu hỏi trắc nghiệm' : '⚙️ Ẩn quản lý câu hỏi';
     });
 
@@ -687,6 +685,7 @@
         rebuildEffectiveQuiz();
         renderQuizManager();
         renderQuiz();
+        $('#quizManagerBody').scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (err) {
         box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(err.message)}</div>`;
       }
@@ -708,6 +707,7 @@
         rebuildEffectiveQuiz();
         renderQuizManager();
         renderQuiz();
+        $('#quizManagerBody').scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (err) {
         const msg = escapeHtml(err.message).replace(/\n/g, '<br>');
         box.innerHTML = `<div class="result-box show error">⚠️ ${msg}</div>`;
