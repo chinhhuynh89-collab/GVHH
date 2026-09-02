@@ -72,7 +72,7 @@
     card.style.display = 'block';
     card.style.borderColor = 'var(--brand)';
     card.innerHTML = `
-      <h2><span class="icon">🔴</span>Đang diễn ra: ${escapeHtml(exam.examTitle || exam.chapterTitle)}</h2>
+      <h2><span class="icon">🔴</span>Đang diễn ra: ${escapeHtml(exam.examTitle || (exam.chapterTitles || []).join(', '))}</h2>
       <p class="hint" style="margin-top:-4px;">${groupLabel}</p>
       <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0;">
         <div style="font-size:13px;color:var(--text-dim);">⏱ Thời gian còn lại</div>
@@ -109,7 +109,7 @@
     card.style.display = 'block';
     card.style.borderColor = 'var(--border)';
     card.innerHTML = `
-      <h2><span class="icon">✅</span>Đã kết thúc: ${escapeHtml(exam.examTitle || exam.chapterTitle)}</h2>
+      <h2><span class="icon">✅</span>Đã kết thúc: ${escapeHtml(exam.examTitle || (exam.chapterTitles || []).join(', '))}</h2>
       <p class="hint" style="margin-top:-4px;">${groupLabel} · ${doneCount}/${total} học sinh đã nộp bài</p>
       <a class="btn primary block" href="pages/thong-ke.html?group=${encodeURIComponent(exam.groupCode)}">Xem thống kê →</a>
     `;

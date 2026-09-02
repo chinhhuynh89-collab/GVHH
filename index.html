@@ -213,7 +213,7 @@
     card.style.display = 'block';
     card.innerHTML = `
       <h2><span class="icon">🔔</span>Có bài kiểm tra mới!</h2>
-      <p class="hint">${escapeHtml(active.examTitle || active.chapterTitle)} — ${active.questions.length} câu — ${active.durationMinutes} phút</p>
+      <p class="hint">${escapeHtml(active.examTitle || (active.chapterTitles || []).join(', '))} — ${active.questions.length} câu — ${active.durationMinutes} phút</p>
       <a class="btn primary block" href="pages/kiem-tra.html">Vào làm bài ngay</a>
     `;
   } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }

@@ -25,7 +25,7 @@
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       if (!exams.length) { $('#statsExam').innerHTML = '<option value="">Chưa có đợt kiểm tra nào</option>'; return; }
       $('#statsExam').innerHTML = exams.map((e) =>
-        `<option value="${escapeHtml(e.examId)}">${escapeHtml(e.examTitle || e.chapterTitle)} — ${e.questions.length} câu — ${new Date(e.createdAt).toLocaleString('vi-VN')}</option>`
+        `<option value="${escapeHtml(e.examId)}">${escapeHtml(e.examTitle || (e.chapterTitles || []).join(', '))} — ${e.questions.length} câu — ${new Date(e.createdAt).toLocaleString('vi-VN')}</option>`
       ).join('');
       await loadResults();
     }

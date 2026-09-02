@@ -1,8 +1,13 @@
-// Giáo viên tạo đề kiểm tra tự động: chọn nhóm, chương, số câu, thời gian — hệ thống rút ngẫu nhiên
-// từ kho câu hỏi (có sẵn trong app + tự thêm) rồi lưu lên Firestore để học sinh trong nhóm làm bài.
+// Giáo viên tạo đề kiểm tra tự động: chọn nhóm, 1 hoặc nhiều chương, số câu, thời gian — hệ thống
+// rút ngẫu nhiên từ kho câu hỏi gộp của các chương đã chọn (có sẵn trong app + tự thêm) rồi lưu
+// lên Firestore để học sinh trong nhóm làm bài.
 //
 // Đề được tách làm 2 tài liệu: "exams/{id}" (câu hỏi, KHÔNG có đáp án — công khai) và
 // "examAnswers/{id}" (đáp án đúng — chỉ tải về lúc học sinh bấm nộp bài, xem firestore.rules).
+//
+// Thứ tự câu hỏi/đáp án lưu trong "exams" là CỐ ĐỊNH, giống nhau cho cả nhóm — việc mỗi học sinh
+// thấy thứ tự khác nhau (để chống chép bài) được xáo lại RIÊNG trên máy từng học sinh lúc làm bài
+// (xem exam-taker.js), không cần sinh nhiều bản đề khác nhau ở đây.
 
 function shuffleArray(arr) {
   const a = arr.slice();
@@ -23,8 +28,8 @@ async function createExamForCurrentTeacher(examInput) {
     examRef.set({
       teacherUid: teacher.uid,
       groupCode: examInput.groupCode,
-      chapterId: examInput.chapterId,
-      chapterTitle: examInput.chapterTitle,
+      chapterIds: examInput.chapterIds,
+      chapterTitles: examInput.chapterTitles,
       examTitle: examInput.examTitle,
       durationMinutes: examInput.durationMinutes,
       startTime: examInput.startTime,
@@ -49,7 +54,7 @@ async function createExamForCurrentTeacher(examInput) {
     async function loadGroups() {
       groups = await listGroupsForCurrentTeacher();
       $('#examGroup').innerHTML = groups.map((g) =>
-        `<option value="${escapeHtml(g.groupCode)}" ${g.groupCode === preselectGroup ? 'selected' : ''}>${escapeHtml(g.groupName)} (Lớp ${g.grade} · mã ${escapeHtml(g.groupCode)})</option>`
+        `<option value="${escapeHtml(g.groupCode)}" ${g.groupCode === preselectGroup ? 'selected' : ''}>${escapeHtml(g.groupName)} (Lớp ${escapeHtml(String(g.grade))} · mã ${escapeHtml(g.groupCode)})</option>`
       ).join('');
       await onGroupChange();
     }
@@ -57,55 +62,69 @@ async function createExamForCurrentTeacher(examInput) {
     async function onGroupChange() {
       const code = $('#examGroup').value;
       currentGroup = groups.find((g) => g.groupCode === code);
-      if (!currentGroup) { $('#examChapter').innerHTML = ''; return; }
+      if (!currentGroup) { $('#examChapters').innerHTML = ''; return; }
       // Chương của 1 nhóm có thể đến từ nhiều khối lớp khác nhau (chương trình riêng) — tra theo
       // đúng chapterIds của nhóm thay vì lọc theo 1 khối duy nhất.
       const chapters = currentGroup.chapterIds
         .map((id) => findChapterAnywhere(id))
         .filter(Boolean);
-      $('#examChapter').innerHTML = chapters.map(({ chapter, grade }) =>
-        `<option value="${chapter.id}">Lớp ${grade} - Chương ${chapter.order}. ${escapeHtml(chapter.title)}</option>`
-      ).join('');
+      $('#examChapters').innerHTML = chapters.map(({ chapter, grade }) => `
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
+          <input type="checkbox" class="exam-chapter-check" value="${chapter.id}" checked style="margin-top:3px;" />
+          <span>Lớp ${grade} - Chương ${chapter.order}. ${escapeHtml(chapter.title)}</span>
+        </label>
+      `).join('');
+      $$('.exam-chapter-check').forEach((cb) => cb.addEventListener('change', onChapterChange));
       await onChapterChange();
     }
 
-    async function getQuestionPool(chapterId) {
-      const found = findChapterAnywhere(chapterId);
-      if (!found) return [];
-      const builtIn = found.chapter.quiz || [];
-      let custom = [];
-      try { custom = await getCustomQuiz(getCurrentTeacher().uid, chapterId); } catch (e) { custom = []; }
-      return builtIn.concat(custom.map((c) => ({ q: c.q, options: c.options, correct: c.correct, explain: c.explain })));
+    function selectedChapterIds() {
+      return $$('.exam-chapter-check').filter((c) => c.checked).map((c) => c.value);
+    }
+
+    // Gộp kho câu hỏi (có sẵn + tự thêm) của TẤT CẢ chương đã chọn thành 1 kho chung để rút ngẫu nhiên.
+    async function getQuestionPool(chapterIds) {
+      const pools = await Promise.all(chapterIds.map(async (chapterId) => {
+        const found = findChapterAnywhere(chapterId);
+        if (!found) return [];
+        const builtIn = found.chapter.quiz || [];
+        let custom = [];
+        try { custom = await getCustomQuiz(getCurrentTeacher().uid, chapterId); } catch (e) { custom = []; }
+        return builtIn.concat(custom.map((c) => ({ q: c.q, options: c.options, correct: c.correct, explain: c.explain })));
+      }));
+      return pools.flat();
     }
 
     async function onChapterChange() {
-      const chapterId = $('#examChapter').value;
-      const pool = await getQuestionPool(chapterId);
-      $('#examPoolInfo').textContent = pool.length ? `Kho câu hỏi hiện có: ${pool.length} câu.` : 'Chương này chưa có câu hỏi trắc nghiệm — hãy thêm câu hỏi trước.';
+      const chapterIds = selectedChapterIds();
+      const pool = await getQuestionPool(chapterIds);
+      $('#examPoolInfo').textContent = pool.length
+        ? `Kho câu hỏi hiện có: ${pool.length} câu (gộp từ ${chapterIds.length} chương đã chọn).`
+        : 'Chưa có câu hỏi nào trong (các) chương đã chọn — hãy thêm câu hỏi trước hoặc chọn chương khác.';
       $('#examCount').max = pool.length || 1;
     }
 
     $('#examGroup').addEventListener('change', onGroupChange);
-    $('#examChapter').addEventListener('change', onChapterChange);
 
     $('#examCreateBtn').addEventListener('click', async () => {
       const box = $('#examCreateResult');
       const groupCode = $('#examGroup').value;
-      const chapterId = $('#examChapter').value;
+      const chapterIds = selectedChapterIds();
       const examTitle = $('#examTitle').value.trim();
       const count = parseInt($('#examCount').value, 10);
       const duration = parseInt($('#examDuration').value, 10);
       const startMode = $('#examStartMode').value;
 
-      if (!groupCode || !chapterId) { showResult(box, 'Chọn nhóm và chương.', true); return; }
+      if (!groupCode) { showResult(box, 'Chọn nhóm.', true); return; }
+      if (!chapterIds.length) { showResult(box, 'Chọn ít nhất 1 chương.', true); return; }
       if (!count || count < 1) { showResult(box, 'Nhập số câu hợp lệ.', true); return; }
       if (!duration || duration < 1) { showResult(box, 'Nhập thời gian làm bài hợp lệ.', true); return; }
 
-      const pool = await getQuestionPool(chapterId);
-      if (!pool.length) { showResult(box, 'Chương này chưa có câu hỏi trắc nghiệm nào.', true); return; }
+      const pool = await getQuestionPool(chapterIds);
+      if (!pool.length) { showResult(box, '(Các) chương đã chọn chưa có câu hỏi trắc nghiệm nào.', true); return; }
 
       const questions = shuffleArray(pool).slice(0, Math.min(count, pool.length));
-      const chapterInfo = findChapterAnywhere(chapterId).chapter;
+      const chapterTitles = chapterIds.map((id) => findChapterAnywhere(id)).filter(Boolean).map((f) => f.chapter.title);
 
       let startTime;
       if (startMode === 'now') {
@@ -118,16 +137,16 @@ async function createExamForCurrentTeacher(examInput) {
       // Hạn nộp bài CỐ ĐỊNH = giờ bắt đầu + thời gian làm bài — không có thời gian đệm. Học sinh
       // vào muộn vẫn làm được nhưng chỉ còn phần thời gian còn lại tới hạn này (xem exam-taker.js).
       const endTime = new Date(startTime.getTime() + duration * 60000);
-      const finalTitle = examTitle || `${chapterInfo.title} - ${startTime.toLocaleDateString('vi-VN')}`;
+      const finalTitle = examTitle || `${chapterTitles.join(', ')} - ${startTime.toLocaleDateString('vi-VN')}`;
 
       showResult(box, '⏳ Đang tạo đề kiểm tra...');
       try {
         await createExamForCurrentTeacher({
-          groupCode, chapterId, chapterTitle: chapterInfo.title, examTitle: finalTitle,
+          groupCode, chapterIds, chapterTitles, examTitle: finalTitle,
           durationMinutes: duration, startTime: startTime.toISOString(), endTime: endTime.toISOString(),
           questions
         });
-        showResult(box, `✓ Đã tạo đợt kiểm tra "${escapeHtml(finalTitle)}" — ${questions.length} câu, ${duration} phút, hạn nộp lúc ${endTime.toLocaleString('vi-VN')}. Học sinh trong nhóm sẽ thấy thông báo khi mở app từ ${startTime.toLocaleString('vi-VN')}.`);
+        showResult(box, `✓ Đã tạo đợt kiểm tra "${escapeHtml(finalTitle)}" — ${questions.length} câu, ${duration} phút, hạn nộp lúc ${endTime.toLocaleString('vi-VN')}. Mỗi học sinh sẽ thấy thứ tự câu hỏi và đáp án được xáo khác nhau. Học sinh trong nhóm sẽ thấy thông báo khi mở app từ ${startTime.toLocaleString('vi-VN')}.`);
         $('#examTitle').value = '';
       } catch (e) {
         showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);

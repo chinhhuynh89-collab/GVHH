@@ -15,13 +15,26 @@
   }
 
   let exam = null;
-  let qIndex = 0;
-  let answers = [];
+  let qIndex = 0; // vị trí hiển thị (0..n-1) — ánh xạ qua questionOrder để ra chỉ số câu hỏi GỐC
+  let answers = []; // lưu theo chỉ số GỐC (khớp trực tiếp với examAnswers, không phụ thuộc thứ tự hiển thị)
+  let questionOrder = []; // thứ tự hiển thị câu hỏi, xáo RIÊNG cho học sinh này — questionOrder[i] = chỉ số gốc
+  let optionOrder = []; // optionOrder[chỉ số gốc câu hỏi] = thứ tự hiển thị 4 đáp án (mảng chỉ số gốc)
   let startedAt = null;
   let examDeadlineMs = null; // hạn nộp bài CỐ ĐỊNH (giờ bắt đầu đợt + thời gian làm bài) — như nhau
                               // cho cả nhóm, không tính lại từ lúc từng học sinh bấm "Bắt đầu". Học
                               // sinh vào muộn vẫn làm được nhưng chỉ còn phần thời gian tới hạn này.
   let timerHandle = null;
+
+  // Xáo thứ tự câu hỏi + đáp án CHỈ trên máy học sinh này (không đụng đến dữ liệu chung trên
+  // Firestore) — mỗi học sinh trong cùng đợt kiểm tra sẽ thấy 1 thứ tự khác nhau, hạn chế chép bài.
+  function shuffleIndices(n) {
+    const a = Array.from({ length: n }, (_, i) => i);
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
 
   function renderWaiting(message) {
     main.innerHTML = `
@@ -43,7 +56,7 @@
     const m = Math.floor(remainingNow / 60);
     main.innerHTML = `
       <div class="card">
-        <h2><span class="icon">📝</span>${escapeHtml(exam.examTitle || exam.chapterTitle)}</h2>
+        <h2><span class="icon">📝</span>${escapeHtml(exam.examTitle || (exam.chapterTitles || []).join(', '))}</h2>
         <p class="hint">${exam.questions.length} câu hỏi · ${exam.durationMinutes} phút cho cả đợt</p>
         <p class="hint">Xin chào <strong>${escapeHtml(membership.studentName)}</strong>. Đợt kiểm tra tính giờ chung từ lúc bắt đầu — bạn còn khoảng <strong>${m} phút</strong> để làm bài (vào muộn sẽ còn ít thời gian hơn). Khi bấm "Bắt đầu", đồng hồ đếm ngược sẽ chạy — hết giờ bài sẽ tự động nộp.</p>
         <button class="btn primary block" id="examStartBtn">Bắt đầu làm bài</button>
@@ -53,7 +66,10 @@
   }
 
   function startExam() {
-    answers = new Array(exam.questions.length).fill(null);
+    const n = exam.questions.length;
+    answers = new Array(n).fill(null);
+    questionOrder = shuffleIndices(n);
+    optionOrder = exam.questions.map((q) => shuffleIndices(q.options.length));
     qIndex = 0;
     startedAt = Date.now();
     renderQuestion();
@@ -91,7 +107,9 @@
 
   function renderQuestion() {
     const total = exam.questions.length;
-    const item = exam.questions[qIndex];
+    const origIdx = questionOrder[qIndex];
+    const item = exam.questions[origIdx];
+    const dispOptions = optionOrder[origIdx]; // mảng chỉ số gốc theo thứ tự hiển thị cho học sinh này
     main.innerHTML = `
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -109,11 +127,11 @@
       </div>
     `;
     const optWrap = $('#examOptions');
-    item.options.forEach((opt, i) => {
+    dispOptions.forEach((origOptIdx) => {
       const b = document.createElement('button');
-      b.className = 'quiz-option' + (answers[qIndex] === i ? ' selected' : '');
-      b.textContent = opt;
-      b.addEventListener('click', () => { answers[qIndex] = i; renderQuestion(); });
+      b.className = 'quiz-option' + (answers[origIdx] === origOptIdx ? ' selected' : '');
+      b.textContent = item.options[origOptIdx];
+      b.addEventListener('click', () => { answers[origIdx] = origOptIdx; renderQuestion(); });
       optWrap.appendChild(b);
     });
     updateTimer();
