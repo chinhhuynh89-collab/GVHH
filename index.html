@@ -304,6 +304,7 @@
       showResult(box, `✓ Đã gửi đăng ký tới ${escapeHtml(data.teacherName || 'giáo viên')}! Thầy/cô sẽ xếp bạn vào nhóm học tập phù hợp.`);
       $('#regName').value = ''; $('#regSchool').value = ''; $('#regClassName').value = '';
       $('#regAddress').value = ''; $('#regPhone').value = ''; $('#regCode').value = '';
+      setTimeout(() => { formCard.style.display = 'none'; hideResult(box); }, 1800);
     } catch (e) {
       showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
     }

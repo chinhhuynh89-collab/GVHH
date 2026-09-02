@@ -299,7 +299,9 @@
             group.chapterIds = chapterIds;
             group.grade = grade;
             showResult(resultBox, `✓ Đã lưu — nhóm giờ có ${chapterIds.length} chương.`);
-            renderGroupList();
+            // Đợi 1 chút cho giáo viên kịp thấy thông báo trước khi danh sách tải lại (renderGroupList
+            // dựng lại toàn bộ khối này từ đầu nên khung "Sửa chương trình học" sẽ tự đóng lại).
+            setTimeout(renderGroupList, 1200);
           } catch (e) {
             showResult(resultBox, `⚠️ ${escapeHtml(e.message)}`, true);
           }
@@ -346,6 +348,11 @@
       showResult(box, `✓ Đã tạo nhóm "${escapeHtml(group.groupName)}" — mã nhóm: <strong style="color:var(--brand);">${escapeHtml(group.groupCode)}</strong>. Gửi mã này cho học sinh để các em tham gia.`);
       $('#groupName').value = '';
       renderGroupList();
+      setTimeout(() => {
+        $('#groupCreateForm').style.display = 'none';
+        $('#groupCreateToggleBtn').style.display = 'flex';
+        hideResult(box);
+      }, 2200);
     } catch (e) {
       showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
     }

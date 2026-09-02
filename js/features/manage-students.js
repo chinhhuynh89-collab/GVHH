@@ -138,6 +138,10 @@
         showResult(box, `✓ Đã tạo nhóm "${escapeHtml(name)}" — mã ${escapeHtml(group.groupCode)}. Đã có thể xếp học sinh vào nhóm này.`);
         $('#pendingNewGroupName').value = '';
         await renderPending();
+        setTimeout(() => {
+          $('#pendingCreateGroupForm').style.display = 'none';
+          hideResult(box);
+        }, 2200);
       } catch (e) {
         showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
       }
