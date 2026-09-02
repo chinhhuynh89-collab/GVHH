@@ -167,8 +167,16 @@ function resizeImageToDataUrl(file) {
           updatedAt: data.updatedAt
         };
         if (resetPhoto) {
-          data.photoURL = firebase.firestore.FieldValue.delete();
-          publicData.photoURL = firebase.firestore.FieldValue.delete();
+          // "Dùng lại ảnh Google" phải THỰC SỰ lưu lại link ảnh Google vào hồ sơ công khai — nếu chỉ
+          // xoá photoURL thì học sinh/trang chủ (không đăng nhập được tài khoản Google của giáo viên)
+          // sẽ không có ảnh nào để hiện cả, dù ô xem trước ở trang này vẫn thấy ảnh Google bình thường.
+          if (user.photoURL) {
+            data.photoURL = user.photoURL;
+            publicData.photoURL = user.photoURL;
+          } else {
+            data.photoURL = firebase.firestore.FieldValue.delete();
+            publicData.photoURL = firebase.firestore.FieldValue.delete();
+          }
         } else if (newPhotoDataUrl) {
           data.photoURL = newPhotoDataUrl;
           publicData.photoURL = newPhotoDataUrl;
