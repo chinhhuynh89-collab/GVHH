@@ -10,6 +10,7 @@
   let groupsCache = [];
   let ownProgramsWithChapters = []; // [{ program, chapters }] — chương trình riêng của giáo viên, để chọn giao cho nhóm
   let knownStudents = []; // học sinh đã có sẵn trong danh sách (mọi nhóm) — để chọn thêm thẳng vào nhóm mới
+  let openGroupId = null; // nhóm đang mở khung chi tiết (kiểu lưới nút + 1 khung nội dung, giống trang Quản trị)
 
   requireTeacherAuth(async () => {
     renderQuickGradeOptions();
@@ -103,53 +104,105 @@
     return sorted.length ? sorted.join(', ') : '—';
   }
 
+  // Bố cục kiểu lưới nút (giống trang Quản trị): mỗi nhóm là 1 nút trong "#groupMenuGrid", bấm vào
+  // mới mở đầy đủ thông tin + hành động (danh sách học sinh, kết quả, sửa chương trình, xoá...) của
+  // ĐÚNG nhóm đó vào "#groupSectionPanel" — nhóm khác tự đóng lại, tránh cảnh tất cả các nhóm hiện
+  // tràn cùng lúc khi giáo viên có nhiều nhóm.
   async function renderGroupList() {
-    const box = $('#groupList');
-    box.innerHTML = '<p class="hint">⏳ Đang tải danh sách nhóm...</p>';
+    const menu = $('#groupMenuGrid');
+    menu.innerHTML = '<p class="hint">⏳ Đang tải danh sách nhóm...</p>';
     try {
       groupsCache = await listGroupsForCurrentTeacher();
-      if (!groupsCache.length) { box.innerHTML = '<p class="hint">Chưa có nhóm nào.</p>'; return; }
-      box.innerHTML = groupsCache.map((g) => `
-        <div class="chapter-card">
-          <div class="cc-icon">👥</div>
-          <div class="cc-body">
-            <div class="cc-order">Lớp ${escapeHtml(String(g.grade))} · Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
-            <div class="cc-title">${escapeHtml(g.groupName)}</div>
-            <div class="cc-desc">${g.studentCount} học sinh đã tham gia · ${g.chapterIds.length} chương được giao</div>
-            <div class="free-mode-row" style="margin:8px 0;padding:10px 12px;">
-              <div class="fm-text">
-                <div class="fm-title">Học tự do cho nhóm này</div>
-                <div class="fm-sub">Bật: học sinh mở được mọi chương ngay. Tắt: phải học tuần tự, xong chương trước mới mở chương sau.</div>
-              </div>
-              <div class="switch free-mode-toggle ${g.freeMode ? 'on' : ''}" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}"><div class="knob"></div></div>
-            </div>
-            <div class="action-grid" style="margin-top:8px;">
-              <button class="btn roster-toggle" data-group="${escapeHtml(g.groupCode)}">👥 Danh sách học sinh</button>
-              <button class="btn results-toggle" data-group="${escapeHtml(g.groupCode)}">📊 Kết quả học tập</button>
-              <button class="btn chapters-toggle" data-group="${escapeHtml(g.groupCode)}">📘 Sửa chương trình học</button>
-              <a class="btn" href="tao-de-kiem-tra.html?group=${encodeURIComponent(g.groupCode)}">📝 Tạo đề kiểm tra</a>
-              <a class="btn" href="thong-ke.html?group=${encodeURIComponent(g.groupCode)}">📈 Thống kê từng đợt</a>
-              ${g.zaloGroupLink
-                ? `<a class="btn" href="${escapeHtml(g.zaloGroupLink)}" target="_blank" rel="noopener">💬 Nhắn Zalo nhóm</a>
-                   <button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="${escapeHtml(g.zaloGroupLink)}">✏️ Sửa link Zalo</button>`
-                : `<button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="">💬 + Thêm link Zalo nhóm</button>`}
-              <button class="btn delete-group-btn" type="button" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}" data-name="${escapeHtml(g.groupName)}" style="color:#dc2626;">🗑️ Xoá nhóm</button>
-            </div>
-            <div class="roster-box" id="roster-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
-            <div class="results-box" id="results-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
-            <div class="chapters-edit-box" id="chapters-edit-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
-          </div>
-        </div>
-      `).join('');
-      wireRosterToggles();
-      wireResultsToggles();
-      wireChaptersEditToggles();
-      wireFreeModeToggles();
-      wireZaloEditButtons();
-      wireDeleteGroupButtons();
     } catch (e) {
-      box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
+      menu.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
+      return;
     }
+    if (!groupsCache.length) {
+      menu.innerHTML = '<p class="hint">Chưa có nhóm nào.</p>';
+      closeGroupPanel();
+      return;
+    }
+    menu.innerHTML = groupsCache.map((g) => `
+      <button class="btn group-menu-btn ${g.id === openGroupId ? 'has-open' : ''}" type="button" data-group-id="${g.id}">
+        <span style="display:block;font-weight:700;">${escapeHtml(g.groupName)}</span>
+        <span class="hint" style="display:block;">Mã ${escapeHtml(g.groupCode)} · ${g.studentCount} HS</span>
+      </button>
+    `).join('');
+    $$('.group-menu-btn', menu).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const groupId = btn.dataset.groupId;
+        if (openGroupId === groupId) { closeGroupPanel(); return; }
+        openGroupPanel(groupId);
+      });
+    });
+    // Nhóm đang mở lúc trước vẫn còn -> vẽ lại khung chi tiết với dữ liệu mới nhất (VD sau khi tạo
+    // nhóm mới, số liệu nhóm khác có thể đổi); nhóm đó đã bị xoá -> tự đóng khung.
+    if (openGroupId) {
+      if (groupsCache.some((g) => g.id === openGroupId)) renderGroupPanel(openGroupId);
+      else closeGroupPanel();
+    }
+  }
+
+  function closeGroupPanel() {
+    openGroupId = null;
+    const panel = $('#groupSectionPanel');
+    panel.style.display = 'none';
+    panel.innerHTML = '';
+    $$('.group-menu-btn').forEach((b) => b.classList.remove('has-open'));
+  }
+
+  function openGroupPanel(groupId) {
+    openGroupId = groupId;
+    $$('.group-menu-btn').forEach((b) => b.classList.toggle('has-open', b.dataset.groupId === groupId));
+    $('#groupSectionPanel').style.display = 'block';
+    renderGroupPanel(groupId);
+  }
+
+  function groupCardHtml(g) {
+    return `
+      <div class="chapter-card">
+        <div class="cc-icon">👥</div>
+        <div class="cc-body">
+          <div class="cc-order">Lớp ${escapeHtml(String(g.grade))} · Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
+          <div class="cc-title">${escapeHtml(g.groupName)}</div>
+          <div class="cc-desc">${g.studentCount} học sinh đã tham gia · ${g.chapterIds.length} chương được giao</div>
+          <div class="free-mode-row" style="margin:8px 0;padding:10px 12px;">
+            <div class="fm-text">
+              <div class="fm-title">Học tự do cho nhóm này</div>
+              <div class="fm-sub">Bật: học sinh mở được mọi chương ngay. Tắt: phải học tuần tự, xong chương trước mới mở chương sau.</div>
+            </div>
+            <div class="switch free-mode-toggle ${g.freeMode ? 'on' : ''}" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}"><div class="knob"></div></div>
+          </div>
+          <div class="action-grid" style="margin-top:8px;">
+            <button class="btn roster-toggle" data-group="${escapeHtml(g.groupCode)}">👥 Danh sách học sinh</button>
+            <button class="btn results-toggle" data-group="${escapeHtml(g.groupCode)}">📊 Kết quả học tập</button>
+            <button class="btn chapters-toggle" data-group="${escapeHtml(g.groupCode)}">📘 Sửa chương trình học</button>
+            <a class="btn" href="tao-de-kiem-tra.html?group=${encodeURIComponent(g.groupCode)}">📝 Tạo đề kiểm tra</a>
+            <a class="btn" href="thong-ke.html?group=${encodeURIComponent(g.groupCode)}">📈 Thống kê từng đợt</a>
+            ${g.zaloGroupLink
+              ? `<a class="btn" href="${escapeHtml(g.zaloGroupLink)}" target="_blank" rel="noopener">💬 Nhắn Zalo nhóm</a>
+                 <button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="${escapeHtml(g.zaloGroupLink)}">✏️ Sửa link Zalo</button>`
+              : `<button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="">💬 + Thêm link Zalo nhóm</button>`}
+            <button class="btn delete-group-btn" type="button" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}" data-name="${escapeHtml(g.groupName)}" style="color:#dc2626;">🗑️ Xoá nhóm</button>
+          </div>
+          <div class="roster-box" id="roster-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
+          <div class="results-box" id="results-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
+          <div class="chapters-edit-box" id="chapters-edit-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderGroupPanel(groupId) {
+    const g = groupsCache.find((gr) => gr.id === groupId);
+    if (!g) { closeGroupPanel(); return; }
+    $('#groupSectionPanel').innerHTML = groupCardHtml(g);
+    wireRosterToggles();
+    wireResultsToggles();
+    wireChaptersEditToggles();
+    wireFreeModeToggles();
+    wireZaloEditButtons();
+    wireDeleteGroupButtons();
   }
 
   // Kiểu accordion: mỗi nhóm chỉ mở 1 trong 3 mục (danh sách học sinh / kết quả học tập / sửa
@@ -202,7 +255,7 @@
           await updateGroupZaloLink(groupId, zaloGroupLink);
           const group = groupsCache.find((g) => g.id === groupId);
           if (group) group.zaloGroupLink = zaloGroupLink;
-          renderGroupList();
+          renderGroupPanel(groupId); // chỉ vẽ lại khung của đúng nhóm này, không đóng khung đang mở
         } catch (e) {
           alert('Không lưu được: ' + e.message);
         }
@@ -231,7 +284,8 @@
         btn.textContent = '⏳ Đang xoá...';
         try {
           await deleteGroup(groupId, groupCode);
-          renderGroupList();
+          closeGroupPanel();
+          await renderGroupList();
         } catch (e) {
           alert('Không xoá được: ' + e.message);
           btn.disabled = false;
@@ -407,9 +461,9 @@
             group.chapterIds = chapterIds;
             group.grade = grade;
             showResult(resultBox, `✓ Đã lưu — nhóm giờ có ${chapterIds.length} chương.`);
-            // Đợi 1 chút cho giáo viên kịp thấy thông báo trước khi danh sách tải lại (renderGroupList
-            // dựng lại toàn bộ khối này từ đầu nên khung "Sửa chương trình học" sẽ tự đóng lại).
-            setTimeout(renderGroupList, 1200);
+            // Đợi 1 chút cho giáo viên kịp thấy thông báo trước khi vẽ lại khung nhóm (renderGroupPanel
+            // dựng lại từ đầu nên khung "Sửa chương trình học" sẽ tự đóng lại) — khung nhóm vẫn mở.
+            setTimeout(() => renderGroupPanel(group.id), 1200);
           } catch (e) {
             showResult(resultBox, `⚠️ ${escapeHtml(e.message)}`, true);
           }
