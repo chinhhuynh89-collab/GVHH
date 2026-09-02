@@ -131,14 +131,17 @@ async function ensureTeacherProfile(user) {
   const snap = await ref.get();
   if (!snap.exists) {
     const teacherCode = deriveTeacherCode(user.uid);
+    // Đăng nhập lần đầu qua link chia sẻ "?ref=MÃ" của giáo viên khác (xem index.html) — lưu lại
+    // riêng tư (chỉ chính chủ đọc được) để dùng cho mục đích kinh doanh/giới thiệu sau này.
+    const referredBy = localStorage.getItem('hoahoc_referred_by') || '';
     await Promise.all([
-      ref.set({
+      ref.set(Object.assign({
         displayName: user.displayName || '',
         email: user.email || '',
         photoURL: user.photoURL || '',
         teacherCode,
         createdAt: new Date().toISOString()
-      }),
+      }, referredBy ? { referredBy } : {})),
       // Gieo sẵn bản công khai (không có email) bằng tên/ảnh Google — để trang chủ cá nhân hoá
       // được ngay từ lần đăng nhập đầu tiên, giáo viên có thể tự đổi sau ở trang "Hồ sơ".
       db.collection('teacherProfiles').doc(user.uid).set({
@@ -146,6 +149,7 @@ async function ensureTeacherProfile(user) {
         createdAt: new Date().toISOString()
       })
     ]);
+    if (referredBy) localStorage.removeItem('hoahoc_referred_by');
   }
 }
 

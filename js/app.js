@@ -42,6 +42,26 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => _escapeHtmlMap[c]);
 }
 
+// Chia sẻ 1 liên kết: dùng bảng chia sẻ gốc của điện thoại (Web Share API) nếu trình duyệt hỗ trợ;
+// nếu không (đa số trình duyệt máy tính) thì copy link vào clipboard và báo cho người dùng biết.
+async function shareOrCopyLink(title, text, url, resultBox) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text, url });
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // người dùng tự đóng bảng chia sẻ — không phải lỗi
+      // các lỗi khác thì rơi xuống copy bên dưới
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    if (resultBox) showResult(resultBox, `✓ Đã copy link vào bộ nhớ tạm: ${escapeHtml(url)}`);
+  } catch (e) {
+    if (resultBox) showResult(resultBox, `Link: ${escapeHtml(url)}`);
+  }
+}
+
 function initTabs(root) {
   const tabBtns = $$('.tab-btn', root);
   const panels = $$('.tab-panel', root);

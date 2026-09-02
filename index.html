@@ -57,6 +57,7 @@
         <label for="regCode">Mã giáo viên *</label>
         <input type="text" id="regCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
         <div class="hint" style="margin-top:4px;">Mã riêng của thầy/cô (xem trang "Hồ sơ" của giáo viên) — không phải mã nhóm.</div>
+        <div class="hint" id="regCodeLockedHint" style="display:none;margin-top:4px;color:var(--brand);">🔒 Đã tự động điền mã giáo viên từ link chia sẻ.</div>
       </div>
       <button class="btn primary block" id="registerSubmitBtn" type="button">Đăng ký</button>
       <div class="result-box" id="registerResult"></div>
@@ -213,6 +214,22 @@
 
 <script src="js/app.js"></script>
 <script src="js/features/role.js"></script>
+<script>
+(function () {
+  // Link chia sẻ mang theo mã: ?tc=MÃ GIÁO VIÊN (chia sẻ cho học sinh — trang tự nhận diện thương
+  // hiệu giáo viên, khoá sẵn mã khi đăng ký) hoặc ?ref=MÃ GIÁO VIÊN (chia sẻ cho giáo viên khác —
+  // tự chuyển sang vai trò Giáo viên, lưu mã người giới thiệu để dùng sau này).
+  const params = new URLSearchParams(window.location.search);
+  const tc = params.get('tc');
+  const ref = params.get('ref');
+  if (tc) localStorage.setItem('hoahoc_shared_teacher_code', tc.trim().toUpperCase());
+  if (ref) {
+    localStorage.setItem('hoahoc_referred_by', ref.trim().toUpperCase());
+    if (typeof setRole === 'function') setRole('teacher');
+  }
+  if (tc || ref) window.history.replaceState({}, '', window.location.pathname);
+})();
+</script>
 <script src="js/vendor/firebase/firebase-app-compat.js"></script>
 <script src="js/vendor/firebase/firebase-auth-compat.js"></script>
 <script src="js/vendor/firebase/firebase-firestore-compat.js"></script>
@@ -277,6 +294,16 @@
     formCard.style.display = formCard.style.display === 'none' ? 'block' : 'none';
   });
 
+  // Mở qua link chia sẻ "?tc=MÃ" (xem đầu index.html) — khoá sẵn mã giáo viên, học sinh không cần
+  // (và không thể) gõ hoặc đổi sang mã khác.
+  const sharedTeacherCode = localStorage.getItem('hoahoc_shared_teacher_code');
+  if (sharedTeacherCode) {
+    const codeInput = document.getElementById('regCode');
+    codeInput.value = sharedTeacherCode;
+    codeInput.readOnly = true;
+    document.getElementById('regCodeLockedHint').style.display = 'block';
+  }
+
   document.getElementById('registerSubmitBtn').addEventListener('click', async () => {
     const studentName = $('#regName').value.trim();
     const school = $('#regSchool').value.trim();
@@ -299,7 +326,8 @@
       const data = await registerWithTeacherCode(teacherCode, info, getDeviceId());
       showResult(box, `✓ Đã gửi đăng ký tới ${escapeHtml(data.teacherName || 'giáo viên')}! Thầy/cô sẽ xếp bạn vào nhóm học tập phù hợp.`);
       $('#regName').value = ''; $('#regSchool').value = ''; $('#regClassName').value = '';
-      $('#regAddress').value = ''; $('#regPhone').value = ''; $('#regCode').value = '';
+      $('#regAddress').value = ''; $('#regPhone').value = '';
+      if (!sharedTeacherCode) $('#regCode').value = ''; // mã khoá từ link chia sẻ thì giữ nguyên
       setTimeout(() => { formCard.style.display = 'none'; hideResult(box); }, 1800);
     } catch (e) {
       showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);

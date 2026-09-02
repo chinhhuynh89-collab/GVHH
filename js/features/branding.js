@@ -1,8 +1,8 @@
 // Cá nhân hoá trang chủ theo giáo viên: tên hiển thị + khẩu hiệu (đặt ở trang "Hồ sơ") + ảnh đại
 // diện — giúp giáo viên xây dựng thương hiệu riêng. Học sinh trong nhóm của giáo viên đó sẽ thấy
 // đúng những gì giáo viên đã thiết đặt; giáo viên xem trang chủ của chính mình cũng thấy y hệt.
-// Khách vãng lai (chưa chọn vai trò, chưa đăng nhập/chưa vào nhóm) không xác định được là của
-// giáo viên nào nên giữ nguyên thương hiệu mặc định của app — không đổi gì.
+// Khách vãng lai (chưa chọn vai trò, chưa đăng nhập/chưa vào nhóm, chưa mở qua link chia sẻ) không
+// xác định được là của giáo viên nào nên giữ nguyên thương hiệu mặc định của app — không đổi gì.
 
 (async function () {
   if (!isFirebaseConfigured()) return;
@@ -16,6 +16,17 @@
   if (!teacherUid) {
     const membership = typeof getMembership === 'function' ? getMembership() : null;
     if (membership && membership.teacherUid) teacherUid = membership.teacherUid;
+  }
+  if (!teacherUid) {
+    // Mở qua link chia sẻ "?tc=MÃ" (xem index.html) — chưa vào nhóm nhưng đã biết mã giáo viên.
+    const sharedCode = localStorage.getItem('hoahoc_shared_teacher_code');
+    if (sharedCode) {
+      try {
+        const { db } = ensureFirebase();
+        const snap = await db.collection('teacherProfiles').where('teacherCode', '==', sharedCode).limit(1).get();
+        if (!snap.empty) teacherUid = snap.docs[0].id;
+      } catch (e) { /* ignore */ }
+    }
   }
   if (!teacherUid) return;
 

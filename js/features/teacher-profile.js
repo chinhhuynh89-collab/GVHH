@@ -7,6 +7,15 @@
 const PROFILE_PHOTO_SIZE = 240; // px, ảnh vuông sau khi resize
 const PROFILE_PHOTO_MAX_BYTES = 350 * 1024; // ~350KB data URL, an toàn dưới giới hạn 1MB/doc của Firestore
 
+// Dựng link trang chủ kèm query param chia sẻ (tc = mã giáo viên cho học sinh, ref = mã giới thiệu
+// cho giáo viên khác) — dùng URL tương đối để ra đúng domain/đường dẫn app đang deploy (kể cả khi
+// deploy dưới 1 thư mục con như GitHub Pages).
+function buildShareUrl(params) {
+  const url = new URL((window.APP_BASE_PATH || './') + 'index.html', window.location.href);
+  Object.keys(params).forEach((k) => url.searchParams.set(k, params[k]));
+  return url.href;
+}
+
 function resizeImageToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -83,6 +92,25 @@ function resizeImageToDataUrl(file) {
       } catch (e) { /* mã vẫn hiện đúng (tính được ngay) — sẽ lưu lại ở lần ghé trang sau */ }
     }
     $('#profileTeacherCode').textContent = teacherCode;
+
+    const shareBox = $('#shareResult');
+    $('#shareToStudentBtn').addEventListener('click', () => {
+      const name = $('#profileName').value.trim() || user.displayName || 'thầy/cô';
+      const url = buildShareUrl({ tc: teacherCode });
+      shareOrCopyLink(
+        `Học cùng ${name}`,
+        `Bấm vào để đăng ký học cùng ${name} trên Trợ Lý Giáo Viên Hoá Học nhé!`,
+        url, shareBox
+      );
+    });
+    $('#shareToTeacherBtn').addEventListener('click', () => {
+      const url = buildShareUrl({ ref: teacherCode });
+      shareOrCopyLink(
+        'Trợ Lý Giáo Viên Hoá Học',
+        'Mời bạn dùng thử app Trợ Lý Giáo Viên Hoá Học — soạn bài giảng, quản lý nhóm học sinh, tạo đề kiểm tra tự động!',
+        url, shareBox
+      );
+    });
 
     $('#profilePhotoBtn').addEventListener('click', () => $('#profilePhotoInput').click());
 
