@@ -124,17 +124,12 @@ async function getGroupLearningResults(group) {
   return results;
 }
 
-// Toàn bộ học sinh đã đăng ký ở TẤT CẢ nhóm của giáo viên hiện tại, gộp theo SĐT (vì 1 học sinh có
-// thể học cùng lúc nhiều nhóm — mỗi nhóm là 1 bản ghi "students" riêng) — mỗi học sinh chỉ xuất hiện
-// 1 lần kèm danh sách các nhóm đang học. Sắp xếp theo lần đăng ký gần nhất giảm dần (mới nhất lên đầu).
-async function getAllStudentsForCurrentTeacher() {
-  const groups = await listGroupsForCurrentTeacher();
-  if (!groups.length) return [];
-
-  const perGroup = await Promise.all(groups.map((g) => getStudentsForGroup(g.groupCode)));
+// Gộp học sinh của nhiều nhóm thành 1 danh sách theo SĐT (vì 1 học sinh có thể học cùng lúc nhiều
+// nhóm — mỗi nhóm là 1 bản ghi "students" riêng). groupsWithStudents = [{ group, students }, ...].
+function mergeStudentsAcrossGroups(groupsWithStudents) {
   const byKey = new Map();
-  groups.forEach((group, i) => {
-    perGroup[i].forEach((s) => {
+  groupsWithStudents.forEach(({ group, students }) => {
+    students.forEach((s) => {
       const key = (s.phone || '').trim() || s.id;
       if (!byKey.has(key)) {
         byKey.set(key, Object.assign({}, s, { groups: [], latestJoinedAt: s.joinedAt }));
@@ -144,8 +139,43 @@ async function getAllStudentsForCurrentTeacher() {
       if ((s.joinedAt || '') > (merged.latestJoinedAt || '')) merged.latestJoinedAt = s.joinedAt;
     });
   });
-
   return Array.from(byKey.values()).sort((a, b) => (b.latestJoinedAt || '').localeCompare(a.latestJoinedAt || ''));
+}
+
+// Toàn bộ học sinh đã đăng ký ở TẤT CẢ nhóm của giáo viên hiện tại — tải 1 lần (dùng cho trang
+// "Quản lý học sinh"). Sắp xếp theo lần đăng ký gần nhất giảm dần (mới nhất lên đầu).
+async function getAllStudentsForCurrentTeacher() {
+  const groups = await listGroupsForCurrentTeacher();
+  if (!groups.length) return [];
+  const perGroup = await Promise.all(groups.map((g) => getStudentsForGroup(g.groupCode)));
+  return mergeStudentsAcrossGroups(groups.map((group, i) => ({ group, students: perGroup[i] })));
+}
+
+// Theo dõi TRỰC TIẾP (Firestore onSnapshot) học sinh đăng ký ở tất cả nhóm của giáo viên hiện tại —
+// gọi lại callback(students) mỗi khi có thay đổi, để trang ĐANG MỞ (VD trang chủ trên điện thoại
+// giáo viên) tự cập nhật thông báo "có học sinh mới" mà không cần bấm tải lại trang. Lưu ý: đây
+// KHÔNG phải push notification hệ thống (không dùng Cloud Functions/FCM nên không làm được) — chỉ
+// cập nhật khi trang đang mở trên màn hình. Trả về hàm huỷ theo dõi (unsubscribe).
+async function watchAllStudentsForCurrentTeacher(callback) {
+  const groups = await listGroupsForCurrentTeacher();
+  if (!groups.length) { callback([]); return () => {}; }
+  const { db } = ensureFirebase();
+  const cachedByGroupCode = new Map();
+
+  function emit() {
+    const groupsWithStudents = groups
+      .filter((g) => cachedByGroupCode.has(g.groupCode))
+      .map((g) => ({ group: g, students: cachedByGroupCode.get(g.groupCode) }));
+    callback(mergeStudentsAcrossGroups(groupsWithStudents));
+  }
+
+  const unsubs = groups.map((g) => db.collection('students').where('groupCode', '==', g.groupCode)
+    .onSnapshot((snap) => {
+      cachedByGroupCode.set(g.groupCode, snap.docs.map((d) => Object.assign({ id: d.id }, d.data())));
+      emit();
+    }, () => { /* im lặng bỏ qua lỗi mạng */ }));
+
+  return () => unsubs.forEach((u) => u());
 }
 
 // "Đã xem" danh sách học sinh mới đăng ký lần cuối lúc nào — lưu cục bộ theo từng giáo viên (không

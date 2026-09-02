@@ -309,25 +309,31 @@
   try {
     const teacher = await waitForAuthReady();
     if (!teacher) return;
-    const students = await getAllStudentsForCurrentTeacher();
-    const lastSeen = getStudentsLastSeen(teacher.uid);
-    const newCount = students.filter((s) => !lastSeen || (s.latestJoinedAt || '') > lastSeen).length;
-    if (newCount > 0) {
+    // Theo dõi trực tiếp (Firestore onSnapshot) — nếu trang này đang mở (VD trên điện thoại) lúc có
+    // học sinh mới đăng ký ở máy khác, thông báo sẽ tự hiện ra ngay, không cần tải lại trang.
+    watchAllStudentsForCurrentTeacher((students) => {
+      const lastSeen = getStudentsLastSeen(teacher.uid);
+      const newCount = students.filter((s) => !lastSeen || (s.latestJoinedAt || '') > lastSeen).length;
       const badge = document.getElementById('manageStudentsBadge');
-      if (badge) {
-        badge.textContent = newCount > 99 ? '99+' : String(newCount);
-        badge.style.display = 'inline-block';
-      }
       const card = document.getElementById('teacherStudentsNotifyCard');
-      if (card) {
-        card.style.display = 'block';
-        card.innerHTML = `
-          <h2><span class="icon">🔔</span>Có học sinh mới đăng ký!</h2>
-          <p class="hint">${newCount} học sinh vừa đăng ký học cùng bạn kể từ lần bạn xem gần nhất.</p>
-          <a class="btn primary block" href="pages/quan-ly-hoc-sinh.html">Xem ngay</a>
-        `;
+      if (newCount > 0) {
+        if (badge) {
+          badge.textContent = newCount > 99 ? '99+' : String(newCount);
+          badge.style.display = 'inline-block';
+        }
+        if (card) {
+          card.style.display = 'block';
+          card.innerHTML = `
+            <h2><span class="icon">🔔</span>Có học sinh mới đăng ký!</h2>
+            <p class="hint">${newCount} học sinh vừa đăng ký học cùng bạn kể từ lần bạn xem gần nhất.</p>
+            <a class="btn primary block" href="pages/quan-ly-hoc-sinh.html">Xem ngay</a>
+          `;
+        }
+      } else {
+        if (badge) badge.style.display = 'none';
+        if (card) card.style.display = 'none';
       }
-    }
+    });
   } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
 })();
 </script>
