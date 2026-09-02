@@ -8,22 +8,33 @@
 
 (function () {
   let groupsCache = [];
+  let ownProgramsWithChapters = []; // [{ program, chapters }] — chương trình riêng của giáo viên, để chọn giao cho nhóm
 
   requireTeacherAuth(async () => {
     renderQuickGradeOptions();
+    await loadOwnProgramsWithChapters();
     renderChapterChecklist();
     renderGroupList();
   });
+
+  async function loadOwnProgramsWithChapters() {
+    try {
+      const programs = await listProgramsForCurrentTeacher();
+      const chaptersPerProgram = await Promise.all(programs.map((p) => getProgramChapters(p.id)));
+      ownProgramsWithChapters = programs.map((p, i) => ({ program: p, chapters: chaptersPerProgram[i] }));
+    } catch (e) { ownProgramsWithChapters = []; }
+  }
 
   function renderQuickGradeOptions() {
     $('#groupQuickGrade').innerHTML = GRADES.map((g) => `<option value="${g.grade}">${g.label}</option>`).join('');
   }
 
   // Dùng chung cho cả form "Tạo nhóm mới" và bảng "Sửa chương trình học" của từng nhóm — checkedIds
-  // để tick sẵn chương đang được giao (dùng khi sửa nhóm có sẵn).
+  // để tick sẵn chương đang được giao (dùng khi sửa nhóm có sẵn). Gồm cả chương khối 6-12 mặc định
+  // VÀ chương thuộc chương trình riêng do giáo viên tự tạo (xem programs-data.js).
   function chapterChecklistHtml(checkedIds) {
     const checkedSet = new Set(checkedIds || []);
-    return GRADES.map((g) => {
+    const gradesHtml = GRADES.map((g) => {
       const chapters = getChaptersByGrade(g.grade);
       if (!chapters.length) return '';
       return `
@@ -36,6 +47,19 @@
         `).join('')}
       `;
     }).join('');
+    const programsHtml = ownProgramsWithChapters.map(({ program, chapters }) => {
+      if (!chapters.length) return '';
+      return `
+        <div class="hint" style="font-weight:700;margin:10px 0 6px;">${program.icon || '🎓'} ${escapeHtml(program.name)}</div>
+        ${chapters.map((c) => `
+          <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" class="chapter-check" value="${c.id}" ${checkedSet.has(c.id) ? 'checked' : ''} style="margin-top:3px;" />
+            <span>${escapeHtml(c.title)}</span>
+          </label>
+        `).join('')}
+      `;
+    }).join('');
+    return gradesHtml + programsHtml;
   }
 
   function renderChapterChecklist() {

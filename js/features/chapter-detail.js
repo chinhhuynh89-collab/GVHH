@@ -12,12 +12,20 @@
 // Nội dung TỰ THÊM (không có trong app) vẫn lưu riêng như cũ: customLessons / customQuiz /
 // customFlashcards.
 
-(function () {
+(async function () {
   const params = new URLSearchParams(location.search);
   const chapterId = params.get('id');
   const found = findChapterAnywhere(chapterId);
 
-  if (!found) {
+  // Không có trong chương trình mặc định (lớp 6-12) — có thể là chương thuộc 1 chương trình đào
+  // tạo riêng do giáo viên tự tạo (xem programs-data.js), tra tiếp trong Firestore trước khi báo
+  // "không tìm thấy".
+  let chapter = found ? found.chapter : null;
+  if (!chapter && isFirebaseConfigured() && typeof findProgramChapter === 'function') {
+    try { chapter = await findProgramChapter(chapterId); } catch (e) { chapter = null; }
+  }
+
+  if (!chapter) {
     $('main').innerHTML = `
       <div class="card">
         <h2>Không tìm thấy chương</h2>
@@ -27,7 +35,6 @@
     `;
     return;
   }
-  const chapter = found.chapter;
 
   let owner = { uid: null, isOwner: false };
   let chapterMeta = {};

@@ -69,25 +69,38 @@ async function createExamForCurrentTeacher(examInput) {
       await onGroupChange();
     }
 
+    // Song song với findChapterAnywhere (chương mặc định lớp 6-12, tra đồng bộ) — nếu không thấy,
+    // có thể là chương thuộc 1 chương trình riêng do giáo viên tự tạo (xem programs-data.js).
+    async function resolveChapterInfo(chapterId) {
+      const found = findChapterAnywhere(chapterId);
+      if (found) return { chapter: found.chapter, grade: found.grade, isProgram: false };
+      if (typeof findProgramChapter === 'function') {
+        try {
+          const pc = await findProgramChapter(chapterId);
+          if (pc) return { chapter: pc, grade: null, isProgram: true };
+        } catch (e) { /* ignore */ }
+      }
+      return null;
+    }
+
     async function onGroupChange() {
       try {
         const code = $('#examGroup').value;
         currentGroup = groups.find((g) => g.groupCode === code);
         if (!currentGroup) { $('#examChapters').innerHTML = ''; return; }
-        // Chương của 1 nhóm có thể đến từ nhiều khối lớp khác nhau (chương trình riêng) — tra theo
-        // đúng chapterIds của nhóm thay vì lọc theo 1 khối duy nhất.
-        const chapters = (currentGroup.chapterIds || [])
-          .map((id) => findChapterAnywhere(id))
-          .filter(Boolean);
+        // Chương của 1 nhóm có thể đến từ nhiều khối lớp khác nhau, hoặc chương trình riêng — tra
+        // theo đúng chapterIds của nhóm thay vì lọc theo 1 khối duy nhất.
+        const resolved = await Promise.all((currentGroup.chapterIds || []).map(resolveChapterInfo));
+        const chapters = resolved.filter(Boolean);
         if (!chapters.length) {
           $('#examChapters').innerHTML = '<p class="hint">Nhóm này chưa được giao chương nào — vào "Nhóm học sinh" sửa lại nhóm để giao chương trước.</p>';
           $('#examPoolInfo').textContent = '';
           return;
         }
-        $('#examChapters').innerHTML = chapters.map(({ chapter, grade }) => `
+        $('#examChapters').innerHTML = chapters.map(({ chapter, grade, isProgram }) => `
           <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
             <input type="checkbox" class="exam-chapter-check" value="${chapter.id}" checked style="margin-top:3px;" />
-            <span>Lớp ${grade} - Chương ${chapter.order}. ${escapeHtml(chapter.title)}</span>
+            <span>${isProgram ? escapeHtml(chapter.title) : `Lớp ${grade} - Chương ${chapter.order}. ${escapeHtml(chapter.title)}`}</span>
           </label>
         `).join('');
         $$('.exam-chapter-check').forEach((cb) => cb.addEventListener('change', onChapterChange));
@@ -105,8 +118,7 @@ async function createExamForCurrentTeacher(examInput) {
     async function getQuestionPool(chapterIds) {
       const pools = await Promise.all(chapterIds.map(async (chapterId) => {
         const found = findChapterAnywhere(chapterId);
-        if (!found) return [];
-        const builtIn = found.chapter.quiz || [];
+        const builtIn = found ? (found.chapter.quiz || []) : [];
         let custom = [];
         try { custom = await getCustomQuiz(getCurrentTeacher().uid, chapterId); } catch (e) { custom = []; }
         return builtIn.concat(custom.map((c) => ({ q: c.q, options: c.options, correct: c.correct, explain: c.explain })));
@@ -143,7 +155,8 @@ async function createExamForCurrentTeacher(examInput) {
       if (!pool.length) { showResult(box, '(Các) chương đã chọn chưa có câu hỏi trắc nghiệm nào.', true); return; }
 
       const questions = shuffleArray(pool).slice(0, Math.min(count, pool.length));
-      const chapterTitles = chapterIds.map((id) => findChapterAnywhere(id)).filter(Boolean).map((f) => f.chapter.title);
+      const chapterInfos = await Promise.all(chapterIds.map(resolveChapterInfo));
+      const chapterTitles = chapterInfos.filter(Boolean).map((f) => f.chapter.title);
 
       let startTime;
       if (startMode === 'now') {

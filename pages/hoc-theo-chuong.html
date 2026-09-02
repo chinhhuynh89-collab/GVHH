@@ -14,26 +14,53 @@
 
 <header class="app-header">
   <a class="back-btn" href="../index.html" aria-label="Quay lại">←</a>
-  <h1>Học theo chương<span class="header-sub">Lớp 6 – 12</span></h1>
+  <h1>Học theo chương<span class="header-sub">Chương trình đào tạo</span></h1>
 </header>
 
 <main>
-  <div class="tabs" id="gradeTabs"></div>
+  <div class="card" id="gateCard" style="display:none;"></div>
 
-  <div class="card progress-overview" id="progressOverview"></div>
+  <div id="overviewWrap" style="display:none;">
+    <div class="tabs" id="gradeTabs"></div>
 
-  <div class="card free-mode-row">
-    <div class="fm-text">
-      <div class="fm-title">Học tự do</div>
-      <div class="fm-sub" id="freeModeSub">Cho phép mở tất cả chương, không cần học tuần tự</div>
+    <div class="card" id="programAddForm" style="display:none;">
+      <h2><span class="icon">🎓</span>Tạo chương trình đào tạo mới</h2>
+      <p class="hint" style="margin-top:-4px;">Ngoài chương trình mặc định lớp 6-12, bạn có thể tạo chương trình riêng (VD: Bồi dưỡng đại học, Ôn thi học sinh giỏi...) và tự soạn toàn bộ nội dung.</p>
+      <div class="field">
+        <label for="programName">Tên chương trình</label>
+        <input type="text" id="programName" placeholder="VD: Bồi dưỡng đại học" />
+      </div>
+      <div class="field">
+        <label for="programIcon">Biểu tượng (1 emoji, tuỳ chọn)</label>
+        <input type="text" id="programIcon" placeholder="🎓" maxlength="4" />
+      </div>
+      <div class="field">
+        <label for="programDesc">Mô tả ngắn (tuỳ chọn)</label>
+        <input type="text" id="programDesc" placeholder="VD: Ôn tập nâng cao cho học sinh khá giỏi" />
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="programCreateBtn" style="flex:1;">Tạo chương trình</button>
+        <button class="btn" id="programCreateCancelBtn">Huỷ</button>
+      </div>
+      <div class="result-box" id="programCreateResult"></div>
     </div>
-    <div class="switch" id="freeModeSwitch"><div class="knob"></div></div>
+
+    <div class="card progress-overview" id="progressOverview"></div>
+
+    <div class="card free-mode-row" id="freeModeCard">
+      <div class="fm-text">
+        <div class="fm-title">Học tự do</div>
+        <div class="fm-sub" id="freeModeSub">Cho phép mở tất cả chương, không cần học tuần tự</div>
+      </div>
+      <div class="switch" id="freeModeSwitch"><div class="knob"></div></div>
+    </div>
+
+    <div class="section-label" id="chapterListLabel">Danh sách chương</div>
+    <button class="btn block" id="addProgramChapterBtn" style="display:none;margin-bottom:12px;">+ Thêm chương mới vào chương trình này</button>
+    <div class="chapter-list" id="chapterList"></div>
+
+    <p class="footer-note">Mỗi chương gồm 3 bước: Bài giảng tóm tắt → Flashcard → Trắc nghiệm. Hoàn thành cả 3 bước (trắc nghiệm ≥ 70%) để mở khoá chương tiếp theo. Danh mục chương lớp 6-12 theo chương trình GDPT 2018 — có thể chênh lệch nhỏ tuỳ bộ sách (Kết Nối Tri Thức / Cánh Diều / Chân Trời Sáng Tạo).</p>
   </div>
-
-  <div class="section-label">Danh sách chương</div>
-  <div class="chapter-list" id="chapterList"></div>
-
-  <p class="footer-note">Mỗi chương gồm 3 bước: Bài giảng tóm tắt → Flashcard → Trắc nghiệm. Hoàn thành cả 3 bước (trắc nghiệm ≥ 70%) để mở khoá chương tiếp theo. Danh mục chương theo chương trình GDPT 2018 — có thể chênh lệch nhỏ tuỳ bộ sách (Kết Nối Tri Thức / Cánh Diều / Chân Trời Sáng Tạo).</p>
 </main>
 
 <script src="../js/app.js"></script>
@@ -54,6 +81,7 @@
 <script src="../js/features/device-id.js"></script>
 <script src="../js/features/join-group.js"></script>
 <script src="../js/features/groups-data.js"></script>
+<script src="../js/features/programs-data.js"></script>
 <script src="../js/features/chapter-overview.js"></script>
 </body>
 </html>

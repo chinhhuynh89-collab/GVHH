@@ -99,5 +99,17 @@ service cloud.firestore {
       allow create, update: if request.resource.data.keys().hasAll(['studentId', 'groupCode']);
       allow delete: if false;
     }
+
+    // ---------- Chương trình đào tạo riêng do giáo viên tự tạo (ngoài lớp 6-12 mặc định) ----------
+    match /programs/{programId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.teacherUid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.teacherUid == request.auth.uid;
+    }
+    match /programChapters/{chapterId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.teacherUid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.teacherUid == request.auth.uid;
+    }
   }
 }
