@@ -142,6 +142,17 @@
       Khu vực Học sinh
       <a href="#" id="switchRoleBtnStudent" style="float:right;text-transform:none;font-weight:600;color:var(--text-faint);">Đổi vai trò</a>
     </div>
+
+    <div class="card" id="studentShareCard" style="display:none;">
+      <h2><span class="icon">📤</span>Chia sẻ</h2>
+      <p class="hint" style="margin-top:-4px;">Mời bạn bè cùng học, hoặc giới thiệu app cho thầy/cô khác.</p>
+      <div class="btn-row">
+        <button class="btn primary" id="studentShareFriendBtn" type="button" style="flex:1;">📤 Mời bạn cùng học</button>
+        <button class="btn" id="studentShareTeacherBtn" type="button" style="flex:1;">📤 Mời thầy/cô khác</button>
+      </div>
+      <div class="result-box" id="studentShareResult"></div>
+    </div>
+
     <div class="tile-grid">
       <a class="tile is-active" href="pages/hoc-theo-chuong.html">
         <div class="tile-icon">📘</div>
@@ -364,6 +375,41 @@
         if (badge) badge.style.display = 'none';
         if (card) card.style.display = 'none';
       }
+    });
+  } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
+})();
+</script>
+<script>
+(async function () {
+  const membership = typeof getMembership === 'function' ? getMembership() : null;
+  if (!membership || !membership.teacherUid || !isFirebaseConfigured()) return;
+  try {
+    const { db } = ensureFirebase();
+    const snap = await db.collection('teacherProfiles').doc(membership.teacherUid).get();
+    if (!snap.exists) return;
+    const profile = snap.data();
+    if (!profile.teacherCode) return;
+
+    const card = document.getElementById('studentShareCard');
+    card.style.display = 'block';
+    const shareBox = document.getElementById('studentShareResult');
+    const teacherLabel = profile.displayName || 'thầy/cô';
+
+    document.getElementById('studentShareFriendBtn').addEventListener('click', () => {
+      const url = buildShareUrl({ tc: profile.teacherCode });
+      shareOrCopyLink(
+        `Học cùng ${teacherLabel}`,
+        `Cùng mình học Hoá với ${teacherLabel} trên Trợ Lý Giáo Viên Hoá Học nhé!`,
+        url, shareBox
+      );
+    });
+    document.getElementById('studentShareTeacherBtn').addEventListener('click', () => {
+      const url = buildShareUrl({ ref: profile.teacherCode });
+      shareOrCopyLink(
+        'Trợ Lý Giáo Viên Hoá Học',
+        'Giới thiệu app Trợ Lý Giáo Viên Hoá Học cho thầy/cô — soạn bài giảng, quản lý nhóm học sinh, tạo đề kiểm tra tự động!',
+        url, shareBox
+      );
     });
   } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
 })();

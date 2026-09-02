@@ -627,7 +627,7 @@
   function renderQuiz() {
     const total = effectiveQuiz.length;
     if (!total) {
-      $('#quizWrap').innerHTML = `<p class="hint">📝 Chương này chưa có câu hỏi trắc nghiệm.${owner.isOwner ? ' Hãy thêm câu hỏi ở phần "Quản lý câu hỏi" bên dưới.' : ''}</p>`;
+      $('#quizWrap').innerHTML = `<p class="hint">📝 Chương này chưa có câu hỏi trắc nghiệm.${owner.isOwner ? ' Hãy thêm câu hỏi ở phần "Tạo câu hỏi trắc nghiệm" phía trên.' : ''}</p>`;
       return;
     }
     if (qFinished) { renderQuizResult(); return; }
@@ -787,7 +787,7 @@
       const wrap = $('#quizFormWrap');
       const open = wrap.style.display !== 'none';
       wrap.style.display = open ? 'none' : 'block';
-      $('#quizManagerToggle').textContent = open ? '⚙️ Quản lý câu hỏi trắc nghiệm' : '⚙️ Ẩn quản lý câu hỏi';
+      $('#quizManagerToggle').textContent = open ? '✏️ Tạo câu hỏi trắc nghiệm' : '✏️ Ẩn tạo câu hỏi trắc nghiệm';
     });
 
     $('#quizFormAddBtn').addEventListener('click', () => openQuizForm(null));

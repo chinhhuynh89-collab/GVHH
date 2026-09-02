@@ -42,6 +42,15 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => _escapeHtmlMap[c]);
 }
 
+// Dựng link trang chủ kèm query param chia sẻ (tc = mã giáo viên, để tự nhận diện thương hiệu +
+// khoá mã khi đăng ký; ref = mã giới thiệu cho giáo viên khác) — dùng URL tương đối để ra đúng
+// domain/đường dẫn app đang deploy (kể cả khi deploy dưới 1 thư mục con như GitHub Pages).
+function buildShareUrl(params) {
+  const url = new URL((window.APP_BASE_PATH || './') + 'index.html', window.location.href);
+  Object.keys(params).forEach((k) => url.searchParams.set(k, params[k]));
+  return url.href;
+}
+
 // Chia sẻ 1 liên kết: dùng bảng chia sẻ gốc của điện thoại (Web Share API) nếu trình duyệt hỗ trợ;
 // nếu không (đa số trình duyệt máy tính) thì copy link vào clipboard và báo cho người dùng biết.
 async function shareOrCopyLink(title, text, url, resultBox) {

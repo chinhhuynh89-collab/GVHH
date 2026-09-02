@@ -7,15 +7,6 @@
 const PROFILE_PHOTO_SIZE = 240; // px, ảnh vuông sau khi resize
 const PROFILE_PHOTO_MAX_BYTES = 350 * 1024; // ~350KB data URL, an toàn dưới giới hạn 1MB/doc của Firestore
 
-// Dựng link trang chủ kèm query param chia sẻ (tc = mã giáo viên cho học sinh, ref = mã giới thiệu
-// cho giáo viên khác) — dùng URL tương đối để ra đúng domain/đường dẫn app đang deploy (kể cả khi
-// deploy dưới 1 thư mục con như GitHub Pages).
-function buildShareUrl(params) {
-  const url = new URL((window.APP_BASE_PATH || './') + 'index.html', window.location.href);
-  Object.keys(params).forEach((k) => url.searchParams.set(k, params[k]));
-  return url.href;
-}
-
 function resizeImageToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

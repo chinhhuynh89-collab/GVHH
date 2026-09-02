@@ -109,37 +109,8 @@
   </div>
 
   <div class="tab-panel" id="tabQuiz">
-    <div class="card" id="selfTestCard" style="display:none;">
-      <h2><span class="icon">🎯</span>Tự kiểm tra</h2>
-      <div id="selfTestSetup">
-        <p class="hint" style="margin-top:-4px;">Chọn số câu hỏi và thời gian làm bài — hệ thống rút ngẫu nhiên câu hỏi từ kho câu hỏi của chương, chấm điểm theo thang 10 khi nộp bài. Trong lúc làm bài sẽ không hiện đáp án đúng/sai từng câu.</p>
-        <div class="field">
-          <label for="selfTestCount">Số câu hỏi</label>
-          <select id="selfTestCount"></select>
-        </div>
-        <div class="field">
-          <label for="selfTestDuration">Thời gian làm bài</label>
-          <select id="selfTestDuration">
-            <option value="5">5 phút</option>
-            <option value="10" selected>10 phút</option>
-            <option value="15">15 phút</option>
-            <option value="20">20 phút</option>
-            <option value="30">30 phút</option>
-            <option value="45">45 phút</option>
-            <option value="60">60 phút</option>
-          </select>
-        </div>
-        <button class="btn primary block" id="selfTestStartBtn">Bắt đầu tự kiểm tra</button>
-      </div>
-      <div id="selfTestNotEnough" class="hint" style="display:none;">Chương này cần có ít nhất 5 câu hỏi trắc nghiệm để dùng tính năng tự kiểm tra.</div>
-      <div id="selfTestRunning" style="display:none;"></div>
-    </div>
-
-    <div class="section-label">Ôn tập (làm hết câu hỏi, xem đáp án ngay)</div>
-    <div class="card" id="quizWrap"></div>
-
     <div class="card" id="quizManagerSection" style="display:none;">
-      <button class="btn block" id="quizManagerToggle">⚙️ Quản lý câu hỏi trắc nghiệm</button>
+      <button class="btn block" id="quizManagerToggle">✏️ Tạo câu hỏi trắc nghiệm</button>
 
       <div id="quizFormWrap" style="display:none;">
         <div id="quizManagerBody" style="margin-top:12px;"></div>
@@ -197,6 +168,35 @@ Giải thích: nội dung (tuỳ chọn)
         <div id="quizExcelResult"></div>
       </div>
     </div>
+
+    <div class="card" id="selfTestCard" style="display:none;">
+      <h2><span class="icon">🎯</span>Tự kiểm tra</h2>
+      <div id="selfTestSetup">
+        <p class="hint" style="margin-top:-4px;">Chọn số câu hỏi và thời gian làm bài — hệ thống rút ngẫu nhiên câu hỏi từ kho câu hỏi của chương, chấm điểm theo thang 10 khi nộp bài. Trong lúc làm bài sẽ không hiện đáp án đúng/sai từng câu.</p>
+        <div class="field">
+          <label for="selfTestCount">Số câu hỏi</label>
+          <select id="selfTestCount"></select>
+        </div>
+        <div class="field">
+          <label for="selfTestDuration">Thời gian làm bài</label>
+          <select id="selfTestDuration">
+            <option value="5">5 phút</option>
+            <option value="10" selected>10 phút</option>
+            <option value="15">15 phút</option>
+            <option value="20">20 phút</option>
+            <option value="30">30 phút</option>
+            <option value="45">45 phút</option>
+            <option value="60">60 phút</option>
+          </select>
+        </div>
+        <button class="btn primary block" id="selfTestStartBtn">Bắt đầu tự kiểm tra</button>
+      </div>
+      <div id="selfTestNotEnough" class="hint" style="display:none;">Chương này cần có ít nhất 5 câu hỏi trắc nghiệm để dùng tính năng tự kiểm tra.</div>
+      <div id="selfTestRunning" style="display:none;"></div>
+    </div>
+
+    <div class="section-label">Ôn tập (làm hết câu hỏi, xem đáp án ngay)</div>
+    <div class="card" id="quizWrap"></div>
   </div>
 </main>
 
