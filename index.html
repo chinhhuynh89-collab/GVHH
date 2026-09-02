@@ -91,19 +91,10 @@
 
   <div class="card" id="examNotifyCard" style="display:none;"></div>
 
-  <div class="card" id="rolePickerCard" style="display:none;">
-    <h2><span class="icon">👋</span>Bạn là ai?</h2>
-    <p class="hint" style="margin-top:-4px;">Chọn vai trò để trang chủ chỉ hiện đúng tính năng dành cho bạn. Có thể đổi lại bất cứ lúc nào.</p>
-    <div class="btn-row">
-      <button class="btn primary" id="pickTeacherBtn" style="flex:1;">👨‍🏫 Tôi là Giáo viên</button>
-      <button class="btn primary" id="pickStudentBtn" style="flex:1;">🎓 Tôi là Học sinh</button>
-    </div>
-  </div>
-
   <div id="teacherSection" style="display:none;">
     <div class="section-label">
       Khu vực Giáo viên
-      <a href="#" id="switchRoleBtnTeacher" style="float:right;text-transform:none;font-weight:600;color:var(--text-faint);">Đổi vai trò</a>
+      <a href="#" id="previewAsStudentBtn" style="float:right;text-transform:none;font-weight:600;color:var(--text-faint);">👁️ Xem với vai trò học sinh của tôi</a>
     </div>
 
     <div class="card" id="teacherExamNotifyCard" style="display:none;"></div>
@@ -138,9 +129,11 @@
   </div>
 
   <div id="studentSection" style="display:none;">
-    <div class="section-label">
-      Khu vực Học sinh
-      <a href="#" id="switchRoleBtnStudent" style="float:right;text-transform:none;font-weight:600;color:var(--text-faint);">Đổi vai trò</a>
+    <div class="section-label">Khu vực Học sinh</div>
+
+    <div class="card" id="exitPreviewBanner" style="display:none;">
+      <p class="hint" style="margin:0;">👁️ Bạn (giáo viên) đang xem thử với vai trò học sinh.</p>
+      <a class="btn primary block" href="#" id="exitPreviewBtn" style="margin-top:8px;">🔙 Quay lại vai trò giáo viên</a>
     </div>
 
     <div class="card" id="studentShareCard" style="display:none;">
@@ -233,7 +226,10 @@
   const params = new URLSearchParams(window.location.search);
   const tc = params.get('tc');
   const ref = params.get('ref');
-  if (tc) localStorage.setItem('hoahoc_shared_teacher_code', tc.trim().toUpperCase());
+  if (tc) {
+    localStorage.setItem('hoahoc_shared_teacher_code', tc.trim().toUpperCase());
+    if (typeof setRole === 'function') setRole('student');
+  }
   if (ref) {
     localStorage.setItem('hoahoc_referred_by', ref.trim().toUpperCase());
     if (typeof setRole === 'function') setRole('teacher');
@@ -252,19 +248,44 @@
 <script src="js/features/teacher-exam-monitor.js"></script>
 <script src="js/features/branding.js"></script>
 <script>
-(function () {
+(async function () {
+  const PREVIEW_KEY = 'hoahoc_teacher_preview';
+
   function renderRoleSections() {
     const role = getRole();
-    $('#rolePickerCard').style.display = role ? 'none' : 'block';
     $('#teacherSection').style.display = role === 'teacher' ? 'block' : 'none';
     $('#studentSection').style.display = role === 'student' ? 'block' : 'none';
     $('#registerWithTeacherWrap').style.display = role === 'student' ? 'block' : 'none';
+    $('#exitPreviewBanner').style.display = (role === 'student' && localStorage.getItem(PREVIEW_KEY)) ? 'block' : 'none';
   }
-  $('#pickTeacherBtn').addEventListener('click', () => { setRole('teacher'); renderRoleSections(); });
-  $('#pickStudentBtn').addEventListener('click', () => { setRole('student'); renderRoleSections(); });
-  $$('#switchRoleBtnTeacher, #switchRoleBtnStudent').forEach((btn) => {
-    btn.addEventListener('click', (e) => { e.preventDefault(); clearRole(); renderRoleSections(); window.scrollTo(0, 0); });
+
+  // Không còn hỏi "Bạn là ai?" nữa — tự xác định vai trò:
+  // 1) Đã có link chia sẻ (?tc=/?ref=) hoặc đã từng chọn trước đó -> giữ nguyên (setRole đã chạy ở
+  //    script phía trên, hoặc getRole() còn nhớ từ lần trước).
+  // 2) Lần đầu mở, chưa có gì -> đang đăng nhập Google (giáo viên) thì mặc định Giáo viên, ngược lại
+  //    mặc định Học sinh (đa số người mở app lần đầu qua link của giáo viên là học sinh).
+  if (!getRole()) {
+    let isTeacher = false;
+    try { isTeacher = isFirebaseConfigured() && !!(await waitForAuthReady()); } catch (e) { /* ignore */ }
+    setRole(isTeacher ? 'teacher' : 'student');
+  }
+
+  $('#previewAsStudentBtn').addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!confirm('Xem thử với vai trò học sinh sẽ đăng xuất tài khoản Google của bạn để kiểm tra chính xác. Đăng nhập lại bất cứ lúc nào để quay về vai trò giáo viên. Tiếp tục?')) return;
+    try { if (isFirebaseConfigured()) await signOutTeacher(); } catch (err) { /* vẫn tiếp tục dù đăng xuất lỗi */ }
+    localStorage.setItem(PREVIEW_KEY, '1');
+    setRole('student');
+    window.location.reload();
   });
+
+  $('#exitPreviewBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    localStorage.removeItem(PREVIEW_KEY);
+    setRole('teacher');
+    window.location.reload();
+  });
+
   renderRoleSections();
 })();
 </script>

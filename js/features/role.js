@@ -10,7 +10,3 @@ function getRole() {
 function setRole(role) {
   localStorage.setItem(ROLE_KEY, role);
 }
-
-function clearRole() {
-  localStorage.removeItem(ROLE_KEY);
-}
