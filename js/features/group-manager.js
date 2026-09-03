@@ -124,8 +124,9 @@
     }
     menu.innerHTML = groupsCache.map((g) => `
       <button class="btn group-menu-btn ${g.id === openGroupId ? 'has-open' : ''}" type="button" data-group-id="${g.id}">
-        <span style="display:block;font-weight:700;">${escapeHtml(g.groupName)}</span>
-        <span class="hint" style="display:block;">Mã ${escapeHtml(g.groupCode)} · ${g.studentCount} HS</span>
+        <span class="gmb-name">${escapeHtml(g.groupName)}</span>
+        <span class="gmb-code">${escapeHtml(g.groupCode)}</span>
+        <span class="gmb-count">👥 ${g.studentCount} học sinh</span>
       </button>
     `).join('');
     $$('.group-menu-btn', menu).forEach((btn) => {

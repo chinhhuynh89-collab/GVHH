@@ -944,6 +944,15 @@ sub { font-size: 0.72em; }
 @media (min-width: 480px) {
   .action-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* Nút chọn nhóm trong "Danh sách nhóm" (trang Nhóm học sinh) — trước chỉ 2 dòng chữ cùng cỡ nhỏ
+   (tên đậm + "Mã X · N HS" gộp chung 1 hint), giờ tách 3 tầng rõ rệt: tên nhóm to nhất, mã nhóm màu
+   thương hiệu ở giữa, số học sinh nhỏ nhạt nhất — dễ quét mắt khi có nhiều nhóm. */
+.group-menu-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 12px; }
+.group-menu-btn .gmb-name { font-size: 15.5px; font-weight: 800; color: var(--text); line-height: 1.25; }
+.group-menu-btn .gmb-code { font-size: 12.5px; font-weight: 700; color: var(--brand); letter-spacing: 0.06em; }
+.group-menu-btn .gmb-count { font-size: 12px; font-weight: 500; color: var(--text-dim); }
+.group-menu-btn.has-open .gmb-code { color: var(--brand-2); }
 /* width: max-content (không phải 100%) để bảng được PHÉP rộng hơn khung chứa khi nhiều cột —
    nếu ép 100% thì trình duyệt sẽ ép chữ nhỏ/xít lại vừa khung thay vì cho cuộn ngang, đúng lỗi
    "hiển thị rất nhỏ, không kéo ngang được" trên điện thoại. min-width: 100% để bảng ít cột vẫn
