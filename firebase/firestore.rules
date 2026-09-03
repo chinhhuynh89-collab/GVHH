@@ -82,15 +82,19 @@ service cloud.firestore {
 
     // ---------- 1 tài khoản Google CHỈ 1 vai trò (giáo viên HOẶC học sinh), không lẫn lộn ----------
     // Xem js/features/auth.js: enforceExclusiveRole(). Ghi ĐÚNG 1 LẦN lúc tài khoản lần đầu xác định
-    // được vai trò (create), sau đó KHOÁ CỨNG — không update/delete được từ app (kể cả admin), tránh
-    // mọi đường lách đổi vai trò qua lại. "code" là mã cố định GV.../HS... (deriveTeacherCode/
-    // deriveStudentCode), sinh cùng lúc khoá vai trò. Không có gì nhạy cảm nên cho đọc công khai.
+    // được vai trò (create) — người dùng thường KHÔNG tự sửa/xoá được (update luôn false, tránh mọi
+    // đường lách tự đổi vai trò qua lại). CHỈ admin xoá được (delete) — dùng cho công cụ "Đặt lại tài
+    // khoản" ở trang quản trị (js/features/admin.js: buildResetAccountSection) để tự test lại hoặc
+    // sửa cho người dùng chọn nhầm vai trò; xoá xong, lần đăng nhập tiếp theo sẽ được chọn lại vai
+    // trò từ đầu. "code" là mã cố định GV.../HS... (deriveTeacherCode/deriveStudentCode), sinh cùng
+    // lúc khoá vai trò. Không có gì nhạy cảm nên cho đọc công khai.
     match /accountRoles/{uid} {
       allow read: if true;
       allow create: if request.auth != null && request.auth.uid == uid
                     && request.resource.data.keys().hasOnly(['role', 'code', 'createdAt'])
                     && request.resource.data.role in ['teacher', 'student'];
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     // ---------- Dữ liệu riêng của giáo viên ----------
@@ -98,28 +102,31 @@ service cloud.firestore {
     // học sinh (tên hiển thị, khẩu hiệu, ảnh đại diện) tách riêng ở collection teacherProfiles bên
     // dưới để không lộ email khi công khai.
     match /teachers/{teacherId} {
-      // Admin đọc thêm được (KHÔNG ghi được) — cần tra "referredBy" (mã giới thiệu) của giáo viên
-      // F1 để tính ra F2 lúc duyệt hoa hồng (xem js/features/admin.js approvePayment).
+      // Admin đọc thêm được — cần tra "referredBy" (mã giới thiệu) của giáo viên F1 để tính ra F2 lúc
+      // duyệt hoa hồng (xem js/features/admin.js approvePayment). Admin GHI thêm được (chỉ để XOÁ,
+      // dùng cho công cụ "Đặt lại tài khoản" — xem chú thích accountRoles ở trên) — không có UI nào
+      // khác cho admin sửa nội dung hồ sơ giáo viên người khác.
       allow read: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
-      allow write: if request.auth != null && request.auth.uid == teacherId;
+      allow write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
 
       // Nội dung biên soạn (bài giảng, câu hỏi, sửa chương): AI CŨNG ĐỌC ĐƯỢC (để học sinh trong nhóm
-      // của giáo viên đó thấy nội dung khi học), nhưng CHỈ chính giáo viên mới sửa/xoá được.
+      // của giáo viên đó thấy nội dung khi học), CHỈ chính giáo viên hoặc admin (công cụ đặt lại tài
+      // khoản) mới sửa/xoá được.
       match /customLessons/{lessonId} {
         allow read: if true;
-        allow write: if request.auth != null && request.auth.uid == teacherId;
+        allow write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
       }
       match /customQuiz/{quizId} {
         allow read: if true;
-        allow write: if request.auth != null && request.auth.uid == teacherId;
+        allow write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
       }
       match /customFlashcards/{cardId} {
         allow read: if true;
-        allow write: if request.auth != null && request.auth.uid == teacherId;
+        allow write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
       }
       match /chapterMeta/{chapterId} {
         allow read: if true;
-        allow write: if request.auth != null && request.auth.uid == teacherId;
+        allow write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
       }
     }
 
@@ -129,7 +136,7 @@ service cloud.firestore {
       allow create: if request.auth != null
                     && request.resource.data.teacherUid == request.auth.uid;
       allow update, delete: if request.auth != null
-                    && resource.data.teacherUid == request.auth.uid;
+                    && (resource.data.teacherUid == request.auth.uid || isAdmin());
     }
 
     // ---------- Học sinh tham gia nhóm ----------
@@ -153,7 +160,7 @@ service cloud.firestore {
                     && !('teacherUid' in resource.data)
                     && request.resource.data.teacherUid == request.auth.uid
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherUid']);
-      allow delete: if request.auth != null && request.auth.uid == resource.data.teacherUid;
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.teacherUid || isAdmin());
     }
 
     // ---------- Đề kiểm tra (câu hỏi, không có đáp án) ----------
@@ -162,14 +169,15 @@ service cloud.firestore {
       allow create: if request.auth != null
                     && request.resource.data.teacherUid == request.auth.uid;
       allow update, delete: if request.auth != null
-                    && resource.data.teacherUid == request.auth.uid;
+                    && (resource.data.teacherUid == request.auth.uid || isAdmin());
     }
 
     // ---------- Đáp án đúng (tách riêng khỏi exams) ----------
     match /examAnswers/{examId} {
       allow read: if true; // học sinh cần đọc lúc tự chấm điểm khi nộp bài
       allow create: if request.auth != null;
-      allow update, delete: if false;
+      allow update: if false; // luôn bất biến — kể cả admin
+      allow delete: if isAdmin(); // chỉ để dọn dẹp qua công cụ "Đặt lại tài khoản"
     }
 
     // ---------- Bài nộp của học sinh ----------
@@ -180,7 +188,8 @@ service cloud.firestore {
       allow read: if true; // giáo viên xem thống kê
       allow create: if request.auth != null && request.auth.uid == request.resource.data.studentUid
                     && request.resource.data.keys().hasAll(['examId', 'studentId', 'answers', 'score', 'studentUid']);
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isAdmin(); // chỉ để dọn dẹp qua công cụ "Đặt lại tài khoản"
     }
 
     // ---------- Học sinh bắt đầu làm bài (để giáo viên theo dõi real-time ai đang làm bài) ----------
@@ -188,7 +197,8 @@ service cloud.firestore {
       allow read: if true;
       allow create: if request.auth != null && request.auth.uid == request.resource.data.studentUid
                     && request.resource.data.keys().hasAll(['examId', 'studentId', 'studentName', 'studentUid', 'startedAt']);
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     // ---------- Tiến độ học theo chương của từng học sinh (để giáo viên xem "Kết quả học tập") ----------
@@ -197,19 +207,19 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if request.auth != null && request.auth.uid == request.resource.data.studentUid
                     && request.resource.data.keys().hasAll(['studentId', 'groupCode', 'studentUid']);
-      allow delete: if false;
+      allow delete: if isAdmin(); // chỉ để dọn dẹp qua công cụ "Đặt lại tài khoản"
     }
 
     // ---------- Chương trình đào tạo riêng do giáo viên tự tạo (ngoài lớp 6-12 mặc định) ----------
     match /programs/{programId} {
       allow read: if true;
       allow create: if request.auth != null && request.resource.data.teacherUid == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.teacherUid == request.auth.uid;
+      allow update, delete: if request.auth != null && (resource.data.teacherUid == request.auth.uid || isAdmin());
     }
     match /programChapters/{chapterId} {
       allow read: if true;
       allow create: if request.auth != null && request.resource.data.teacherUid == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.teacherUid == request.auth.uid;
+      allow update, delete: if request.auth != null && (resource.data.teacherUid == request.auth.uid || isAdmin());
     }
 
     // ---------- Học sinh xin vào nhóm, chờ giáo viên duyệt ----------
@@ -220,12 +230,12 @@ service cloud.firestore {
     // Có SĐT/địa chỉ nên CHỈ giáo viên sở hữu đọc được (khác với "students" vốn cho đọc công khai).
     // studentUid PHẢI khớp request.auth.uid — học sinh phải đăng nhập Google mới đăng ký được.
     match /studentRegistrations/{regId} {
-      allow read: if request.auth != null && request.auth.uid == resource.data.teacherUid;
+      allow read: if request.auth != null && (request.auth.uid == resource.data.teacherUid || isAdmin());
       allow create: if request.auth != null && request.auth.uid == request.resource.data.studentUid
                     && request.resource.data.keys().hasAll(
                       ['teacherUid', 'studentName', 'school', 'className', 'address', 'phone', 'studentUid', 'status', 'createdAt']
                     );
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.teacherUid;
+      allow update, delete: if request.auth != null && (request.auth.uid == resource.data.teacherUid || isAdmin());
     }
 
     // ---------- Phần hồ sơ giáo viên hiện công khai (thương hiệu trang chủ cho học sinh xem) ----------
@@ -233,7 +243,7 @@ service cloud.firestore {
     // hiển thị/khẩu hiệu/ảnh đại diện, không có gì nhạy cảm.
     match /teacherProfiles/{teacherUid} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == teacherUid;
+      allow write: if request.auth != null && (request.auth.uid == teacherUid || isAdmin());
     }
   }
 }

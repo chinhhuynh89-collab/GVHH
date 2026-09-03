@@ -78,7 +78,8 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
       locked: buildLockedFeaturesSection,
       plans: buildPlansSection,
       payment: buildPaymentSection,
-      commissions: buildCommissionsSection
+      commissions: buildCommissionsSection,
+      resetAccount: buildResetAccountSection
     };
 
     $$('.admin-menu-btn').forEach((btn) => {
@@ -837,6 +838,206 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
       } catch (e) {
         box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
       }
+    }
+
+    // ---------- 🧪 Đặt lại tài khoản ----------
+    // Công cụ CHỈ ADMIN dùng, cho 2 việc: (1) mở khoá vai trò cho tài khoản chọn nhầm (giáo viên tự
+    // test/đăng ký nhầm là học sinh hoặc ngược lại — xem enforceExclusiveRole() trong auth.js), (2)
+    // xoá sạch dữ liệu 1 tài khoản để admin tự test lại từ đầu (tài khoản Google của admin từng dùng
+    // để test sẽ bị khoá vai trò/còn dữ liệu cũ, không "sạch" để thử lại đúng như người dùng mới).
+    // Đây là tính năng TẠM THỜI cho giai đoạn thử nghiệm — chủ ứng dụng dự định khoá/gỡ bỏ khi có
+    // người dùng thật, để tránh rủi ro xoá nhầm dữ liệu thật.
+    async function buildResetAccountSection(panel) {
+      panel.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">🧪</span>Đặt lại tài khoản</h2>
+          <p class="hint" style="margin-top:-4px;">Dùng để tự test lại (tài khoản Google của admin đã bị khoá vai trò từ lần test trước), hoặc sửa cho người dùng lỡ chọn nhầm vai trò giáo viên/học sinh. Chỉ nên dùng trong giai đoạn thử nghiệm.</p>
+          <div class="field">
+            <label for="resetAccountInput">Uid hoặc email tài khoản Google</label>
+            <input type="text" id="resetAccountInput" placeholder="VD: abcXyz123... hoặc ten@gmail.com" />
+          </div>
+          <button class="btn primary block" id="resetAccountLookupBtn">🔍 Tìm tài khoản</button>
+          <div class="result-box" id="resetAccountLookupResult"></div>
+        </div>
+        <div id="resetAccountSummary"></div>
+      `;
+
+      // Học sinh không có hồ sơ kiểu "teachers" nên không tra được bằng email trực tiếp — dò qua
+      // email đã lưu trên "students"/"studentRegistrations" (thêm từ đợt chuyển học sinh sang đăng
+      // nhập Google) để tìm ra đúng studentUid.
+      async function resolveUidByEmailOrUid(input) {
+        const val = input.trim();
+        if (!val) throw new Error('Nhập uid hoặc email.');
+        if (!val.includes('@')) return val;
+        const teacherSnap = await db.collection('teachers').where('email', '==', val).limit(1).get();
+        if (!teacherSnap.empty) return teacherSnap.docs[0].id;
+        const studentSnap = await db.collection('students').where('email', '==', val).limit(1).get();
+        if (!studentSnap.empty) return studentSnap.docs[0].data().studentUid;
+        const regSnap = await db.collection('studentRegistrations').where('email', '==', val).limit(1).get();
+        if (!regSnap.empty) return regSnap.docs[0].data().studentUid;
+        throw new Error(`Không tìm thấy tài khoản với email "${val}" — thử nhập đúng uid thay vì email (lấy từ danh sách giáo viên/học sinh ở các mục khác).`);
+      }
+
+      // Gom TOÀN BỘ bản ghi (ở mọi collection) gắn với 1 uid — dùng chung cho cả preview (hiện trước
+      // khi xoá) lẫn thao tác xoá thật. Duyệt song song cho nhanh (đa số collection cho đọc công khai
+      // hoặc admin đọc được — xem firestore.rules).
+      async function gatherAccountData(uid) {
+        const [
+          roleDoc, teacherDoc, teacherProfileDoc, subDoc, studentSubDoc,
+          groupsSnap, studentsOwnedSnap, studentsMemberSnap,
+          regsOwnedSnap, regsMemberSnap,
+          progressSnap, submissionsSnap, examStartsSnap,
+          examsSnap, programsSnap, programChaptersSnap,
+          customLessonsSnap, customQuizSnap, customFlashcardsSnap, chapterMetaSnap,
+          paymentsAsTeacherSnap, paymentsAsStudentSnap, commissionsSnap
+        ] = await Promise.all([
+          db.collection('accountRoles').doc(uid).get(),
+          db.collection('teachers').doc(uid).get(),
+          db.collection('teacherProfiles').doc(uid).get(),
+          db.collection('subscriptions').doc(uid).get(),
+          db.collection('studentSubscriptions').doc(uid).get(),
+          db.collection('groups').where('teacherUid', '==', uid).get(),
+          db.collection('students').where('teacherUid', '==', uid).get(),
+          db.collection('students').where('studentUid', '==', uid).get(),
+          db.collection('studentRegistrations').where('teacherUid', '==', uid).get(),
+          db.collection('studentRegistrations').where('studentUid', '==', uid).get(),
+          db.collection('progress').where('studentUid', '==', uid).get(),
+          db.collection('submissions').where('studentUid', '==', uid).get(),
+          db.collection('examStarts').where('studentUid', '==', uid).get(),
+          db.collection('exams').where('teacherUid', '==', uid).get(),
+          db.collection('programs').where('teacherUid', '==', uid).get(),
+          db.collection('programChapters').where('teacherUid', '==', uid).get(),
+          db.collection('teachers').doc(uid).collection('customLessons').get(),
+          db.collection('teachers').doc(uid).collection('customQuiz').get(),
+          db.collection('teachers').doc(uid).collection('customFlashcards').get(),
+          db.collection('teachers').doc(uid).collection('chapterMeta').get(),
+          db.collection('paymentSubmissions').where('submitterUid', '==', uid).get(),
+          db.collection('paymentSubmissions').where('submitterStudentUid', '==', uid).get(),
+          db.collection('commissions').where('beneficiaryTeacherUid', '==', uid).get()
+        ]);
+
+        // Đáp án đúng (examAnswers) gắn theo examId của các đề giáo viên này sở hữu — tra thêm 1 vòng.
+        const examIds = examsSnap.docs.map((d) => d.id);
+        const examAnswersDocs = examIds.length
+          ? (await Promise.all(examIds.map((id) => db.collection('examAnswers').doc(id).get()))).filter((s) => s.exists)
+          : [];
+
+        return {
+          role: roleDoc.exists ? roleDoc.data() : null,
+          teacherName: teacherDoc.exists ? teacherDoc.data().displayName : null,
+          teacherEmail: teacherDoc.exists ? teacherDoc.data().email : null,
+          refsByCollection: {
+            accountRoles: roleDoc.exists ? [roleDoc.ref] : [],
+            teachers: teacherDoc.exists ? [teacherDoc.ref] : [],
+            teacherProfiles: teacherProfileDoc.exists ? [teacherProfileDoc.ref] : [],
+            subscriptions: subDoc.exists ? [subDoc.ref] : [],
+            studentSubscriptions: studentSubDoc.exists ? [studentSubDoc.ref] : [],
+            groups: groupsSnap.docs.map((d) => d.ref),
+            students: [...studentsOwnedSnap.docs, ...studentsMemberSnap.docs].map((d) => d.ref),
+            studentRegistrations: [...regsOwnedSnap.docs, ...regsMemberSnap.docs].map((d) => d.ref),
+            progress: progressSnap.docs.map((d) => d.ref),
+            submissions: submissionsSnap.docs.map((d) => d.ref),
+            examStarts: examStartsSnap.docs.map((d) => d.ref),
+            exams: examsSnap.docs.map((d) => d.ref),
+            examAnswers: examAnswersDocs.map((d) => d.ref),
+            programs: programsSnap.docs.map((d) => d.ref),
+            programChapters: programChaptersSnap.docs.map((d) => d.ref),
+            customLessons: customLessonsSnap.docs.map((d) => d.ref),
+            customQuiz: customQuizSnap.docs.map((d) => d.ref),
+            customFlashcards: customFlashcardsSnap.docs.map((d) => d.ref),
+            chapterMeta: chapterMetaSnap.docs.map((d) => d.ref),
+            paymentSubmissions: [...paymentsAsTeacherSnap.docs, ...paymentsAsStudentSnap.docs].map((d) => d.ref),
+            commissions: commissionsSnap.docs.map((d) => d.ref)
+          }
+        };
+      }
+
+      function flattenRefs(refsByCollection) {
+        const seen = new Map();
+        Object.values(refsByCollection).forEach((refs) => refs.forEach((ref) => seen.set(ref.path, ref)));
+        return Array.from(seen.values());
+      }
+
+      // Firestore giới hạn 500 thao tác/batch — chia nhỏ cho an toàn dù tài khoản test thường ít dữ liệu.
+      async function deleteRefsInBatches(refs) {
+        const CHUNK = 450;
+        for (let i = 0; i < refs.length; i += CHUNK) {
+          const batch = db.batch();
+          refs.slice(i, i + CHUNK).forEach((ref) => batch.delete(ref));
+          await batch.commit();
+        }
+      }
+
+      function renderAccountSummary(uid, data) {
+        const box = $('#resetAccountSummary');
+        const counts = Object.entries(data.refsByCollection).filter(([, refs]) => refs.length > 0);
+        const allRefs = flattenRefs(data.refsByCollection);
+        box.innerHTML = `
+          <div class="card" style="margin-top:12px;">
+            <p class="hint"><strong>Uid:</strong> ${escapeHtml(uid)}</p>
+            <p class="hint"><strong>Vai trò đã khoá:</strong> ${data.role ? `${escapeHtml(data.role.role === 'teacher' ? 'Giáo viên' : 'Học sinh')} (mã ${escapeHtml(data.role.code || '—')})` : 'Chưa có — tài khoản chưa từng đăng nhập qua app này'}</p>
+            ${data.teacherName ? `<p class="hint"><strong>Tên/email giáo viên:</strong> ${escapeHtml(data.teacherName)} (${escapeHtml(data.teacherEmail || '')})</p>` : ''}
+            <p class="hint" style="font-weight:700;margin-top:8px;">Dữ liệu tìm thấy — ${allRefs.length} bản ghi:</p>
+            ${counts.length
+              ? `<ul class="hint" style="margin:4px 0 0;padding-left:18px;">${counts.map(([name, refs]) => `<li>${escapeHtml(name)}: ${refs.length}</li>`).join('')}</ul>`
+              : '<p class="hint">Không có dữ liệu nào khác ngoài (có thể có) vai trò đã khoá.</p>'}
+            <div class="btn-row" style="margin-top:12px;">
+              <button class="btn" id="resetRoleOnlyBtn" type="button" style="flex:1;" ${data.role ? '' : 'disabled'}>🔓 Chỉ mở khoá vai trò</button>
+              <button class="btn" id="resetFullWipeBtn" type="button" style="flex:1;color:#dc2626;" ${allRefs.length ? '' : 'disabled'}>🗑️ Xoá toàn bộ dữ liệu</button>
+            </div>
+            <div class="result-box" id="resetAccountActionResult"></div>
+          </div>
+        `;
+
+        $('#resetRoleOnlyBtn').addEventListener('click', async () => {
+          if (!confirm(`Xoá khoá vai trò "${data.role.role === 'teacher' ? 'giáo viên' : 'học sinh'}" của tài khoản ${uid}?\n\nLần đăng nhập tiếp theo, tài khoản này sẽ được chọn lại vai trò từ đầu. Dữ liệu khác (nhóm, học sinh, tiến độ, gói...) được GIỮ NGUYÊN, không mất gì.`)) return;
+          const resBox = $('#resetAccountActionResult');
+          showResult(resBox, '⏳ Đang xử lý...');
+          try {
+            await db.collection('accountRoles').doc(uid).delete();
+            data.role = null;
+            data.refsByCollection.accountRoles = [];
+            // Vẽ lại TOÀN BỘ khối tóm tắt (đổi luôn dòng "Vai trò đã khoá" + vô hiệu nút này) — vẽ
+            // lại XONG rồi mới hiện thông báo thành công vào #resetAccountActionResult MỚI, tránh bị
+            // renderAccountSummary xoá mất thông báo vừa hiện (đã từng xảy ra khi làm ngược thứ tự).
+            renderAccountSummary(uid, data);
+            showResult($('#resetAccountActionResult'), '✅ Đã mở khoá vai trò — có thể chọn lại ở lần đăng nhập tiếp theo.');
+          } catch (e) {
+            showResult(resBox, `⚠️ ${escapeHtml(e.message)}`, true);
+          }
+        });
+
+        $('#resetFullWipeBtn').addEventListener('click', async () => {
+          const typed = prompt(`⚠️ XOÁ VĨNH VIỄN toàn bộ ${allRefs.length} bản ghi của tài khoản này (vai trò, hồ sơ, nhóm, học sinh, tiến độ học, bài nộp, giao dịch, hoa hồng...).\n\nKHÔNG THỂ HOÀN TÁC. Gõ đúng uid dưới đây để xác nhận:\n\n${uid}`);
+          if (typed === null) return;
+          if (typed.trim() !== uid) { alert('Không khớp uid — đã huỷ, chưa xoá gì cả.'); return; }
+          const resBox = $('#resetAccountActionResult');
+          showResult(resBox, `⏳ Đang xoá ${allRefs.length} bản ghi...`);
+          try {
+            await deleteRefsInBatches(allRefs);
+            showResult(resBox, `✅ Đã xoá toàn bộ ${allRefs.length} bản ghi của tài khoản ${uid}.`);
+            $('#resetRoleOnlyBtn').disabled = true;
+            $('#resetFullWipeBtn').disabled = true;
+          } catch (e) {
+            showResult(resBox, `⚠️ ${escapeHtml(e.message)}`, true);
+          }
+        });
+      }
+
+      $('#resetAccountLookupBtn').addEventListener('click', async () => {
+        const box = $('#resetAccountLookupResult');
+        $('#resetAccountSummary').innerHTML = '';
+        const input = $('#resetAccountInput').value;
+        showResult(box, '⏳ Đang tìm...');
+        try {
+          const uid = await resolveUidByEmailOrUid(input);
+          const data = await gatherAccountData(uid);
+          hideResult(box);
+          renderAccountSummary(uid, data);
+        } catch (e) {
+          showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        }
+      });
     }
   });
 })();
