@@ -327,15 +327,20 @@ function requireTeacherAuth(onReady) {
     const profile = await fetchTeacherProfile(user.uid).catch(() => null);
     const displayName = (profile && profile.displayName) || user.displayName || user.email || 'Giáo viên';
     const photoURL = (profile && profile.photoURL) || user.photoURL || '';
+    // Tên/email + 2 nút Hồ sơ/Đăng xuất tách làm 2 HÀNG (trước gộp chung 1 hàng) — email dài (phổ
+    // biến với Gmail) cộng thêm 2 nút chữ trên cùng 1 dòng dễ tràn ra ngoài màn hình, nhất là trên
+    // điện thoại. Hàng dưới đặt 2 nút để riêng, không chung với tên/email nữa.
     gate.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;">
-        ${photoURL ? `<img src="${photoURL}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;" referrerpolicy="no-referrer" />` : ''}
-        <div style="flex:1;">
-          <div style="font-weight:700;font-size:14px;">${escapeHtml(displayName)}</div>
-          <div class="hint">${escapeHtml(user.email || '')}</div>
+        ${photoURL ? `<img src="${photoURL}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" referrerpolicy="no-referrer" />` : ''}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(displayName)}</div>
+          <div class="hint" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(user.email || '')}</div>
         </div>
-        <a class="btn" href="ho-so.html">✏️ Hồ sơ</a>
-        <button class="btn" id="teacherSignOutBtn">Đăng xuất</button>
+      </div>
+      <div class="btn-row" style="margin-top:10px;">
+        <a class="btn" href="ho-so.html" style="flex:1;">✏️ Hồ sơ</a>
+        <button class="btn" id="teacherSignOutBtn" style="flex:1;">Đăng xuất</button>
       </div>
     `;
     $('#teacherSignOutBtn').addEventListener('click', () => signOutTeacher());
