@@ -251,33 +251,52 @@ async function ensureTeacherProfile(user) {
   const { db } = ensureFirebase();
   const ref = db.collection('teachers').doc(user.uid);
   const snap = await ref.get();
-  if (!snap.exists) {
+  const isNew = !snap.exists;
+
+  // Gieo hồ sơ mặc định — CHỈ 1 LẦN DUY NHẤT lúc tài khoản "teachers" hoàn toàn chưa có doc nào, để
+  // không đè mất tên/ảnh/khẩu hiệu giáo viên đã tự chỉnh sau này ở trang "Hồ sơ".
+  if (isNew) {
     const teacherCode = deriveTeacherCode(user.uid);
-    // Đăng nhập lần đầu qua link chia sẻ "?ref=MÃ" của giáo viên khác (xem index.html) — lưu lại
-    // riêng tư (chỉ chính chủ đọc được) để dùng cho mục đích kinh doanh/giới thiệu sau này.
-    const referredBy = localStorage.getItem('hoahoc_referred_by') || '';
-    // Resolve NGAY ra uid (không chỉ giữ mã) và lưu thêm vào bản CÔNG KHAI (teacherProfiles) — mã
-    // referredBy chỉ nằm ở "teachers" (riêng tư, chỉ chính chủ đọc được) nên KHÔNG ai query ngược
-    // lại được "tôi đã giới thiệu những ai"; referredByUid trên bản công khai giải quyết việc đó,
-    // đồng thời để admin tra ra F2 lúc duyệt hoa hồng (xem js/features/admin.js approvePayment).
-    const referredByUid = (referredBy && typeof findTeacherUidByCode === 'function')
-      ? await findTeacherUidByCode(referredBy) : null;
     await Promise.all([
-      ref.set(Object.assign({
-        displayName: user.displayName || '',
-        email: user.email || '',
-        photoURL: user.photoURL || '',
-        teacherCode,
-        createdAt: new Date().toISOString()
-      }, referredBy ? { referredBy, referredByUid: referredByUid || null } : {})),
+      ref.set({
+        displayName: user.displayName || '', email: user.email || '', photoURL: user.photoURL || '',
+        teacherCode, createdAt: new Date().toISOString()
+      }),
       // Gieo sẵn bản công khai (không có email) bằng tên/ảnh Google — để trang chủ cá nhân hoá
       // được ngay từ lần đăng nhập đầu tiên, giáo viên có thể tự đổi sau ở trang "Hồ sơ".
-      db.collection('teacherProfiles').doc(user.uid).set(Object.assign({
+      db.collection('teacherProfiles').doc(user.uid).set({
         displayName: user.displayName || '', photoURL: user.photoURL || '', bio: '', teacherCode,
         createdAt: new Date().toISOString()
-      }, referredByUid ? { referredByUid } : {}))
+      })
     ]);
-    if (referredBy) localStorage.removeItem('hoahoc_referred_by');
+  }
+
+  // Gán người giới thiệu (referredBy/referredByUid) — thử ở MỌI LẦN ĐĂNG NHẬP có mã giới thiệu đang
+  // lưu sẵn (từ link chia sẻ "?ref=MÃ" vừa mở, xem index.html), MIỄN LÀ tài khoản CHƯA từng có
+  // referredByUid — không chỉ đúng 1 lần lúc "teachers" hoàn toàn chưa có doc như trước. Lý do: tách
+  // riêng khỏi khối "gieo hồ sơ" ở trên để không mất cơ hội gán vĩnh viễn nếu lần đầu đó tra mã thất
+  // bại (mất mạng), HOẶC tài khoản có doc "teachers" từ TRƯỚC (VD dùng công cụ "Đặt lại tài khoản" ở
+  // trang quản trị — chỉ mở khoá vai trò, không xoá hồ sơ) khiến isNew=false dù thực chất đang đăng
+  // nhập lại qua đúng link giới thiệu mới. referredByUid resolve KHÔNG được (mã sai/mạng lỗi) thì GIỮ
+  // NGUYÊN hoahoc_referred_by trong localStorage để tự thử lại ở lần đăng nhập kế tiếp.
+  const referredBy = localStorage.getItem('hoahoc_referred_by') || '';
+  if (referredBy) {
+    const alreadyHasReferrer = !isNew && !!snap.data().referredByUid;
+    if (alreadyHasReferrer) {
+      localStorage.removeItem('hoahoc_referred_by');
+    } else {
+      try {
+        const referredByUid = typeof findTeacherUidByCode === 'function' ? await findTeacherUidByCode(referredBy) : null;
+        if (referredByUid && referredByUid !== user.uid) {
+          await Promise.all([
+            ref.set({ referredBy, referredByUid }, { merge: true }),
+            db.collection('teacherProfiles').doc(user.uid).set({ referredByUid }, { merge: true })
+          ]);
+          localStorage.removeItem('hoahoc_referred_by');
+        }
+        // referredByUid null (không tra được mã) hoặc == chính mình -> giữ nguyên localStorage, thử lại sau.
+      } catch (e) { /* lỗi mạng -> giữ nguyên hoahoc_referred_by, thử lại lần đăng nhập sau */ }
+    }
   }
 }
 
