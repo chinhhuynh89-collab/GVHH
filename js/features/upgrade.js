@@ -52,18 +52,18 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         });
       }
     });
-  } else if (membership && membership.groupCode) {
+  } else if (membership && membership.groupCode && membership.studentUid && (await isSignedInAs(membership.studentUid))) {
     await renderUpgradeFlow({
       plans: cfg.studentPlans,
       title: 'Gói Premium cho học sinh',
-      currentSub: await getStudentSubscription(getDeviceId()),
+      currentSub: await getStudentSubscription(membership.studentUid),
       currentTierLabel: 'Premium',
       extraDesc: 'Mở khoá tính năng nâng cao.',
       defaultContact: membership.phone || '',
       submit: async (plan, planId, contact, note) => submitPaymentRequest({
         type: 'student_upgrade',
         planId,
-        submitterDeviceId: getDeviceId(),
+        submitterStudentUid: membership.studentUid,
         submitterName: membership.studentName || '',
         amount: plan.price,
         referrerTeacherUid: membership.teacherUid || null,
@@ -71,6 +71,16 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         note
       })
     });
+  } else if (membership && membership.groupCode) {
+    // Có nhóm trong bộ nhớ đệm nhưng phiên đăng nhập Google hiện tại không khớp (VD hết hạn đăng
+    // nhập) — mua gói sẽ bị Firestore Rules từ chối vì cần đúng request.auth.uid, nên chặn sớm ở
+    // đây và hướng dẫn đăng nhập lại thay vì để lỗi khó hiểu lúc bấm "Tôi đã chuyển khoản".
+    main.innerHTML = `
+      <div class="card">
+        <p class="hint">⚠️ Cần đăng nhập lại đúng tài khoản Google đã dùng để vào nhóm "${escapeHtml(membership.groupName || '')}" trước khi mua gói.</p>
+        <a class="btn primary block" href="vao-nhom.html" style="margin-top:8px;">Vào nhóm học tập</a>
+      </div>
+    `;
   } else {
     main.innerHTML = `
       <div class="card">

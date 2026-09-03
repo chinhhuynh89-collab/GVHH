@@ -104,7 +104,7 @@ async function addStudentToGroup(groupCode, student) {
   await enforceTeacherStudentLimit(teacher.uid);
 
   await db.collection('students').add({
-    groupCode, teacherUid: teacher.uid, deviceId: student.deviceId, joinedAt: new Date().toISOString(),
+    groupCode, teacherUid: teacher.uid, studentUid: student.studentUid, joinedAt: new Date().toISOString(),
     studentName: student.studentName, school: student.school,
     className: student.className, address: student.address, phone: student.phone
   });
@@ -186,18 +186,18 @@ async function getGroupLearningResults(group) {
   return results;
 }
 
-// Gộp học sinh của nhiều nhóm thành 1 danh sách theo THIẾT BỊ (deviceId) — vì 1 học sinh có thể học
-// cùng lúc nhiều nhóm, mỗi nhóm là 1 bản ghi "students" riêng trên CÙNG 1 thiết bị. KHÔNG gộp theo
-// SĐT như trước: 2 học sinh khác nhau (VD anh chị em) hoàn toàn có thể dùng chung 1 số điện thoại
-// (của bố/mẹ) — gộp theo SĐT sẽ làm mất hẳn 1 học sinh khỏi danh sách (chỉ còn thấy 1 trong 2).
-// deviceId sinh ngẫu nhiên riêng cho từng trình duyệt (xem device-id.js) nên hiếm khi trùng giữa 2
-// người khác nhau, đáng tin hơn nhiều so với SĐT có thể dùng chung trong gia đình.
+// Gộp học sinh của nhiều nhóm thành 1 danh sách theo TÀI KHOẢN (studentUid, xem
+// js/features/auth.js: requireStudentAuth) — vì 1 học sinh có thể học cùng lúc nhiều nhóm, mỗi nhóm
+// là 1 bản ghi "students" riêng trên CÙNG 1 tài khoản. KHÔNG gộp theo SĐT như trước: 2 học sinh khác
+// nhau (VD anh chị em) hoàn toàn có thể dùng chung 1 số điện thoại (của bố/mẹ) — gộp theo SĐT sẽ làm
+// mất hẳn 1 học sinh khỏi danh sách (chỉ còn thấy 1 trong 2). studentUid gắn với tài khoản Google
+// thật của từng em nên đáng tin hơn nhiều so với SĐT có thể dùng chung trong gia đình.
 // groupsWithStudents = [{ group, students }, ...].
 function mergeStudentsAcrossGroups(groupsWithStudents) {
   const byKey = new Map();
   groupsWithStudents.forEach(({ group, students }) => {
     students.forEach((s) => {
-      const key = (s.deviceId || '').trim() || s.id;
+      const key = (s.studentUid || '').trim() || s.id;
       if (!byKey.has(key)) {
         byKey.set(key, Object.assign({}, s, { groups: [], latestJoinedAt: s.joinedAt }));
       }

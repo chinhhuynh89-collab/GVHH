@@ -36,7 +36,7 @@
   }
 
   // Danh sách tick chọn học sinh đã có sẵn (từ nhóm khác) để thêm thẳng vào nhóm MỚI đang tạo —
-  // dùng deviceId làm khoá (khớp cách gộp học sinh ở groups-data.js).
+  // dùng studentUid làm khoá (khớp cách gộp học sinh ở groups-data.js).
   function renderStudentsChecklist() {
     const box = $('#groupStudentsChecklist');
     if (!knownStudents.length) {
@@ -45,7 +45,7 @@
     }
     box.innerHTML = knownStudents.map((s) => `
       <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
-        <input type="checkbox" class="group-student-check" value="${escapeHtml(s.deviceId || s.id)}" style="margin-top:3px;" />
+        <input type="checkbox" class="group-student-check" value="${escapeHtml(s.studentUid || s.id)}" style="margin-top:3px;" />
         <span>${escapeHtml(s.studentName || '')} <span class="hint">— ${escapeHtml(s.school || '')} · ${escapeHtml(s.phone || '')}</span></span>
       </label>
     `).join('');
@@ -503,7 +503,7 @@
     const groupName = $('#groupName').value.trim();
     const zaloGroupLink = normalizeGroupZaloUrl($('#groupZaloLink').value.trim());
     const chapterIds = $$('.chapter-check', $('#groupChapters')).filter((c) => c.checked).map((c) => c.value);
-    const selectedDeviceIds = $$('.group-student-check', $('#groupStudentsChecklist')).filter((c) => c.checked).map((c) => c.value);
+    const selectedStudentUids = $$('.group-student-check', $('#groupStudentsChecklist')).filter((c) => c.checked).map((c) => c.value);
     const box = $('#groupCreateResult');
     if (!groupName) { showResult(box, 'Nhập tên nhóm.', true); return; }
     if (!chapterIds.length) { showResult(box, 'Chọn ít nhất 1 chương cho nhóm.', true); return; }
@@ -512,8 +512,8 @@
     try {
       const group = await createGroupForCurrentTeacher(groupName, grade, chapterIds, zaloGroupLink);
       let addedCount = 0;
-      if (selectedDeviceIds.length) {
-        const selectedStudents = knownStudents.filter((s) => selectedDeviceIds.includes(s.deviceId || s.id));
+      if (selectedStudentUids.length) {
+        const selectedStudents = knownStudents.filter((s) => selectedStudentUids.includes(s.studentUid || s.id));
         const results = await Promise.allSettled(selectedStudents.map((s) => addStudentToGroup(group.groupCode, s)));
         addedCount = results.filter((r) => r.status === 'fulfilled').length;
       }

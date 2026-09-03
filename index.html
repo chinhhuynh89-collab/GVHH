@@ -242,7 +242,6 @@
 <script src="js/features/firebase-init.js"></script>
 <script src="js/features/auth.js"></script>
 <script src="js/features/monetization.js"></script>
-<script src="js/features/device-id.js"></script>
 <script src="js/features/join-group.js"></script>
 <script src="js/features/groups-data.js"></script>
 <script src="js/features/teacher-exam-monitor.js"></script>
@@ -297,10 +296,9 @@
 <script>
 (async function () {
   const membership = typeof getMembership === 'function' ? getMembership() : null;
-  if (!membership || !isFirebaseConfigured()) return;
+  if (!membership || !membership.studentUid || !isFirebaseConfigured()) return;
   try {
     const { db } = ensureFirebase();
-    const deviceId = getDeviceId();
     const now = new Date();
     const snap = await db.collection('exams').where('groupCode', '==', membership.groupCode).get();
     const candidates = snap.docs.map((d) => Object.assign({ examId: d.id }, d.data()))
@@ -309,7 +307,7 @@
     if (!candidates.length) return;
     const active = candidates[0];
     const dupSnap = await db.collection('submissions')
-      .where('examId', '==', active.examId).where('deviceId', '==', deviceId).limit(1).get();
+      .where('examId', '==', active.examId).where('studentUid', '==', membership.studentUid).limit(1).get();
     if (!dupSnap.empty) return;
 
     const card = document.getElementById('examNotifyCard');
@@ -359,8 +357,18 @@
     }
     showResult(box, '⏳ Đang đăng ký...');
     try {
+      // Đăng ký gắn với tài khoản Google (để nhóm/tiến độ học/gói không mất khi đổi thiết bị) — nếu
+      // chưa đăng nhập, mở popup đăng nhập ngay tại đây thay vì bắt vào trang khác trước.
+      let user = await waitForAuthReady();
+      if (!user) {
+        showResult(box, '⏳ Cần đăng nhập Google trước khi đăng ký...');
+        const result = await signInWithGoogle(true);
+        user = result && result.user;
+        if (!user) { showResult(box, '⚠️ Đăng nhập chưa hoàn tất, thử lại nhé.', true); return; }
+        showResult(box, '⏳ Đang đăng ký...');
+      }
       const info = { studentName, school, className, address, phone };
-      const data = await registerWithTeacherCode(teacherCode, info, getDeviceId());
+      const data = await registerWithTeacherCode(teacherCode, info, user.uid);
       showResult(box, `✓ Đã gửi đăng ký tới ${escapeHtml(data.teacherName || 'giáo viên')}! Thầy/cô sẽ xếp bạn vào nhóm học tập phù hợp.`);
       $('#regName').value = ''; $('#regSchool').value = ''; $('#regClassName').value = '';
       $('#regAddress').value = ''; $('#regPhone').value = '';
@@ -459,10 +467,10 @@
   // tác dụng": với giáo viên, nó chưa từng chạy chứ không phải chạy chậm.
   async function renderStudentPlanCard() {
     const membership = typeof getMembership === 'function' ? getMembership() : null;
-    if (!membership || !membership.groupCode) return;
+    if (!membership || !membership.groupCode || !membership.studentUid) return;
     const cfg = await getMonetizationConfig();
     if (!cfg.enabled) return;
-    const sub = await getStudentSubscription(getDeviceId());
+    const sub = await getStudentSubscription(membership.studentUid);
     const isPremium = sub.tier === 'premium';
     const code = shortStudentCode(membership.studentId);
     $('#studentUpgradeDesc').innerHTML = isPremium

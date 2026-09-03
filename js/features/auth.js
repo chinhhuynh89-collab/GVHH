@@ -1,19 +1,26 @@
-// Đăng nhập giáo viên bằng tài khoản Google (Firebase Authentication).
-// Học sinh KHÔNG cần đăng nhập — vẫn dùng tên + mã nhóm như trước.
+// Đăng nhập bằng tài khoản Google (Firebase Authentication) — DÙNG CHUNG cho cả giáo viên lẫn học
+// sinh, cùng 1 hệ Firebase Auth (xem resolveEffectiveTeacherUid bên dưới: 1 tài khoản Google có thể
+// vừa là giáo viên vừa xem thử/là học sinh của nhóm khác, phân biệt qua membership chứ không phải
+// qua auth). Trước đây học sinh KHÔNG cần đăng nhập (chỉ dùng tên + mã thiết bị ngẫu nhiên) — đã đổi
+// sang bắt buộc đăng nhập Google (xem join-group.js) để gói đã mua/nhóm/tiến độ học không bị mất khi
+// học sinh đổi thiết bị (trước đó gắn vào 1 chuỗi ngẫu nhiên lưu trong localStorage, đổi máy là mất).
+//
+// asStudent = true: chỉ đăng nhập Google thuần t, KHÔNG tự tạo hồ sơ giáo viên (teachers/{uid}) —
+// học sinh không cần hồ sơ kiểu đó, dữ liệu của các em nằm ở collection "students" (1 bản ghi/nhóm).
 
 // Ưu tiên signInWithPopup: không cần rời trang nên không phụ thuộc trình duyệt lưu đúng trạng thái
 // "đang chờ đăng nhập" qua vòng chuyển trang đi-về — vòng này rất dễ bị các trình duyệt hiện đại
 // chặn cookie/storage bên thứ 3 làm mất, khiến signInWithRedirect quay về im lặng, không báo lỗi gì.
 // Chỉ khi popup bị chặn (thường gặp khi app được cài như PWA trên điện thoại) mới rơi về
 // signInWithRedirect như phương án dự phòng.
-async function signInWithGoogle() {
+async function signInWithGoogle(asStudent) {
   const { auth } = ensureFirebase();
   const provider = new firebase.auth.GoogleAuthProvider();
   try {
     const result = await auth.signInWithPopup(provider);
     if (result && result.user) {
       _lastRedirectError = null;
-      await ensureTeacherProfile(result.user);
+      if (!asStudent) await ensureTeacherProfile(result.user);
     }
     return result;
   } catch (e) {
@@ -32,14 +39,14 @@ function getLastRedirectError() {
   return _lastRedirectError;
 }
 
-async function checkRedirectResult() {
+async function checkRedirectResult(asStudent) {
   if (!isFirebaseConfigured()) return null;
   try {
     const { auth } = ensureFirebase();
     const result = await auth.getRedirectResult();
     if (result && result.user) {
       _lastRedirectError = null;
-      await ensureTeacherProfile(result.user);
+      if (!asStudent) await ensureTeacherProfile(result.user);
       return result.user;
     }
   } catch (e) {
@@ -75,6 +82,14 @@ function waitForAuthReady() {
       const unsub = auth.onAuthStateChanged((user) => { unsub(); resolve(user); });
     } catch (e) { resolve(null); }
   });
+}
+
+// Tài khoản Google đang đăng nhập trên thiết bị này có ĐÚNG bằng uid truyền vào không — dùng để xác
+// nhận phiên đăng nhập vẫn khớp trước khi cho ghi dữ liệu cần request.auth.uid == uid đó (VD mua gói
+// Premium — xem js/features/upgrade.js — hoặc nộp bài kiểm tra — xem js/features/exam-taker.js).
+async function isSignedInAs(uid) {
+  const user = await waitForAuthReady();
+  return !!(user && user.uid === uid);
 }
 
 // Tài khoản Google ĐANG đăng nhập trên thiết bị này có thực sự là giáo viên đang xem/sửa nội dung
@@ -236,6 +251,78 @@ function requireTeacherAuth(onReady) {
       // Chờ xử lý xong kết quả chuyển hướng (và lỗi, nếu có) TRƯỚC khi vẽ giao diện lần đầu —
       // nếu không đợi, màn hình "chưa đăng nhập" có thể vẽ ra trước khi lỗi kịp ghi nhận.
       await checkRedirectResult();
+      onAuthChange((user) => {
+        if (user) { renderSignedIn(user); if (onReady) onReady(user); }
+        else renderSignedOut();
+      });
+    } catch (e) {
+      gate.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
+    }
+  })();
+}
+
+// Gắn vào phần tử #studentAuthGate: y hệt requireTeacherAuth nhưng dành cho học sinh — dùng CHUNG 1
+// hệ đăng nhập Google (không có hệ tài khoản riêng), KHÔNG tự tạo hồ sơ giáo viên (asStudent=true).
+// Mục đích DUY NHẤT của việc bắt đăng nhập: có 1 uid ổn định gắn với nhóm/tiến độ học/gói đã mua
+// của học sinh, không mất khi đổi điện thoại/máy tính (khác trước đây dùng deviceId ngẫu nhiên lưu
+// trong localStorage — mất theo trình duyệt). Dùng ở đầu các trang học sinh (vao-nhom, kiem-tra,
+// hoc-theo-chuong, nang-cap — xem js/features/join-group.js: initJoinGroupPage()).
+function requireStudentAuth(onReady) {
+  if (!isFirebaseConfigured()) {
+    $('main').innerHTML = `
+      <div class="card">
+        <p class="hint">⚠️ Chưa kết nối Firebase. Liên hệ giáo viên để được hướng dẫn.</p>
+      </div>
+    `;
+    return;
+  }
+  const gate = document.createElement('div');
+  gate.id = 'studentAuthGate';
+  gate.className = 'card';
+  document.querySelector('main').prepend(gate);
+
+  const mainChildren = Array.from(document.querySelector('main').children).filter((el) => el !== gate);
+
+  function renderSignedOut() {
+    mainChildren.forEach((el) => { el.style.display = 'none'; });
+    gate.innerHTML = `
+      <h2><span class="icon">🔐</span>Đăng nhập</h2>
+      <p class="hint">Cần đăng nhập bằng tài khoản Google để vào nhóm học tập — nhóm, tiến độ học và gói đã mua sẽ gắn với tài khoản này, không mất khi đổi điện thoại/máy tính.</p>
+      <button class="btn primary block" id="studentSignInBtn">Đăng nhập bằng Google</button>
+      <div class="result-box" id="studentAuthResult"></div>
+    `;
+    const lastErr = getLastRedirectError();
+    if (lastErr) {
+      showResult($('#studentAuthResult'), `⚠️ Đăng nhập thất bại: ${escapeHtml(lastErr.message)}${lastErr.code ? ' (mã lỗi: ' + escapeHtml(lastErr.code) + ')' : ''}`, true);
+    }
+    $('#studentSignInBtn').addEventListener('click', async () => {
+      const box = $('#studentAuthResult');
+      showResult(box, '⏳ Đang chuyển sang trang đăng nhập Google...');
+      try {
+        await signInWithGoogle(true);
+      } catch (e) {
+        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+      }
+    });
+  }
+
+  function renderSignedIn(user) {
+    mainChildren.forEach((el) => { el.style.display = ''; });
+    gate.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;">
+        ${user.photoURL ? `<img src="${user.photoURL}" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover;" referrerpolicy="no-referrer" />` : ''}
+        <div style="flex:1;">
+          <div class="hint">Đang đăng nhập: <strong>${escapeHtml(user.displayName || user.email || '')}</strong></div>
+        </div>
+        <button class="btn" id="studentSignOutBtn">Đăng xuất</button>
+      </div>
+    `;
+    $('#studentSignOutBtn').addEventListener('click', () => signOutTeacher());
+  }
+
+  (async () => {
+    try {
+      await checkRedirectResult(true);
       onAuthChange((user) => {
         if (user) { renderSignedIn(user); if (onReady) onReady(user); }
         else renderSignedOut();

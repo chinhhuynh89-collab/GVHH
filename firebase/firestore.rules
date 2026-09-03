@@ -12,8 +12,10 @@ rules_version = '2';
 //   (đáp án đúng — chỉ tải về lúc học sinh bấm nộp bài). Vì không dùng Cloud Functions nên đây là giới
 //   hạn đã biết: học sinh rành kỹ thuật vẫn có thể đọc được examAnswers nếu cố tình — chấp nhận đánh đổi
 //   để không cần gói trả phí (Blaze) của Firebase.
-// - Học sinh không có tài khoản: được TẠO (create) bản ghi tham gia nhóm / nộp bài, nhưng không sửa/xoá
-//   được bản ghi của người khác.
+// - Học sinh cũng đăng nhập Google (dùng CHUNG hệ Auth với giáo viên, không có hồ sơ giáo viên nào
+//   được tạo thêm — xem js/features/auth.js: requireStudentAuth) để nhóm/tiến độ học/gói đã mua gắn
+//   với tài khoản, không mất khi đổi thiết bị. Được TẠO (create) bản ghi tham gia nhóm / nộp bài
+//   ĐÚNG uid của mình, nhưng không sửa/xoá được bản ghi của người khác.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -40,21 +42,28 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
-    match /studentSubscriptions/{deviceId} {
+    // Khoá theo studentUid (uid tài khoản Google của học sinh — xem js/features/auth.js:
+    // requireStudentAuth), KHÔNG còn theo "deviceId" ngẫu nhiên như trước (đổi thiết bị là mất gói).
+    match /studentSubscriptions/{studentUid} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Yêu cầu "Tôi đã chuyển khoản" — ai cũng tạo được (giống mức tin cậy của "students"/"progress":
-    // không có tài khoản thật để xác thực nên chấp nhận đánh đổi, admin tự kiểm tra thực tế trước khi
-    // duyệt). Chỉ admin đọc được TOÀN BỘ danh sách (để duyệt) và sửa trạng thái; người gửi (nếu có
-    // tài khoản, tức giáo viên) đọc được đúng yêu cầu của mình để biết đã duyệt hay chưa.
+    // Yêu cầu "Tôi đã chuyển khoản" — tạo được nếu đúng uid của người gửi (giáo viên: submitterUid;
+    // học sinh: submitterStudentUid), admin vẫn tự đối chiếu số tiền/nội dung chuyển khoản thực tế
+    // trước khi duyệt (không tự động hoá được vì không dùng Cloud Functions). Chỉ admin đọc được
+    // TOÀN BỘ danh sách (để duyệt) và sửa trạng thái; người gửi đọc được đúng yêu cầu của mình để
+    // biết đã duyệt hay chưa.
     match /paymentSubmissions/{id} {
-      allow read: if isAdmin() || (request.auth != null && resource.data.submitterUid == request.auth.uid);
+      allow read: if isAdmin()
+                  || (request.auth != null && resource.data.submitterUid == request.auth.uid)
+                  || (request.auth != null && resource.data.submitterStudentUid == request.auth.uid);
       allow create: if request.resource.data.keys().hasAll(['type', 'submitterName', 'amount', 'status', 'createdAt', 'orderCode'])
                     && request.resource.data.status == 'pending'
                     && (request.resource.data.type != 'teacher_upgrade'
-                        || (request.auth != null && request.auth.uid == request.resource.data.submitterUid));
+                        || (request.auth != null && request.auth.uid == request.resource.data.submitterUid))
+                    && (request.resource.data.type != 'student_upgrade'
+                        || (request.auth != null && request.auth.uid == request.resource.data.submitterStudentUid));
       allow update, delete: if isAdmin();
     }
 
@@ -111,15 +120,22 @@ service cloud.firestore {
     }
 
     // ---------- Học sinh tham gia nhóm ----------
-    // teacherUid: gắn từ bản ghi tạo sau khi có tính năng xoá học sinh/nhóm, dùng để xác định đúng
-    // giáo viên sở hữu được xoá. Bản ghi CŨ (tạo trước đó) chưa có teacherUid — cho phép "nhận sở
-    // hữu" 1 lần (chỉ set được khi CHƯA có, và chỉ đổi đúng field này) để giáo viên xoá được cả học
-    // sinh cũ; xem getStudentsForGroup() tự làm việc này khi giáo viên xem đúng nhóm của mình.
+    // Bản ghi "students" LUÔN do GIÁO VIÊN tạo (giáo viên tick chọn học sinh có sẵn, hoặc duyệt 1
+    // đăng ký đang chờ — xem js/features/groups-data.js: addStudentToGroup/assignRegistrationToGroup)
+    // — học sinh KHÔNG tự tạo thẳng bản ghi này (phải qua "studentRegistrations" chờ duyệt trước).
+    // studentUid: uid tài khoản Google của học sinh (xem js/features/auth.js: requireStudentAuth) —
+    // dùng để gộp 1 học sinh qua nhiều nhóm và để gói/tiến độ học không mất khi đổi thiết bị.
+    // teacherUid: gắn từ bản ghi tạo, dùng để xác định đúng giáo viên sở hữu được xoá. Bản ghi CŨ
+    // (tạo trước khi có teacherUid) — cho phép "nhận sở hữu" 1 lần (chỉ set được khi CHƯA có, và chỉ
+    // đổi đúng field này) để giáo viên xoá được cả học sinh cũ; xem getStudentsForGroup() tự làm
+    // việc này khi giáo viên xem đúng nhóm của mình.
     match /students/{studentId} {
       allow read: if true;
-      allow create: if request.resource.data.keys().hasAll(
-        ['groupCode', 'deviceId', 'studentName', 'school', 'className', 'address', 'phone', 'joinedAt']
-      );
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.teacherUid
+                    && request.resource.data.keys().hasAll(
+                      ['groupCode', 'teacherUid', 'studentUid', 'studentName', 'school', 'className', 'address', 'phone', 'joinedAt']
+                    );
       allow update: if request.auth != null
                     && !('teacherUid' in resource.data)
                     && request.resource.data.teacherUid == request.auth.uid
@@ -144,25 +160,30 @@ service cloud.firestore {
     }
 
     // ---------- Bài nộp của học sinh ----------
+    // studentUid PHẢI khớp request.auth.uid (xem js/features/auth.js: requireStudentAuth) — trước
+    // đây chỉ khoá theo "deviceId" tự khai, ai cũng ghi được bản ghi mạo danh học sinh khác; giờ bắt
+    // buộc đăng nhập Google nên siết lại được, khó giả mạo/nộp hộ hơn hẳn.
     match /submissions/{submissionId} {
       allow read: if true; // giáo viên xem thống kê
-      allow create: if request.resource.data.keys().hasAll(['examId', 'studentId', 'answers', 'score', 'deviceId']);
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.studentUid
+                    && request.resource.data.keys().hasAll(['examId', 'studentId', 'answers', 'score', 'studentUid']);
       allow update, delete: if false;
     }
 
     // ---------- Học sinh bắt đầu làm bài (để giáo viên theo dõi real-time ai đang làm bài) ----------
     match /examStarts/{startId} {
       allow read: if true;
-      allow create: if request.resource.data.keys().hasAll(['examId', 'studentId', 'studentName', 'deviceId', 'startedAt']);
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.studentUid
+                    && request.resource.data.keys().hasAll(['examId', 'studentId', 'studentName', 'studentUid', 'startedAt']);
       allow update, delete: if false;
     }
 
     // ---------- Tiến độ học theo chương của từng học sinh (để giáo viên xem "Kết quả học tập") ----------
-    // 1 doc/học sinh (id = studentId), tự cập nhật liên tục khi học sinh học — không dùng để chấm
-    // điểm/xác thực gì quan trọng nên cho phép ghi thoải mái, giống students/submissions/examStarts.
+    // 1 doc/học sinh (id = studentId), tự cập nhật liên tục khi học sinh học.
     match /progress/{studentId} {
       allow read: if true;
-      allow create, update: if request.resource.data.keys().hasAll(['studentId', 'groupCode']);
+      allow create, update: if request.auth != null && request.auth.uid == request.resource.data.studentUid
+                    && request.resource.data.keys().hasAll(['studentId', 'groupCode', 'studentUid']);
       allow delete: if false;
     }
 
@@ -184,11 +205,13 @@ service cloud.firestore {
     // giáo viên chỉ cần duyệt/từ chối (có groupCode, không có teacherCode). Khác với "students" (vào
     // thẳng không cần duyệt): đây LUÔN cần giáo viên xác nhận trước khi có bản ghi "students" thật.
     // Có SĐT/địa chỉ nên CHỈ giáo viên sở hữu đọc được (khác với "students" vốn cho đọc công khai).
+    // studentUid PHẢI khớp request.auth.uid — học sinh phải đăng nhập Google mới đăng ký được.
     match /studentRegistrations/{regId} {
       allow read: if request.auth != null && request.auth.uid == resource.data.teacherUid;
-      allow create: if request.resource.data.keys().hasAll(
-        ['teacherUid', 'studentName', 'school', 'className', 'address', 'phone', 'deviceId', 'status', 'createdAt']
-      );
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.studentUid
+                    && request.resource.data.keys().hasAll(
+                      ['teacherUid', 'studentName', 'school', 'className', 'address', 'phone', 'studentUid', 'status', 'createdAt']
+                    );
       allow update, delete: if request.auth != null && request.auth.uid == resource.data.teacherUid;
     }
 

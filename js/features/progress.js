@@ -40,10 +40,11 @@ function syncProgressToServer(chapterId, progress) {
     if (typeof isFirebaseConfigured !== 'function' || !isFirebaseConfigured()) return;
     if (typeof getMembership !== 'function') return;
     const membership = getMembership();
-    if (!membership || !membership.studentId) return;
+    if (!membership || !membership.studentId || !membership.studentUid) return;
     const { db } = ensureFirebase();
     db.collection('progress').doc(membership.studentId).set({
       studentId: membership.studentId,
+      studentUid: membership.studentUid,
       groupCode: membership.groupCode,
       studentName: membership.studentName,
       chapters: { [chapterId]: Object.assign({}, progress, { updatedAt: new Date().toISOString() }) }

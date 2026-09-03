@@ -304,7 +304,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
               .map((d) => Object.assign({ id: d.id }, d.data()))
               .sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi'));
             if (!students.length) { cell.innerHTML = '<p class="hint">Chưa có học sinh nào.</p>'; return; }
-            const subs = await Promise.all(students.map((s) => getStudentSubscription(s.deviceId)));
+            const subs = await Promise.all(students.map((s) => getStudentSubscription(s.studentUid)));
             cell.innerHTML = `
               <div class="roster-table-wrap">
                 <table class="roster-table">

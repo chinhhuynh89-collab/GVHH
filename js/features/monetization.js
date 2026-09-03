@@ -197,11 +197,14 @@ async function getTeacherSubscription(uid) {
   } catch (e) { return { tier: 'free' }; }
 }
 
-async function getStudentSubscription(deviceId) {
-  if (!deviceId || !isFirebaseConfigured()) return { tier: 'free' };
+// studentUid = uid tài khoản Google của học sinh (xem js/features/auth.js: requireStudentAuth) —
+// trước đây khoá theo "deviceId" ngẫu nhiên lưu trong localStorage nên đổi thiết bị là mất gói đã
+// mua; giờ gắn theo tài khoản nên sống sót qua mọi lần đổi điện thoại/máy tính.
+async function getStudentSubscription(studentUid) {
+  if (!studentUid || !isFirebaseConfigured()) return { tier: 'free' };
   try {
     const { db } = ensureFirebase();
-    const snap = await db.collection('studentSubscriptions').doc(deviceId).get();
+    const snap = await db.collection('studentSubscriptions').doc(studentUid).get();
     if (!snap.exists) return { tier: 'free' };
     const data = snap.data();
     if (data.tier === 'premium' && data.expiresAt && new Date(data.expiresAt) < new Date()) {
@@ -268,8 +271,8 @@ async function isViewerPremium() {
       return sub.tier === 'pro';
     }
     const membership = typeof getMembership === 'function' ? getMembership() : null;
-    if (membership && membership.groupCode && typeof getDeviceId === 'function') {
-      const sub = await getStudentSubscription(getDeviceId());
+    if (membership && membership.groupCode && membership.studentUid) {
+      const sub = await getStudentSubscription(membership.studentUid);
       return sub.tier === 'premium';
     }
   } catch (e) { /* ignore */ }

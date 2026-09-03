@@ -14,6 +14,22 @@
     return;
   }
 
+  // Bắt đăng nhập ĐÚNG tài khoản Google đã dùng lúc vào nhóm trước khi cho làm bài — nộp bài cần ghi
+  // Firestore với studentUid khớp request.auth.uid (xem firestore.rules), nếu phiên đăng nhập đã hết
+  // hạn (VD lâu không mở app) thì phải đăng nhập lại mới nộp bài được.
+  requireStudentAuth((user) => {
+    if (user.uid !== membership.studentUid) {
+      main.innerHTML = `
+        <div class="card">
+          <p class="hint">⚠️ Tài khoản đang đăng nhập không khớp với tài khoản đã vào nhóm "${escapeHtml(membership.groupName)}". Vào lại trang "Vào nhóm" để chọn đúng nhóm.</p>
+          <a class="btn primary block" href="vao-nhom.html">Vào nhóm học tập</a>
+        </div>
+      `;
+      return;
+    }
+    startExamTaker();
+  });
+
   let exam = null;
   let qIndex = 0; // vị trí hiển thị (0..n-1) — ánh xạ qua questionOrder để ra chỉ số câu hỏi GỐC
   let answers = []; // lưu theo chỉ số GỐC (khớp trực tiếp với examAnswers, không phụ thuộc thứ tự hiển thị)
@@ -82,7 +98,7 @@
       const { db } = ensureFirebase();
       db.collection('examStarts').add({
         examId: exam.examId, studentId: membership.studentId, studentName: membership.studentName,
-        deviceId: getDeviceId(), startedAt: new Date(startedAt).toISOString()
+        studentUid: membership.studentUid, startedAt: new Date(startedAt).toISOString()
       }).catch(() => {});
     } catch (e) { /* ignore */ }
   }
@@ -144,11 +160,10 @@
     main.innerHTML = `<div class="card"><p class="hint">⏳ Đang nộp bài...</p></div>`;
     try {
       const { db } = ensureFirebase();
-      const deviceId = getDeviceId();
 
-      // Chặn nộp trùng: kiểm tra đã có bài nộp cho đề này từ thiết bị này chưa.
+      // Chặn nộp trùng: kiểm tra đã có bài nộp cho đề này từ tài khoản này chưa.
       const dupSnap = await db.collection('submissions')
-        .where('examId', '==', exam.examId).where('deviceId', '==', deviceId).limit(1).get();
+        .where('examId', '==', exam.examId).where('studentUid', '==', membership.studentUid).limit(1).get();
       if (!dupSnap.empty) {
         const dup = dupSnap.docs[0].data();
         renderResult(dup.score, dup.correctCount, dup.total, true);
@@ -165,7 +180,7 @@
 
       await db.collection('submissions').add({
         examId: exam.examId, studentId: membership.studentId, studentName: membership.studentName,
-        deviceId, answers, score, correctCount, total,
+        studentUid: membership.studentUid, answers, score, correctCount, total,
         startedAt: new Date(startedAt).toISOString(), submittedAt: new Date().toISOString()
       });
 
@@ -197,11 +212,10 @@
     if (!box) return;
     try {
       const { db } = ensureFirebase();
-      const deviceId = getDeviceId();
       const now = new Date();
       const [examsSnap, subsSnap] = await Promise.all([
         db.collection('exams').where('groupCode', '==', membership.groupCode).get(),
-        db.collection('submissions').where('deviceId', '==', deviceId).get()
+        db.collection('submissions').where('studentUid', '==', membership.studentUid).get()
       ]);
       const exams = examsSnap.docs.map((d) => Object.assign({ examId: d.id }, d.data()));
       if (!exams.length) { box.innerHTML = ''; return; }
@@ -287,7 +301,6 @@
     main.innerHTML = `<div class="card"><p class="hint">⏳ Đang kiểm tra bài kiểm tra...</p></div>`;
     try {
       const { db } = ensureFirebase();
-      const deviceId = getDeviceId();
       const now = new Date();
 
       const examsSnap = await db.collection('exams').where('groupCode', '==', membership.groupCode).get();
@@ -300,7 +313,7 @@
       const active = candidates[0];
 
       const dupSnap = await db.collection('submissions')
-        .where('examId', '==', active.examId).where('deviceId', '==', deviceId).limit(1).get();
+        .where('examId', '==', active.examId).where('studentUid', '==', membership.studentUid).limit(1).get();
       if (!dupSnap.empty) { renderWaiting('Bạn đã hoàn thành bài kiểm tra gần nhất.'); return; }
 
       exam = active;
@@ -311,6 +324,8 @@
     }
   }
 
-  renderExamHistory();
-  loadExam();
+  function startExamTaker() {
+    renderExamHistory();
+    loadExam();
+  }
 })();
