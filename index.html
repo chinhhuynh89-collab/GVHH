@@ -335,10 +335,18 @@
     }
   }
 
+  // KHÔNG đăng xuất Google khi vào chế độ xem thử — trước đây có đăng xuất, nhưng resolveContentOwner()
+  // (auth.js) vốn đã được thiết kế để nhận diện đúng chế độ "xem thử": vẫn đăng nhập tài khoản giáo
+  // viên thật, chỉ đổi role='student' (role.js) để mọi trang hiện đúng NỘI DUNG CỦA CHÍNH GIÁO VIÊN
+  // ĐÓ nhưng ở chế độ chỉ-xem (owner.isOwner luôn false khi role là học sinh, xem chapter-detail.js).
+  // Đăng xuất khiến effectiveTeacherUid mất, trang phải dựa vào #hoahoc_student_membership cũ (nếu
+  // có, từ lần test bằng 1 tài khoản học sinh thật khác trên cùng máy) — đây chính là nguyên nhân
+  // "lẫn lộn thật và ảo" người dùng gặp: có lúc hiện dữ liệu học sinh thật cũ, có lúc trống trơn, tuỳ
+  // máy có cache gì sẵn. Giữ nguyên đăng nhập giúp preview LUÔN mô phỏng đúng 1 việc duy nhất, không
+  // phụ thuộc dữ liệu cache nào khác: "chính giáo viên này, nhìn qua lăng kính học sinh".
   $('#previewAsStudentBtn').addEventListener('click', async (e) => {
     e.preventDefault();
-    if (!confirm('Xem thử với vai trò học sinh sẽ đăng xuất tài khoản Google của bạn để kiểm tra chính xác. Đăng nhập lại bất cứ lúc nào để quay về vai trò giáo viên. Tiếp tục?')) return;
-    try { if (isFirebaseConfigured()) await signOutTeacher(); } catch (err) { /* vẫn tiếp tục dù đăng xuất lỗi */ }
+    if (!confirm('Xem thử với vai trò học sinh sẽ chuyển giao diện sang chế độ mô phỏng học sinh (chỉ xem, không sửa được) — tài khoản Google của bạn vẫn giữ nguyên đăng nhập. Tiếp tục?')) return;
     localStorage.setItem(PREVIEW_KEY, '1');
     setRole('student');
     window.location.reload();
@@ -348,9 +356,6 @@
     e.preventDefault();
     localStorage.removeItem(PREVIEW_KEY);
     setRole('teacher');
-    // Trước đó đã đăng xuất Google khi vào chế độ xem thử (xem previewAsStudentBtn) — phải chủ động
-    // đăng nhập lại ngay đây, không chỉ đổi vai trò, thì dữ liệu giáo viên mới tải lại được.
-    try { if (isFirebaseConfigured()) await signInWithGoogle(); } catch (err) { /* vẫn quay lại giao diện GV dù đăng nhập lỗi/bị huỷ — các trang sẽ tự hiện nút đăng nhập khi cần */ }
     window.location.reload();
   });
 })();
