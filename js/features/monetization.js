@@ -14,12 +14,18 @@ const MONETIZATION_DEFAULTS = {
   enabled: false,
   teacherPlan: { price: 199000, periodDays: 30, maxGroupsFree: 2, maxStudentsFree: 40, maxCustomChaptersFree: 3 },
   studentPlan: { price: 49000, periodDays: 30 },
-  // Hoa hồng 2 CẤP — CHỈ áp dụng khi giáo viên mua gói Pro (học sinh mua Premium không sinh hoa
-  // hồng cho ai, xem approvePayment() trong admin.js). F1 = người giới thiệu trực tiếp, F2 = người
-  // đã giới thiệu F1 — dừng cứng ở đây, không truy F3 trở lên (đúng mo-hinh-kinh-doanh-referral.md).
-  // holdDays: hoa hồng mới duyệt vào trạng thái "pending_hold", phải chờ đủ số ngày này mới chuyển
-  // sang "available" (đủ điều kiện rút) — xem promoteMaturedCommissions() bên dưới.
-  commission: { teacherF1Percent: 35, teacherF2Percent: 5, holdDays: 20 },
+  // Hoa hồng 2 CẤP, tính CẢ 2 loại gói (giáo viên mua Pro LẪN học sinh mua Premium) — nhưng người
+  // NHẬN hoa hồng LUÔN LUÔN là giáo viên (F1 = giáo viên trực tiếp đưa app tới người mua — với học
+  // sinh chính là giáo viên chủ nhóm của em đó; F2 = giáo viên đã giới thiệu F1). Tài khoản học sinh
+  // KHÔNG BAO GIỜ nhận hoa hồng dù có chia sẻ link cho ai — chỉ là kênh lan truyền, không phải người
+  // hưởng. Dừng cứng ở F2, không truy F3 trở lên (đúng mo-hinh-kinh-doanh-referral.md).
+  // *HoldDays: hoa hồng mới duyệt vào trạng thái "pending_hold", phải chờ đủ số ngày này mới chuyển
+  // sang "available" (đủ điều kiện rút) — xem promoteMaturedCommissions() bên dưới. Tách riêng số
+  // ngày giữ cho 2 loại gói vì giá trị khác nhau nhiều (rủi ro tranh chấp khác nhau, theo spec).
+  commission: {
+    teacherF1Percent: 35, teacherF2Percent: 5, teacherHoldDays: 20,
+    studentF1Percent: 35, studentF2Percent: 5, studentHoldDays: 10
+  },
   payment: { bankName: '', accountNumber: '', accountHolder: '', momoNumber: '', note: '' },
   // Tính năng CHỈ dùng được khi có gói trả phí, bật/tắt từng cái ở trang quản trị (đổi được bất cứ
   // lúc nào, không cần deploy lại) — khác giới hạn SỐ LƯỢNG ở teacherPlan phía trên (đây là khoá

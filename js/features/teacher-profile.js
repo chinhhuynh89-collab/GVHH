@@ -296,7 +296,7 @@ function resizeImageToDataUrl(file) {
         </div>
         <div class="card">
           <h2><span class="icon">💰</span>Hoa hồng của tôi</h2>
-          <p class="hint" style="margin-top:-4px;">Giới thiệu giáo viên khác dùng app (nút "Chia sẻ cho giáo viên khác" ở mục "Mã &amp; chia sẻ") để nhận hoa hồng khi họ nâng cấp gói Pro — cấp 1 (F1) khi bạn giới thiệu trực tiếp, cấp 2 (F2) khi người bạn giới thiệu lại giới thiệu tiếp người khác. Học sinh mua Premium không sinh hoa hồng.</p>
+          <p class="hint" style="margin-top:-4px;">Nhận hoa hồng khi: (1) giáo viên bạn giới thiệu nâng cấp gói Pro, hoặc (2) học sinh trong nhóm của bạn nâng cấp Premium — cấp 1 (F1) là người/nhóm trực tiếp của bạn, cấp 2 (F2) là 1 tầng xa hơn (VD giáo viên bạn giới thiệu lại giới thiệu tiếp người khác). Học sinh không bao giờ nhận hoa hồng, kể cả khi tự chia sẻ link cho bạn bè.</p>
           <div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div>
         </div>
         <div class="card">

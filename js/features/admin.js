@@ -9,8 +9,9 @@
 // các mục cùng lúc như trước — đỡ phải cuộn dài. Mỗi mục tự tải dữ liệu MỖI LẦN mở (không cache lại
 // giữa các lần mở) — đơn giản, đủ nhanh vì quy mô dữ liệu nhỏ (1 admin, vài chục giáo viên).
 //
-// Hoa hồng 2 CẤP (F1/F2) — CHỈ khi giáo viên mua gói Pro, xem mo-hinh-kinh-doanh-referral.md và
-// approvePayment() bên dưới. Học sinh mua Premium KHÔNG sinh hoa hồng cho ai.
+// Hoa hồng 2 CẤP (F1/F2) — tính cho CẢ giáo viên mua Pro LẪN học sinh mua Premium, nhưng người NHẬN
+// hoa hồng LUÔN LÀ giáo viên (xem mo-hinh-kinh-doanh-referral.md và createReferralCommissions() bên
+// dưới). Tài khoản học sinh không bao giờ nhận hoa hồng dù có chia sẻ link cho ai.
 
 const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thiệu phát sinh > N đơn/24h
 
@@ -148,13 +149,13 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
       `;
       const box = $('#teacherRosterBody');
       try {
-        const [profilesSnap, subsSnap, groupsSnap, studentsSnap, commissionsSnap, teacherOrdersSnap] = await Promise.all([
+        const [profilesSnap, subsSnap, groupsSnap, studentsSnap, commissionsSnap, allOrdersSnap] = await Promise.all([
           db.collection('teacherProfiles').get(),
           db.collection('subscriptions').get(),
           db.collection('groups').get(),
           db.collection('students').get(),
           db.collection('commissions').get(),
-          db.collection('paymentSubmissions').where('type', '==', 'teacher_upgrade').get()
+          db.collection('paymentSubmissions').get()
         ]);
 
         const subsByUid = new Map(subsSnap.docs.map((d) => [d.id, d.data()]));
@@ -180,10 +181,11 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
           if (!ref) return;
           referredCountByUid.set(ref, (referredCountByUid.get(ref) || 0) + 1);
         });
-        // Cảnh báo nhẹ: > N đơn teacher_upgrade trong 24h gần nhất do CÙNG 1 người giới thiệu.
+        // Cảnh báo nhẹ: > N đơn (giáo viên HOẶC học sinh nâng cấp) trong 24h gần nhất do CÙNG 1
+        // giáo viên đứng tên giới thiệu — cả 2 loại gói giờ đều sinh hoa hồng nên đều cần theo dõi.
         const since24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
         const recentOrderCountByReferrer = new Map();
-        teacherOrdersSnap.docs.forEach((d) => {
+        allOrdersSnap.docs.forEach((d) => {
           const o = d.data();
           if (!o.referrerTeacherUid || (o.createdAt || '') < since24h) return;
           recentOrderCountByReferrer.set(o.referrerTeacherUid, (recentOrderCountByReferrer.get(o.referrerTeacherUid) || 0) + 1);
@@ -346,10 +348,14 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
           <div class="field"><label for="planMaxChapters">Gói miễn phí: tối đa số chương tự soạn</label><input type="number" id="planMaxChapters" min="0" step="1" /></div>
           <div class="field"><label for="planStudentPrice">Giá gói Premium cho học sinh (đ/kỳ)</label><input type="number" id="planStudentPrice" min="0" step="1000" /></div>
           <div class="field"><label for="planStudentPeriod">Thời hạn 1 kỳ (số ngày)</label><input type="number" id="planStudentPeriod" min="1" step="1" /></div>
-          <p class="hint" style="font-weight:700;margin:14px 0 -2px;">Hoa hồng giới thiệu — CHỈ áp dụng khi giáo viên mua gói Pro (học sinh mua Premium không sinh hoa hồng)</p>
-          <div class="field"><label for="commissionF1">Hoa hồng cấp 1 (F1 — người giới thiệu trực tiếp) %</label><input type="number" id="commissionF1" min="0" max="100" step="1" /></div>
-          <div class="field"><label for="commissionF2">Hoa hồng cấp 2 (F2 — người giới thiệu của F1) %</label><input type="number" id="commissionF2" min="0" max="100" step="1" /></div>
-          <div class="field"><label for="commissionHoldDays">Số ngày giữ hoa hồng trước khi được rút</label><input type="number" id="commissionHoldDays" min="0" step="1" /></div>
+          <p class="hint" style="font-weight:700;margin:14px 0 -2px;">Hoa hồng khi giáo viên mua Pro — người nhận LUÔN LÀ giáo viên (F1: người giới thiệu trực tiếp, F2: người giới thiệu F1)</p>
+          <div class="field"><label for="commissionTF1">Hoa hồng cấp 1 (F1) %</label><input type="number" id="commissionTF1" min="0" max="100" step="1" /></div>
+          <div class="field"><label for="commissionTF2">Hoa hồng cấp 2 (F2) %</label><input type="number" id="commissionTF2" min="0" max="100" step="1" /></div>
+          <div class="field"><label for="commissionTHold">Số ngày giữ trước khi được rút</label><input type="number" id="commissionTHold" min="0" step="1" /></div>
+          <p class="hint" style="font-weight:700;margin:14px 0 -2px;">Hoa hồng khi học sinh mua Premium — học sinh KHÔNG nhận hoa hồng (chỉ là kênh chia sẻ); F1 = giáo viên chủ nhóm của học sinh đó, F2 = người giới thiệu giáo viên đó</p>
+          <div class="field"><label for="commissionSF1">Hoa hồng cấp 1 (F1) %</label><input type="number" id="commissionSF1" min="0" max="100" step="1" /></div>
+          <div class="field"><label for="commissionSF2">Hoa hồng cấp 2 (F2) %</label><input type="number" id="commissionSF2" min="0" max="100" step="1" /></div>
+          <div class="field"><label for="commissionSHold">Số ngày giữ trước khi được rút</label><input type="number" id="commissionSHold" min="0" step="1" /></div>
           <button class="btn primary block" id="savePlansBtn">Lưu gói &amp; giá &amp; hoa hồng</button>
           <div class="result-box" id="savePlansResult"></div>
         </div>
@@ -361,18 +367,25 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
       $('#planMaxChapters').value = cfg.teacherPlan.maxCustomChaptersFree;
       $('#planStudentPrice').value = cfg.studentPlan.price;
       $('#planStudentPeriod').value = cfg.studentPlan.periodDays;
-      $('#commissionF1').value = cfg.commission.teacherF1Percent;
-      $('#commissionF2').value = cfg.commission.teacherF2Percent;
-      $('#commissionHoldDays').value = cfg.commission.holdDays;
+      $('#commissionTF1').value = cfg.commission.teacherF1Percent;
+      $('#commissionTF2').value = cfg.commission.teacherF2Percent;
+      $('#commissionTHold').value = cfg.commission.teacherHoldDays;
+      $('#commissionSF1').value = cfg.commission.studentF1Percent;
+      $('#commissionSF2').value = cfg.commission.studentF2Percent;
+      $('#commissionSHold').value = cfg.commission.studentHoldDays;
 
       $('#savePlansBtn').addEventListener('click', async () => {
         const box = $('#savePlansResult');
         showResult(box, '⏳ Đang lưu...');
         try {
+          const pct = (id) => Math.min(100, Math.max(0, Number($(id).value) || 0));
           const commission = {
-            teacherF1Percent: Math.min(100, Math.max(0, Number($('#commissionF1').value) || 0)),
-            teacherF2Percent: Math.min(100, Math.max(0, Number($('#commissionF2').value) || 0)),
-            holdDays: Math.max(0, Number($('#commissionHoldDays').value) || 0)
+            teacherF1Percent: pct('#commissionTF1'),
+            teacherF2Percent: pct('#commissionTF2'),
+            teacherHoldDays: Math.max(0, Number($('#commissionTHold').value) || 0),
+            studentF1Percent: pct('#commissionSF1'),
+            studentF2Percent: pct('#commissionSF2'),
+            studentHoldDays: Math.max(0, Number($('#commissionSHold').value) || 0)
           };
           await Promise.all([
             saveMonetizationConfig({
@@ -408,7 +421,9 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
         if (!list.length) { box.innerHTML = '<p class="hint">Chưa có thay đổi nào — vẫn đang dùng mức mặc định.</p>'; return; }
         box.innerHTML = list.map((r) => `
           <div class="hint" style="padding:8px 0;border-top:1px solid var(--border);">
-            ${escapeHtml((r.changedAt || '').replace('T', ' ').slice(0, 16))} — F1 ${r.teacherF1Percent}% · F2 ${r.teacherF2Percent}% · giữ ${r.holdDays} ngày
+            ${escapeHtml((r.changedAt || '').replace('T', ' ').slice(0, 16))} —
+            Giáo viên: F1 ${r.teacherF1Percent}%/F2 ${r.teacherF2Percent}% (giữ ${r.teacherHoldDays} ngày) ·
+            Học sinh: F1 ${r.studentF1Percent}%/F2 ${r.studentF2Percent}% (giữ ${r.studentHoldDays} ngày)
             <span style="color:var(--text-faint);">(${escapeHtml(r.changedBy || '')})</span>
           </div>
         `).join('');
@@ -460,7 +475,41 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
     }
 
     // ---------- 🧾 Duyệt thanh toán ----------
-    // Hoa hồng F1/F2 CHỈ tạo khi duyệt "teacher_upgrade" — xem Context trong plan/spec kinh doanh.
+    // Hoa hồng F1/F2 tạo cho CẢ 2 loại gói — người NHẬN luôn là giáo viên (F1/F2), KHÔNG BAO GIỜ là
+    // học sinh (học sinh chỉ là kênh chia sẻ, xem monetization.js). Với gói giáo viên: F1 = người
+    // giới thiệu trực tiếp giáo viên mua. Với gói học sinh: F1 = giáo viên chủ nhóm của học sinh đó
+    // (chính là người đã đưa app tới tay em học sinh này, dù em có tự chia sẻ lại cho bạn khác thì
+    // hoa hồng vẫn về giáo viên, không phải bạn học sinh kia). F2 luôn là người đã giới thiệu F1.
+    async function createReferralCommissions(sub, freshCfg, f1Percent, f2Percent, holdDays, nowIso, batch) {
+      const f1Uid = sub.referrerTeacherUid || null;
+      let f2Uid = null;
+      if (f1Uid) {
+        try {
+          const f1Doc = await db.collection('teachers').doc(f1Uid).get();
+          const f1ReferredBy = f1Doc.exists ? f1Doc.data().referredBy : null;
+          if (f1ReferredBy) f2Uid = await findTeacherUidByCode(f1ReferredBy);
+        } catch (e) { /* không tra được F2 thì bỏ qua, F1 vẫn được trả bình thường */ }
+      }
+
+      const holdUntil = new Date(Date.now() + (Number(holdDays) || 0) * 86400000).toISOString();
+      const tiers = [];
+      if (f1Uid) tiers.push({ uid: f1Uid, tier: 'F1', percent: f1Percent });
+      if (f2Uid && f2Uid !== f1Uid) tiers.push({ uid: f2Uid, tier: 'F2', percent: f2Percent });
+
+      for (const t of tiers) {
+        // Mã giới thiệu bị admin khoá (nghi gian lận) -> bỏ qua ĐÚNG cấp đó, các cấp khác không ảnh hưởng.
+        const subDoc = await db.collection('subscriptions').doc(t.uid).get();
+        if (subDoc.exists && subDoc.data().referralDisabled) continue;
+        const amount = Math.round((Number(sub.amount) || 0) * t.percent / 100);
+        batch.set(db.collection('commissions').doc(), {
+          beneficiaryTeacherUid: t.uid, tier: t.tier,
+          sourceType: sub.type === 'teacher_upgrade' ? 'teacher_referral' : 'student_referral',
+          sourcePaymentId: sub.id, sourceName: sub.submitterName || '', sourceOrderCode: sub.orderCode || '',
+          amount, percent: t.percent, status: 'pending_hold', holdUntil, createdAt: nowIso
+        });
+      }
+    }
+
     async function approvePayment(sub) {
       const freshCfg = await getMonetizationConfig();
       const now = new Date();
@@ -471,42 +520,12 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
         const expiresAt = new Date(now.getTime() + freshCfg.teacherPlan.periodDays * 86400000).toISOString();
         batch.set(db.collection('subscriptions').doc(sub.submitterUid),
           { tier: 'pro', expiresAt, updatedAt: nowIso, updatedBy: MONETIZATION_ADMIN_EMAIL }, { merge: true });
-
-        // F1 = referrerTeacherUid đã resolve sẵn lúc giáo viên gửi yêu cầu (xem upgrade.js). F2 = tra
-        // ngược "referredBy" (mã code, riêng tư) của CHÍNH F1 — cần rule admin đọc được teachers/{F1}
-        // (xem firestore.rules), rồi resolve mã đó ra uid bằng findTeacherUidByCode(). Dừng cứng ở F2,
-        // không truy tiếp F3.
-        const f1Uid = sub.referrerTeacherUid || null;
-        let f2Uid = null;
-        if (f1Uid) {
-          try {
-            const f1Doc = await db.collection('teachers').doc(f1Uid).get();
-            const f1ReferredBy = f1Doc.exists ? f1Doc.data().referredBy : null;
-            if (f1ReferredBy) f2Uid = await findTeacherUidByCode(f1ReferredBy);
-          } catch (e) { /* không tra được F2 thì bỏ qua, F1 vẫn được trả bình thường */ }
-        }
-
-        const holdUntil = new Date(now.getTime() + (Number(freshCfg.commission.holdDays) || 0) * 86400000).toISOString();
-        const tiers = [];
-        if (f1Uid) tiers.push({ uid: f1Uid, tier: 'F1', percent: freshCfg.commission.teacherF1Percent });
-        if (f2Uid && f2Uid !== f1Uid) tiers.push({ uid: f2Uid, tier: 'F2', percent: freshCfg.commission.teacherF2Percent });
-
-        for (const t of tiers) {
-          // Mã giới thiệu bị admin khoá (nghi gian lận) -> bỏ qua ĐÚNG cấp đó, các cấp khác không ảnh hưởng.
-          const subDoc = await db.collection('subscriptions').doc(t.uid).get();
-          if (subDoc.exists && subDoc.data().referralDisabled) continue;
-          const amount = Math.round((Number(sub.amount) || 0) * t.percent / 100);
-          batch.set(db.collection('commissions').doc(), {
-            beneficiaryTeacherUid: t.uid, tier: t.tier, sourceType: 'teacher_referral',
-            sourcePaymentId: sub.id, sourceName: sub.submitterName || '', sourceOrderCode: sub.orderCode || '',
-            amount, percent: t.percent, status: 'pending_hold', holdUntil, createdAt: nowIso
-          });
-        }
+        await createReferralCommissions(sub, freshCfg, freshCfg.commission.teacherF1Percent, freshCfg.commission.teacherF2Percent, freshCfg.commission.teacherHoldDays, nowIso, batch);
       } else {
         const expiresAt = new Date(now.getTime() + freshCfg.studentPlan.periodDays * 86400000).toISOString();
         batch.set(db.collection('studentSubscriptions').doc(sub.submitterDeviceId),
           { tier: 'premium', expiresAt, updatedAt: nowIso }, { merge: true });
-        // Học sinh mua Premium: KHÔNG tạo hoa hồng cho ai (theo yêu cầu — chỉ tính hoa hồng gói giáo viên).
+        await createReferralCommissions(sub, freshCfg, freshCfg.commission.studentF1Percent, freshCfg.commission.studentF2Percent, freshCfg.commission.studentHoldDays, nowIso, batch);
       }
 
       batch.update(db.collection('paymentSubmissions').doc(sub.id), { status: 'approved', reviewedAt: nowIso, reviewedBy: MONETIZATION_ADMIN_EMAIL });
@@ -537,7 +556,7 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
             <div style="font-weight:700;">${sub.type === 'teacher_upgrade' ? '👩‍🏫 Giáo viên nâng cấp Pro' : '🎓 Học sinh nâng cấp Premium'}</div>
             ${sub.orderCode ? `<div class="hint">Mã đơn hàng: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(sub.orderCode)}</strong> — đối chiếu với nội dung chuyển khoản</div>` : ''}
             <div class="hint">${escapeHtml(sub.submitterName || '')} · ${escapeHtml(sub.submitterContact || '')}</div>
-            <div class="hint">Số tiền: <strong>${formatVnd(sub.amount)}</strong>${sub.referrerTeacherUid && sub.type === 'teacher_upgrade' ? ' · Có người giới thiệu (sẽ tự sinh hoa hồng F1/F2 khi duyệt)' : ''}</div>
+            <div class="hint">Số tiền: <strong>${formatVnd(sub.amount)}</strong>${sub.referrerTeacherUid ? ' · Có giáo viên giới thiệu (sẽ tự sinh hoa hồng F1/F2 khi duyệt)' : ''}</div>
             ${sub.note ? `<div class="hint">Ghi chú: ${escapeHtml(sub.note)}</div>` : ''}
             <div class="btn-row" style="margin-top:8px;">
               <button class="btn primary approve-payment-btn" data-id="${sub.id}" type="button" style="flex:1;">✅ Duyệt</button>
