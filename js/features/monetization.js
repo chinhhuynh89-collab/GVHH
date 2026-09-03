@@ -14,7 +14,12 @@ const MONETIZATION_DEFAULTS = {
   enabled: false,
   teacherPlan: { price: 199000, periodDays: 30, maxGroupsFree: 2, maxStudentsFree: 40, maxCustomChaptersFree: 3 },
   studentPlan: { price: 49000, periodDays: 30 },
-  commission: { teacherReferralPercent: 20, studentReferralPercent: 10 },
+  // Hoa hồng 2 CẤP — CHỈ áp dụng khi giáo viên mua gói Pro (học sinh mua Premium không sinh hoa
+  // hồng cho ai, xem approvePayment() trong admin.js). F1 = người giới thiệu trực tiếp, F2 = người
+  // đã giới thiệu F1 — dừng cứng ở đây, không truy F3 trở lên (đúng mo-hinh-kinh-doanh-referral.md).
+  // holdDays: hoa hồng mới duyệt vào trạng thái "pending_hold", phải chờ đủ số ngày này mới chuyển
+  // sang "available" (đủ điều kiện rút) — xem promoteMaturedCommissions() bên dưới.
+  commission: { teacherF1Percent: 35, teacherF2Percent: 5, holdDays: 20 },
   payment: { bankName: '', accountNumber: '', accountHolder: '', momoNumber: '', note: '' },
   // Tính năng CHỈ dùng được khi có gói trả phí, bật/tắt từng cái ở trang quản trị (đổi được bất cứ
   // lúc nào, không cần deploy lại) — khác giới hạn SỐ LƯỢNG ở teacherPlan phía trên (đây là khoá
@@ -102,6 +107,52 @@ async function getMonetizationConfig() {
 async function saveMonetizationConfig(partial) {
   const { db } = ensureFirebase();
   await db.collection('config').doc('monetization').set(partial, { merge: true });
+}
+
+// Lưu % hoa hồng F1/F2 + số ngày giữ — GHI THÊM 1 bản ghi lịch sử (commissionRateHistory), KHÔNG
+// sửa đè bản cũ, để admin xem lại được đã đổi bao nhiêu lần/khi nào (mo-hinh-kinh-doanh-referral.md
+// mục 6). Hoa hồng CŨ đã tự lưu % dùng lúc phát sinh (commissions.percent) nên đổi ở đây không ảnh
+// hưởng ngược — chỉ áp dụng cho các đơn duyệt SAU thời điểm lưu.
+async function saveCommissionRate(commission, adminEmail) {
+  const { db } = ensureFirebase();
+  const nowIso = new Date().toISOString();
+  const batch = db.batch();
+  batch.set(db.collection('config').doc('monetization'), { commission }, { merge: true });
+  batch.set(db.collection('commissionRateHistory').doc(), Object.assign({}, commission, {
+    changedAt: nowIso, changedBy: adminEmail
+  }));
+  await batch.commit();
+}
+
+// Sinh mã đơn hàng NGẮN, DUY NHẤT — người nộp tiền phải ghi đúng mã này vào nội dung chuyển khoản để
+// admin đối soát (mo-hinh-kinh-doanh-referral.md mục 2+5.2). Kiểm tra trùng giống hệt cách
+// genGroupCodeClient() trong groups-data.js đang làm cho mã nhóm.
+async function genOrderCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const { db } = ensureFirebase();
+  let code, attempts = 0;
+  do {
+    code = 'DH' + Array.from({ length: 6 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
+    const clash = await db.collection('paymentSubmissions').where('orderCode', '==', code).limit(1).get();
+    if (clash.empty) break;
+    attempts++;
+  } while (attempts < 5);
+  return code;
+}
+
+// "Job nền" chuyển hoa hồng đã đủ ngày giữ (pending_hold) sang "available" (đủ điều kiện rút) — app
+// không có Cloud Functions/cron thật nên chạy dưới dạng dọn dẹp MỖI LẦN admin mở mục "Hoa hồng cần
+// trả" (xem admin.js), không phải job chạy nền liên tục. Không có gì để chuyển thì không làm gì cả.
+async function promoteMaturedCommissions() {
+  const { db } = ensureFirebase();
+  const nowIso = new Date().toISOString();
+  const snap = await db.collection('commissions').where('status', '==', 'pending_hold').get();
+  const matured = snap.docs.filter((d) => (d.data().holdUntil || '') <= nowIso);
+  if (!matured.length) return 0;
+  const batch = db.batch();
+  matured.forEach((d) => batch.update(d.ref, { status: 'available', availableAt: nowIso }));
+  await batch.commit();
+  return matured.length;
 }
 
 // Gói hiện tại của 1 giáo viên. Hết hạn (expiresAt đã qua) coi như đã rớt về free — không cần admin

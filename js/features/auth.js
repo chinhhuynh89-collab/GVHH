@@ -146,6 +146,12 @@ async function ensureTeacherProfile(user) {
     // Đăng nhập lần đầu qua link chia sẻ "?ref=MÃ" của giáo viên khác (xem index.html) — lưu lại
     // riêng tư (chỉ chính chủ đọc được) để dùng cho mục đích kinh doanh/giới thiệu sau này.
     const referredBy = localStorage.getItem('hoahoc_referred_by') || '';
+    // Resolve NGAY ra uid (không chỉ giữ mã) và lưu thêm vào bản CÔNG KHAI (teacherProfiles) — mã
+    // referredBy chỉ nằm ở "teachers" (riêng tư, chỉ chính chủ đọc được) nên KHÔNG ai query ngược
+    // lại được "tôi đã giới thiệu những ai"; referredByUid trên bản công khai giải quyết việc đó,
+    // đồng thời để admin tra ra F2 lúc duyệt hoa hồng (xem js/features/admin.js approvePayment).
+    const referredByUid = (referredBy && typeof findTeacherUidByCode === 'function')
+      ? await findTeacherUidByCode(referredBy) : null;
     await Promise.all([
       ref.set(Object.assign({
         displayName: user.displayName || '',
@@ -153,13 +159,13 @@ async function ensureTeacherProfile(user) {
         photoURL: user.photoURL || '',
         teacherCode,
         createdAt: new Date().toISOString()
-      }, referredBy ? { referredBy } : {})),
+      }, referredBy ? { referredBy, referredByUid: referredByUid || null } : {})),
       // Gieo sẵn bản công khai (không có email) bằng tên/ảnh Google — để trang chủ cá nhân hoá
       // được ngay từ lần đăng nhập đầu tiên, giáo viên có thể tự đổi sau ở trang "Hồ sơ".
-      db.collection('teacherProfiles').doc(user.uid).set({
+      db.collection('teacherProfiles').doc(user.uid).set(Object.assign({
         displayName: user.displayName || '', photoURL: user.photoURL || '', bio: '', teacherCode,
         createdAt: new Date().toISOString()
-      })
+      }, referredByUid ? { referredByUid } : {}))
     ]);
     if (referredBy) localStorage.removeItem('hoahoc_referred_by');
   }

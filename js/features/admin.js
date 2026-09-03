@@ -8,6 +8,11 @@
 // dung của mục đó vào #adminSectionPanel (đóng khung đang mở trước, nếu có), thay vì hiện hết tất cả
 // các mục cùng lúc như trước — đỡ phải cuộn dài. Mỗi mục tự tải dữ liệu MỖI LẦN mở (không cache lại
 // giữa các lần mở) — đơn giản, đủ nhanh vì quy mô dữ liệu nhỏ (1 admin, vài chục giáo viên).
+//
+// Hoa hồng 2 CẤP (F1/F2) — CHỈ khi giáo viên mua gói Pro, xem mo-hinh-kinh-doanh-referral.md và
+// approvePayment() bên dưới. Học sinh mua Premium KHÔNG sinh hoa hồng cho ai.
+
+const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thiệu phát sinh > N đơn/24h
 
 (function () {
   requireTeacherAuth(async (user) => {
@@ -25,10 +30,9 @@
 
     // cfg tải NỀN (không await ở đây) — nút bấm phải gắn được NGAY, không chờ mạng, để tránh cảnh
     // "bấm nút vài giây đầu không thấy phản ứng gì" nếu mạng chậm. Các mục cần cfg (plans/payment/
-    // locked) tự "await cfgReady" bên trong khi mở, mục khác (stats/roster/pending/commissions) không
-    // cần chờ gì cả.
+    // locked) tự "await cfgReady" bên trong khi mở, mục khác không cần chờ gì cả.
     let cfg = null;
-    const cfgReady = getMonetizationConfig(true).then((c) => {
+    const cfgReady = getMonetizationConfig().then((c) => {
       cfg = c;
       $('#monetizationEnabledToggle').classList.toggle('on', cfg.enabled);
       return c;
@@ -63,7 +67,7 @@
     }).catch(() => { /* ignore */ });
 
     // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
-    // Gắn nút bấm NGAY LẬP TỨC (đồng bộ, không chờ awit nào ở trên) — đây là phần quan trọng nhất
+    // Gắn nút bấm NGAY LẬP TỨC (đồng bộ, không chờ await nào ở trên) — đây là phần quan trọng nhất
     // của trang nên phải chắc chắn hoạt động dù mạng chậm hay cfg tải lỗi.
     const NEEDS_CFG = { plans: true, payment: true, locked: true };
     const SECTION_BUILDERS = {
@@ -73,7 +77,8 @@
       plans: buildPlansSection,
       payment: buildPaymentSection,
       pending: buildPendingSection,
-      commissions: buildCommissionsSection
+      commissions: buildCommissionsSection,
+      rateHistory: buildRateHistorySection
     };
 
     $$('.admin-menu-btn').forEach((btn) => {
@@ -112,7 +117,7 @@
           db.collection('subscriptions').where('tier', '==', 'pro').get(),
           db.collection('studentSubscriptions').where('tier', '==', 'premium').get(),
           db.collection('paymentSubmissions').where('status', '==', 'approved').get(),
-          db.collection('commissions').where('status', '==', 'pending').get()
+          db.collection('commissions').where('status', 'in', ['pending_hold', 'available']).get()
         ]);
         const totalRevenue = paymentsSnap.docs.reduce((sum, d) => sum + (Number(d.data().amount) || 0), 0);
         const totalCommissionOwed = commissionsSnap.docs.reduce((sum, d) => sum + (Number(d.data().amount) || 0), 0);
@@ -130,24 +135,26 @@
     }
 
     // ---------- 👥 Danh sách giáo viên (báo cáo tổng hợp) ----------
-    // Đọc từ các collection CÔNG KHAI (teacherProfiles/subscriptions/groups/students) + commissions
-    // (chỉ admin đọc được toàn bộ) — KHÔNG đọc "teachers" (có email, chỉ chính chủ đọc được).
+    // Đọc từ các collection CÔNG KHAI (teacherProfiles/subscriptions/groups/students) + commissions/
+    // paymentSubmissions (chỉ admin đọc được toàn bộ) — KHÔNG đọc "teachers" (có email) trừ lúc cần
+    // tra F2 (xem approvePayment) vì đây là báo cáo tổng quan, không cần thông tin riêng tư đó.
     async function buildRosterSection(panel) {
       panel.innerHTML = `
         <div class="card">
           <h2><span class="icon">👥</span>Danh sách giáo viên</h2>
-          <p class="hint" style="margin-top:-4px;">Bấm 1 dòng để xem danh sách học sinh của giáo viên đó.</p>
+          <p class="hint" style="margin-top:-4px;">Bấm 1 dòng để xem danh sách học sinh của giáo viên đó. ⚠️ = mã giới thiệu phát sinh nhiều đơn bất thường trong 24h gần nhất.</p>
           <div id="teacherRosterBody"><p class="hint">⏳ Đang tải...</p></div>
         </div>
       `;
       const box = $('#teacherRosterBody');
       try {
-        const [profilesSnap, subsSnap, groupsSnap, studentsSnap, commissionsSnap] = await Promise.all([
+        const [profilesSnap, subsSnap, groupsSnap, studentsSnap, commissionsSnap, teacherOrdersSnap] = await Promise.all([
           db.collection('teacherProfiles').get(),
           db.collection('subscriptions').get(),
           db.collection('groups').get(),
           db.collection('students').get(),
-          db.collection('commissions').get()
+          db.collection('commissions').get(),
+          db.collection('paymentSubmissions').where('type', '==', 'teacher_upgrade').get()
         ]);
 
         const subsByUid = new Map(subsSnap.docs.map((d) => [d.id, d.data()]));
@@ -166,6 +173,21 @@
           if (c.status === 'paid') cur.paid += Number(c.amount) || 0; else cur.pending += Number(c.amount) || 0;
           commissionByUid.set(c.beneficiaryTeacherUid, cur);
         });
+        // "Đã giới thiệu" — đếm qua referredByUid công khai (xem auth.js ensureTeacherProfile).
+        const referredCountByUid = new Map();
+        profilesSnap.docs.forEach((d) => {
+          const ref = d.data().referredByUid;
+          if (!ref) return;
+          referredCountByUid.set(ref, (referredCountByUid.get(ref) || 0) + 1);
+        });
+        // Cảnh báo nhẹ: > N đơn teacher_upgrade trong 24h gần nhất do CÙNG 1 người giới thiệu.
+        const since24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+        const recentOrderCountByReferrer = new Map();
+        teacherOrdersSnap.docs.forEach((d) => {
+          const o = d.data();
+          if (!o.referrerTeacherUid || (o.createdAt || '') < since24h) return;
+          recentOrderCountByReferrer.set(o.referrerTeacherUid, (recentOrderCountByReferrer.get(o.referrerTeacherUid) || 0) + 1);
+        });
 
         const rows = profilesSnap.docs.map((d) => {
           const p = d.data();
@@ -173,8 +195,10 @@
           const comm = commissionByUid.get(d.id) || { paid: 0, pending: 0 };
           return {
             uid: d.id, teacherCode: p.teacherCode || '—', name: p.displayName || '(chưa đặt tên)',
-            tier: sub.tier || 'free', expiresAt: sub.expiresAt || '',
-            studentCount: studentCountByUid.get(d.id) || 0, comm
+            tier: sub.tier || 'free', expiresAt: sub.expiresAt || '', referralDisabled: !!sub.referralDisabled,
+            studentCount: studentCountByUid.get(d.id) || 0, comm,
+            referredCount: referredCountByUid.get(d.id) || 0,
+            recentOrders: recentOrderCountByReferrer.get(d.id) || 0
           };
         }).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
 
@@ -185,7 +209,7 @@
           <div class="roster-table-wrap">
             <table class="roster-table">
               <thead>
-                <tr><th>Mã GV</th><th>Tên</th><th>Trạng thái gói</th><th>Số học sinh</th><th>Hoa hồng đã trả</th><th>Hoa hồng chờ trả</th><th></th></tr>
+                <tr><th>Mã GV</th><th>Tên</th><th>Trạng thái gói</th><th>Số học sinh</th><th>Đã giới thiệu</th><th>Hoa hồng đã trả</th><th>Hoa hồng chưa trả</th><th></th><th></th></tr>
               </thead>
               <tbody>
                 ${rows.map((r) => `
@@ -194,11 +218,13 @@
                     <td>${escapeHtml(r.name)}</td>
                     <td>${r.tier === 'pro' ? `Pro (hết hạn ${escapeHtml(r.expiresAt.slice(0, 10))})` : 'Miễn phí'}</td>
                     <td>${r.studentCount}</td>
+                    <td>${r.referredCount}${r.recentOrders > ADMIN_FRAUD_ORDER_THRESHOLD_24H ? ` <span title="${r.recentOrders} đơn trong 24h qua">⚠️</span>` : ''}</td>
                     <td>${formatVnd(r.comm.paid)}</td>
                     <td>${formatVnd(r.comm.pending)}</td>
                     <td><button class="btn roster-expand-btn" type="button" data-uid="${r.uid}">👥 Xem học sinh</button></td>
+                    <td><button class="btn referral-lock-btn" type="button" data-uid="${r.uid}" data-disabled="${r.referralDisabled ? '1' : '0'}">${r.referralDisabled ? '🔓 Mở lại mã' : '🔒 Khoá mã'}</button></td>
                   </tr>
-                  <tr id="roster-students-${r.uid}" style="display:none;"><td colspan="7"></td></tr>
+                  <tr id="roster-students-${r.uid}" style="display:none;"><td colspan="9"></td></tr>
                 `).join('')}
               </tbody>
             </table>
@@ -245,6 +271,25 @@
                 </table>
               </div>
             `;
+          });
+        });
+
+        $$('.referral-lock-btn', box).forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const uid = btn.dataset.uid;
+            const next = btn.dataset.disabled !== '1';
+            const label = next ? 'khoá mã giới thiệu' : 'mở lại mã giới thiệu';
+            if (!confirm(`Xác nhận ${label} của giáo viên này? Mã bị khoá sẽ không nhận hoa hồng cho các đơn duyệt sau này.`)) return;
+            btn.disabled = true;
+            try {
+              await db.collection('subscriptions').doc(uid).set({ referralDisabled: next }, { merge: true });
+              btn.dataset.disabled = next ? '1' : '0';
+              btn.textContent = next ? '🔓 Mở lại mã' : '🔒 Khoá mã';
+              btn.disabled = false;
+            } catch (e) {
+              alert('Không lưu được: ' + e.message);
+              btn.disabled = false;
+            }
           });
         });
       } catch (e) {
@@ -301,8 +346,10 @@
           <div class="field"><label for="planMaxChapters">Gói miễn phí: tối đa số chương tự soạn</label><input type="number" id="planMaxChapters" min="0" step="1" /></div>
           <div class="field"><label for="planStudentPrice">Giá gói Premium cho học sinh (đ/kỳ)</label><input type="number" id="planStudentPrice" min="0" step="1000" /></div>
           <div class="field"><label for="planStudentPeriod">Thời hạn 1 kỳ (số ngày)</label><input type="number" id="planStudentPeriod" min="1" step="1" /></div>
-          <div class="field"><label for="commissionTeacher">Hoa hồng giới thiệu giáo viên (%)</label><input type="number" id="commissionTeacher" min="0" max="100" step="1" /></div>
-          <div class="field"><label for="commissionStudent">Hoa hồng khi học sinh (trong nhóm) mua Premium (%)</label><input type="number" id="commissionStudent" min="0" max="100" step="1" /></div>
+          <p class="hint" style="font-weight:700;margin:14px 0 -2px;">Hoa hồng giới thiệu — CHỈ áp dụng khi giáo viên mua gói Pro (học sinh mua Premium không sinh hoa hồng)</p>
+          <div class="field"><label for="commissionF1">Hoa hồng cấp 1 (F1 — người giới thiệu trực tiếp) %</label><input type="number" id="commissionF1" min="0" max="100" step="1" /></div>
+          <div class="field"><label for="commissionF2">Hoa hồng cấp 2 (F2 — người giới thiệu của F1) %</label><input type="number" id="commissionF2" min="0" max="100" step="1" /></div>
+          <div class="field"><label for="commissionHoldDays">Số ngày giữ hoa hồng trước khi được rút</label><input type="number" id="commissionHoldDays" min="0" step="1" /></div>
           <button class="btn primary block" id="savePlansBtn">Lưu gói &amp; giá &amp; hoa hồng</button>
           <div class="result-box" id="savePlansResult"></div>
         </div>
@@ -314,37 +361,60 @@
       $('#planMaxChapters').value = cfg.teacherPlan.maxCustomChaptersFree;
       $('#planStudentPrice').value = cfg.studentPlan.price;
       $('#planStudentPeriod').value = cfg.studentPlan.periodDays;
-      $('#commissionTeacher').value = cfg.commission.teacherReferralPercent;
-      $('#commissionStudent').value = cfg.commission.studentReferralPercent;
+      $('#commissionF1').value = cfg.commission.teacherF1Percent;
+      $('#commissionF2').value = cfg.commission.teacherF2Percent;
+      $('#commissionHoldDays').value = cfg.commission.holdDays;
 
       $('#savePlansBtn').addEventListener('click', async () => {
         const box = $('#savePlansResult');
         showResult(box, '⏳ Đang lưu...');
         try {
-          const partial = {
-            teacherPlan: {
-              price: Number($('#planTeacherPrice').value) || 0,
-              periodDays: Math.max(1, Number($('#planTeacherPeriod').value) || 30),
-              maxGroupsFree: Math.max(0, Number($('#planMaxGroups').value) || 0),
-              maxStudentsFree: Math.max(0, Number($('#planMaxStudents').value) || 0),
-              maxCustomChaptersFree: Math.max(0, Number($('#planMaxChapters').value) || 0)
-            },
-            studentPlan: {
-              price: Number($('#planStudentPrice').value) || 0,
-              periodDays: Math.max(1, Number($('#planStudentPeriod').value) || 30)
-            },
-            commission: {
-              teacherReferralPercent: Math.min(100, Math.max(0, Number($('#commissionTeacher').value) || 0)),
-              studentReferralPercent: Math.min(100, Math.max(0, Number($('#commissionStudent').value) || 0))
-            }
+          const commission = {
+            teacherF1Percent: Math.min(100, Math.max(0, Number($('#commissionF1').value) || 0)),
+            teacherF2Percent: Math.min(100, Math.max(0, Number($('#commissionF2').value) || 0)),
+            holdDays: Math.max(0, Number($('#commissionHoldDays').value) || 0)
           };
-          await saveMonetizationConfig(partial);
-          cfg = await getMonetizationConfig(true);
+          await Promise.all([
+            saveMonetizationConfig({
+              teacherPlan: {
+                price: Number($('#planTeacherPrice').value) || 0,
+                periodDays: Math.max(1, Number($('#planTeacherPeriod').value) || 30),
+                maxGroupsFree: Math.max(0, Number($('#planMaxGroups').value) || 0),
+                maxStudentsFree: Math.max(0, Number($('#planMaxStudents').value) || 0),
+                maxCustomChaptersFree: Math.max(0, Number($('#planMaxChapters').value) || 0)
+              },
+              studentPlan: {
+                price: Number($('#planStudentPrice').value) || 0,
+                periodDays: Math.max(1, Number($('#planStudentPeriod').value) || 30)
+              }
+            }),
+            saveCommissionRate(commission, MONETIZATION_ADMIN_EMAIL)
+          ]);
+          cfg = await getMonetizationConfig();
           showResult(box, '✅ Đã lưu.');
         } catch (e) {
           showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
         }
       });
+    }
+
+    // ---------- 📜 Lịch sử % hoa hồng ----------
+    async function buildRateHistorySection(panel) {
+      panel.innerHTML = `<div class="card"><h2><span class="icon">📜</span>Lịch sử % hoa hồng</h2><div id="rateHistoryBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+      const box = $('#rateHistoryBody');
+      try {
+        const snap = await db.collection('commissionRateHistory').get();
+        const list = snap.docs.map((d) => d.data()).sort((a, b) => (b.changedAt || '').localeCompare(a.changedAt || ''));
+        if (!list.length) { box.innerHTML = '<p class="hint">Chưa có thay đổi nào — vẫn đang dùng mức mặc định.</p>'; return; }
+        box.innerHTML = list.map((r) => `
+          <div class="hint" style="padding:8px 0;border-top:1px solid var(--border);">
+            ${escapeHtml((r.changedAt || '').replace('T', ' ').slice(0, 16))} — F1 ${r.teacherF1Percent}% · F2 ${r.teacherF2Percent}% · giữ ${r.holdDays} ngày
+            <span style="color:var(--text-faint);">(${escapeHtml(r.changedBy || '')})</span>
+          </div>
+        `).join('');
+      } catch (e) {
+        box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+      }
     }
 
     // ---------- 🏦 Thông tin chuyển khoản ----------
@@ -381,7 +451,7 @@
               note: $('#payNote').value.trim()
             }
           });
-          cfg = await getMonetizationConfig(true);
+          cfg = await getMonetizationConfig();
           showResult(box, '✅ Đã lưu.');
         } catch (e) {
           showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
@@ -390,8 +460,9 @@
     }
 
     // ---------- 🧾 Duyệt thanh toán ----------
+    // Hoa hồng F1/F2 CHỈ tạo khi duyệt "teacher_upgrade" — xem Context trong plan/spec kinh doanh.
     async function approvePayment(sub) {
-      const freshCfg = await getMonetizationConfig(true);
+      const freshCfg = await getMonetizationConfig();
       const now = new Date();
       const nowIso = now.toISOString();
       const batch = db.batch();
@@ -400,21 +471,42 @@
         const expiresAt = new Date(now.getTime() + freshCfg.teacherPlan.periodDays * 86400000).toISOString();
         batch.set(db.collection('subscriptions').doc(sub.submitterUid),
           { tier: 'pro', expiresAt, updatedAt: nowIso, updatedBy: MONETIZATION_ADMIN_EMAIL }, { merge: true });
+
+        // F1 = referrerTeacherUid đã resolve sẵn lúc giáo viên gửi yêu cầu (xem upgrade.js). F2 = tra
+        // ngược "referredBy" (mã code, riêng tư) của CHÍNH F1 — cần rule admin đọc được teachers/{F1}
+        // (xem firestore.rules), rồi resolve mã đó ra uid bằng findTeacherUidByCode(). Dừng cứng ở F2,
+        // không truy tiếp F3.
+        const f1Uid = sub.referrerTeacherUid || null;
+        let f2Uid = null;
+        if (f1Uid) {
+          try {
+            const f1Doc = await db.collection('teachers').doc(f1Uid).get();
+            const f1ReferredBy = f1Doc.exists ? f1Doc.data().referredBy : null;
+            if (f1ReferredBy) f2Uid = await findTeacherUidByCode(f1ReferredBy);
+          } catch (e) { /* không tra được F2 thì bỏ qua, F1 vẫn được trả bình thường */ }
+        }
+
+        const holdUntil = new Date(now.getTime() + (Number(freshCfg.commission.holdDays) || 0) * 86400000).toISOString();
+        const tiers = [];
+        if (f1Uid) tiers.push({ uid: f1Uid, tier: 'F1', percent: freshCfg.commission.teacherF1Percent });
+        if (f2Uid && f2Uid !== f1Uid) tiers.push({ uid: f2Uid, tier: 'F2', percent: freshCfg.commission.teacherF2Percent });
+
+        for (const t of tiers) {
+          // Mã giới thiệu bị admin khoá (nghi gian lận) -> bỏ qua ĐÚNG cấp đó, các cấp khác không ảnh hưởng.
+          const subDoc = await db.collection('subscriptions').doc(t.uid).get();
+          if (subDoc.exists && subDoc.data().referralDisabled) continue;
+          const amount = Math.round((Number(sub.amount) || 0) * t.percent / 100);
+          batch.set(db.collection('commissions').doc(), {
+            beneficiaryTeacherUid: t.uid, tier: t.tier, sourceType: 'teacher_referral',
+            sourcePaymentId: sub.id, sourceName: sub.submitterName || '', sourceOrderCode: sub.orderCode || '',
+            amount, percent: t.percent, status: 'pending_hold', holdUntil, createdAt: nowIso
+          });
+        }
       } else {
         const expiresAt = new Date(now.getTime() + freshCfg.studentPlan.periodDays * 86400000).toISOString();
         batch.set(db.collection('studentSubscriptions').doc(sub.submitterDeviceId),
           { tier: 'premium', expiresAt, updatedAt: nowIso }, { merge: true });
-      }
-
-      if (sub.referrerTeacherUid) {
-        const percent = sub.type === 'teacher_upgrade' ? freshCfg.commission.teacherReferralPercent : freshCfg.commission.studentReferralPercent;
-        const amount = Math.round((Number(sub.amount) || 0) * percent / 100);
-        batch.set(db.collection('commissions').doc(), {
-          beneficiaryTeacherUid: sub.referrerTeacherUid,
-          sourceType: sub.type === 'teacher_upgrade' ? 'teacher_referral' : 'student_referral',
-          sourcePaymentId: sub.id, sourceName: sub.submitterName || '',
-          amount, percent, status: 'pending', createdAt: nowIso
-        });
+        // Học sinh mua Premium: KHÔNG tạo hoa hồng cho ai (theo yêu cầu — chỉ tính hoa hồng gói giáo viên).
       }
 
       batch.update(db.collection('paymentSubmissions').doc(sub.id), { status: 'approved', reviewedAt: nowIso, reviewedBy: MONETIZATION_ADMIN_EMAIL });
@@ -443,8 +535,9 @@
         box.innerHTML = list.map((sub) => `
           <div class="card" style="margin-top:10px;background:rgba(20,184,166,0.06);">
             <div style="font-weight:700;">${sub.type === 'teacher_upgrade' ? '👩‍🏫 Giáo viên nâng cấp Pro' : '🎓 Học sinh nâng cấp Premium'}</div>
+            ${sub.orderCode ? `<div class="hint">Mã đơn hàng: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(sub.orderCode)}</strong> — đối chiếu với nội dung chuyển khoản</div>` : ''}
             <div class="hint">${escapeHtml(sub.submitterName || '')} · ${escapeHtml(sub.submitterContact || '')}</div>
-            <div class="hint">Số tiền: <strong>${formatVnd(sub.amount)}</strong>${sub.referrerTeacherUid ? ' · Có người giới thiệu (sẽ tự sinh hoa hồng khi duyệt)' : ''}</div>
+            <div class="hint">Số tiền: <strong>${formatVnd(sub.amount)}</strong>${sub.referrerTeacherUid && sub.type === 'teacher_upgrade' ? ' · Có người giới thiệu (sẽ tự sinh hoa hồng F1/F2 khi duyệt)' : ''}</div>
             ${sub.note ? `<div class="hint">Ghi chú: ${escapeHtml(sub.note)}</div>` : ''}
             <div class="btn-row" style="margin-top:8px;">
               <button class="btn primary approve-payment-btn" data-id="${sub.id}" type="button" style="flex:1;">✅ Duyệt</button>
@@ -497,20 +590,37 @@
     async function renderCommissions() {
       const box = $('#commissionsBody');
       if (!box) return;
+      box.innerHTML = '<p class="hint">⏳ Đang tải...</p>';
       try {
+        const promoted = await promoteMaturedCommissions();
         const snap = await db.collection('commissions').get();
         const list = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
           .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         if (!list.length) { box.innerHTML = '<p class="hint">Chưa có hoa hồng nào phát sinh.</p>'; return; }
-        box.innerHTML = list.map((c) => `
+
+        const groups = [
+          { status: 'pending_hold', label: '⏳ Chờ giữ' },
+          { status: 'available', label: '✅ Sẵn sàng rút' },
+          { status: 'paid', label: '💰 Đã trả' }
+        ];
+        const rowHtml = (c) => `
           <div class="card" style="margin-top:10px;${c.status === 'paid' ? 'opacity:0.6;' : ''}">
-            <div style="font-weight:700;">${formatVnd(c.amount)} · ${c.sourceType === 'teacher_referral' ? 'Giới thiệu giáo viên' : 'Giới thiệu học sinh mua Premium'}</div>
+            <div style="font-weight:700;">${formatVnd(c.amount)} · ${c.tier || '—'} · ${c.percent}%</div>
             <div class="hint">Người hưởng (uid): ${escapeHtml(c.beneficiaryTeacherUid || '')}</div>
-            <div class="hint">Nguồn: ${escapeHtml(c.sourceName || '')} · ${c.percent}%</div>
-            <div class="hint">Trạng thái: <strong>${c.status === 'paid' ? 'Đã trả' : 'Chờ trả'}</strong></div>
-            ${c.status !== 'paid' ? `<button class="btn primary mark-paid-btn" data-id="${c.id}" type="button" style="margin-top:8px;">Đánh dấu đã trả</button>` : ''}
+            <div class="hint">Nguồn: ${escapeHtml(c.sourceName || '')}${c.sourceOrderCode ? ` · Đơn ${escapeHtml(c.sourceOrderCode)}` : ''}</div>
+            ${c.status === 'pending_hold' ? `<div class="hint">Được rút từ: ${escapeHtml((c.holdUntil || '').slice(0, 10))}</div>` : ''}
+            ${c.status === 'available' ? `<button class="btn primary mark-paid-btn" data-id="${c.id}" type="button" style="margin-top:8px;">Đánh dấu đã trả</button>` : ''}
           </div>
-        `).join('');
+        `;
+        box.innerHTML = `
+          ${promoted ? `<p class="hint">✓ Vừa chuyển ${promoted} khoản hoa hồng sang "Sẵn sàng rút".</p>` : ''}
+          ${groups.map((g) => {
+            const items = list.filter((c) => (c.status || 'pending') === g.status || (g.status === 'pending_hold' && c.status === 'pending'));
+            if (!items.length) return '';
+            const total = items.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+            return `<div class="hint" style="font-weight:700;margin:14px 0 4px;">${g.label} — ${formatVnd(total)}</div>${items.map(rowHtml).join('')}`;
+          }).join('')}
+        `;
         $$('.mark-paid-btn', box).forEach((btn) => {
           btn.addEventListener('click', async () => {
             btn.disabled = true;

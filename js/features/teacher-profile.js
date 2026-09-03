@@ -296,8 +296,12 @@ function resizeImageToDataUrl(file) {
         </div>
         <div class="card">
           <h2><span class="icon">💰</span>Hoa hồng của tôi</h2>
-          <p class="hint" style="margin-top:-4px;">Giới thiệu giáo viên khác dùng app (nút "Chia sẻ cho giáo viên khác" ở mục "Mã &amp; chia sẻ") để nhận hoa hồng khi họ nâng cấp gói Pro. Học sinh trong nhóm của bạn mua gói Premium cũng tự tính hoa hồng cho bạn.</p>
+          <p class="hint" style="margin-top:-4px;">Giới thiệu giáo viên khác dùng app (nút "Chia sẻ cho giáo viên khác" ở mục "Mã &amp; chia sẻ") để nhận hoa hồng khi họ nâng cấp gói Pro — cấp 1 (F1) khi bạn giới thiệu trực tiếp, cấp 2 (F2) khi người bạn giới thiệu lại giới thiệu tiếp người khác. Học sinh mua Premium không sinh hoa hồng.</p>
           <div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div>
+        </div>
+        <div class="card">
+          <h2><span class="icon">🌳</span>Giáo viên bạn đã giới thiệu</h2>
+          <div id="referredTeachersBody"><p class="hint">⏳ Đang tải...</p></div>
         </div>
       `;
       await renderSubscriptionAndCommissions(user);
@@ -305,15 +309,18 @@ function resizeImageToDataUrl(file) {
   });
 })();
 
-// "Gói của bạn" + "Hoa hồng của tôi" — chỉ hiện nội dung thật khi admin đã bật công tắc tổng
-// (config/monetization); ngược lại báo rõ để giáo viên không thắc mắc sao trống trơn.
+// "Gói của bạn" + "Hoa hồng của tôi" + "Giáo viên bạn đã giới thiệu" — chỉ hiện nội dung thật khi
+// admin đã bật công tắc tổng (config/monetization); ngược lại báo rõ để giáo viên không thắc mắc
+// sao trống trơn.
 async function renderSubscriptionAndCommissions(user) {
   const subBody = $('#subscriptionBody');
   const commBody = $('#commissionsBody');
+  const referredBody = $('#referredTeachersBody');
   const cfg = await getMonetizationConfig();
   if (!cfg.enabled) {
     subBody.innerHTML = '<p class="hint">Chưa mở tính năng gói trả phí vào lúc này.</p>';
     commBody.innerHTML = '<p class="hint">Chưa mở tính năng hoa hồng vào lúc này.</p>';
+    referredBody.innerHTML = '<p class="hint">Chưa mở tính năng hoa hồng vào lúc này.</p>';
     return;
   }
 
@@ -337,19 +344,45 @@ async function renderSubscriptionAndCommissions(user) {
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     if (!list.length) {
       commBody.innerHTML = '<p class="hint">Chưa có hoa hồng nào — chia sẻ link giới thiệu để bắt đầu nhé!</p>';
-      return;
+    } else {
+      // Bản ghi cũ (trước khi có hold period) có thể chưa có "status" mới — coi như "pending_hold".
+      const normStatus = (c) => (c.status === 'pending' || !c.status) ? 'pending_hold' : c.status;
+      const groups = [
+        { status: 'pending_hold', label: '⏳ Chờ giữ' },
+        { status: 'available', label: '✅ Sẵn sàng rút' },
+        { status: 'paid', label: '💰 Đã trả' }
+      ];
+      const totalsByStatus = {};
+      groups.forEach((g) => { totalsByStatus[g.status] = list.filter((c) => normStatus(c) === g.status).reduce((s, c) => s + (Number(c.amount) || 0), 0); });
+      commBody.innerHTML = `
+        <p class="hint">${groups.map((g) => `${g.label}: <strong>${formatVnd(totalsByStatus[g.status])}</strong>`).join(' · ')}</p>
+        ${list.map((c) => `
+          <div class="hint" style="padding:8px 0;border-top:1px solid var(--border);">
+            ${formatVnd(c.amount)} · ${c.tier || '—'} (${c.percent}%) · ${escapeHtml(c.sourceName || '')}${c.sourceOrderCode ? ` · Đơn ${escapeHtml(c.sourceOrderCode)}` : ''} ·
+            ${normStatus(c) === 'paid' ? '💰 Đã trả' : normStatus(c) === 'available' ? '✅ Sẵn sàng rút' : '⏳ Chờ giữ'}
+          </div>
+        `).join('')}
+      `;
     }
-    const totalPaid = list.filter((c) => c.status === 'paid').reduce((s, c) => s + (Number(c.amount) || 0), 0);
-    const totalPending = list.filter((c) => c.status !== 'paid').reduce((s, c) => s + (Number(c.amount) || 0), 0);
-    commBody.innerHTML = `
-      <p class="hint">Đã trả: <strong>${formatVnd(totalPaid)}</strong> · Chờ trả: <strong>${formatVnd(totalPending)}</strong></p>
-      ${list.map((c) => `
-        <div class="hint" style="padding:8px 0;border-top:1px solid var(--border);">
-          ${formatVnd(c.amount)} · ${c.sourceType === 'teacher_referral' ? 'Giới thiệu giáo viên' : 'Học sinh mua Premium'} · ${escapeHtml(c.sourceName || '')} · ${c.status === 'paid' ? '✅ Đã trả' : '⏳ Chờ trả'}
-        </div>
-      `).join('')}
-    `;
   } catch (e) {
     commBody.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+  }
+
+  try {
+    const { db } = ensureFirebase();
+    const snap = await db.collection('teacherProfiles').where('referredByUid', '==', user.uid).get();
+    const list = snap.docs.map((d) => Object.assign({ uid: d.id }, d.data()));
+    if (!list.length) {
+      referredBody.innerHTML = '<p class="hint">Bạn chưa giới thiệu giáo viên nào — dùng nút "Chia sẻ cho giáo viên khác" ở mục "Mã &amp; chia sẻ" để bắt đầu nhận hoa hồng.</p>';
+      return;
+    }
+    const subs = await Promise.all(list.map((t) => getTeacherSubscription(t.uid)));
+    referredBody.innerHTML = list.map((t, i) => `
+      <div class="hint" style="padding:6px 0;border-top:1px solid var(--border);">
+        ${escapeHtml(t.displayName || '(chưa đặt tên)')} · ${subs[i].tier === 'pro' ? 'Pro' : 'Miễn phí'}
+      </div>
+    `).join('');
+  } catch (e) {
+    referredBody.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
   }
 }

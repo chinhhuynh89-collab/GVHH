@@ -45,11 +45,15 @@
     main.prepend(note);
   }
 
-  function paymentInfoHtml() {
+  function paymentInfoHtml(orderCode) {
     if (!cfg.payment.bankName && !cfg.payment.accountNumber && !cfg.payment.momoNumber) {
       return `<p class="hint">⚠️ Chưa có thông tin chuyển khoản — liên hệ admin để được hướng dẫn.</p>`;
     }
     return `
+      <div style="text-align:center;background:rgba(20,184,166,0.1);border:1px dashed var(--brand);border-radius:10px;padding:10px;margin-bottom:10px;">
+        <div class="hint">Mã đơn hàng — <strong>bắt buộc ghi đúng mã này vào nội dung chuyển khoản</strong> để đối soát:</div>
+        <div style="font-size:22px;font-weight:800;letter-spacing:0.08em;color:var(--brand);">${escapeHtml(orderCode)}</div>
+      </div>
       <div class="hint" style="line-height:1.8;">
         ${cfg.payment.bankName ? `Ngân hàng: <strong>${escapeHtml(cfg.payment.bankName)}</strong><br/>` : ''}
         ${cfg.payment.accountNumber ? `Số tài khoản: <strong>${escapeHtml(cfg.payment.accountNumber)}</strong><br/>` : ''}
@@ -60,11 +64,11 @@
     `;
   }
 
-  function renderSuccess() {
+  function renderSuccess(orderCode) {
     main.innerHTML = `
       <div class="card">
         <h2><span class="icon">✅</span>Đã gửi yêu cầu</h2>
-        <p class="hint">Cảm ơn bạn! Yêu cầu nâng cấp đang chờ admin duyệt (thường trong vòng 24 giờ). Gói sẽ tự động kích hoạt ngay khi được duyệt.</p>
+        <p class="hint">Cảm ơn bạn! Mã đơn hàng của bạn là <strong style="color:var(--brand);">${escapeHtml(orderCode)}</strong> — admin sẽ đối chiếu mã này với nội dung chuyển khoản trước khi duyệt (thường trong vòng 24 giờ). Gói sẽ tự động kích hoạt ngay khi được duyệt.</p>
         <a class="btn primary block" href="../index.html">Quay lại trang chủ</a>
       </div>
     `;
@@ -72,7 +76,9 @@
 
   async function renderTeacherUpgrade(uid) {
     const user = getCurrentTeacher();
-    const [sub, profile] = await Promise.all([getTeacherSubscription(uid), fetchTeacherProfile(uid).catch(() => null)]);
+    const [sub, profile, orderCode] = await Promise.all([
+      getTeacherSubscription(uid), fetchTeacherProfile(uid).catch(() => null), genOrderCode()
+    ]);
     const plan = cfg.teacherPlan;
     main.innerHTML = `
       <div class="card">
@@ -82,7 +88,7 @@
       </div>
       <div class="card">
         <h2><span class="icon">🏦</span>Chuyển khoản</h2>
-        ${paymentInfoHtml()}
+        ${paymentInfoHtml(orderCode)}
       </div>
       <div class="card">
         <h2><span class="icon">✍️</span>Xác nhận đã chuyển khoản</h2>
@@ -91,7 +97,7 @@
           <input type="tel" id="upgradeContact" placeholder="VD: 0912345678" />
         </div>
         <div class="field">
-          <label for="upgradeNote">Ghi chú (VD: đã chuyển khoản lúc mấy giờ, mã giao dịch...)</label>
+          <label for="upgradeNote">Ghi chú (VD: đã chuyển khoản lúc mấy giờ)</label>
           <textarea id="upgradeNote" rows="2"></textarea>
         </div>
         <button class="btn primary block" id="upgradeSubmitBtn">Tôi đã chuyển khoản</button>
@@ -106,6 +112,7 @@
         if (profile && profile.referredBy) referrerTeacherUid = await findTeacherUidByCode(profile.referredBy);
         await submitPaymentRequest({
           type: 'teacher_upgrade',
+          orderCode,
           submitterUid: uid,
           submitterName: (profile && profile.displayName) || user.displayName || user.email || '',
           submitterContact: $('#upgradeContact').value.trim(),
@@ -113,7 +120,7 @@
           amount: plan.price,
           referrerTeacherUid
         });
-        renderSuccess();
+        renderSuccess(orderCode);
       } catch (e) {
         showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
       }
@@ -122,7 +129,7 @@
 
   async function renderStudentUpgrade(m) {
     const deviceId = getDeviceId();
-    const sub = await getStudentSubscription(deviceId);
+    const [sub, orderCode] = await Promise.all([getStudentSubscription(deviceId), genOrderCode()]);
     const plan = cfg.studentPlan;
     main.innerHTML = `
       <div class="card">
@@ -132,7 +139,7 @@
       </div>
       <div class="card">
         <h2><span class="icon">🏦</span>Chuyển khoản</h2>
-        ${paymentInfoHtml()}
+        ${paymentInfoHtml(orderCode)}
       </div>
       <div class="card">
         <h2><span class="icon">✍️</span>Xác nhận đã chuyển khoản</h2>
@@ -141,7 +148,7 @@
           <input type="tel" id="upgradeContact" value="${escapeHtml(m.phone || '')}" placeholder="VD: 0912345678" />
         </div>
         <div class="field">
-          <label for="upgradeNote">Ghi chú (VD: đã chuyển khoản lúc mấy giờ, mã giao dịch...)</label>
+          <label for="upgradeNote">Ghi chú (VD: đã chuyển khoản lúc mấy giờ)</label>
           <textarea id="upgradeNote" rows="2"></textarea>
         </div>
         <button class="btn primary block" id="upgradeSubmitBtn">Tôi đã chuyển khoản</button>
@@ -154,6 +161,7 @@
       try {
         await submitPaymentRequest({
           type: 'student_upgrade',
+          orderCode,
           submitterDeviceId: deviceId,
           submitterName: m.studentName || '',
           submitterContact: $('#upgradeContact').value.trim(),
@@ -161,7 +169,7 @@
           amount: plan.price,
           referrerTeacherUid: m.teacherUid || null
         });
-        renderSuccess();
+        renderSuccess(orderCode);
       } catch (e) {
         showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
       }
