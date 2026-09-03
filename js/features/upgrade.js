@@ -35,7 +35,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
       currentSub: await getTeacherSubscription(effectiveTeacherUid),
       currentTierLabel: 'Pro',
       extraDesc: 'Không giới hạn số nhóm, số học sinh, số chương tự soạn.',
-      submit: async (plan, planId, contact, note) => {
+      submit: async (plan, planId, contact, note, orderCode) => {
         const user = getCurrentTeacher();
         const profile = await fetchTeacherProfile(effectiveTeacherUid).catch(() => null);
         let referrerTeacherUid = null;
@@ -43,6 +43,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         return submitPaymentRequest({
           type: 'teacher_upgrade',
           planId,
+          orderCode,
           submitterUid: effectiveTeacherUid,
           submitterName: (profile && profile.displayName) || user.displayName || user.email || '',
           amount: plan.price,
@@ -60,9 +61,10 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
       currentTierLabel: 'Premium',
       extraDesc: 'Mở khoá tính năng nâng cao.',
       defaultContact: membership.phone || '',
-      submit: async (plan, planId, contact, note) => submitPaymentRequest({
+      submit: async (plan, planId, contact, note, orderCode) => submitPaymentRequest({
         type: 'student_upgrade',
         planId,
+        orderCode,
         submitterStudentUid: membership.studentUid,
         submitterName: membership.studentName || '',
         amount: plan.price,
@@ -186,7 +188,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         const plan = currentPlan();
         const contact = $('#upgradeContact').value.trim();
         const note = $('#upgradeNote').value.trim();
-        await opts.submit(plan, selectedId, contact, note);
+        await opts.submit(plan, selectedId, contact, note, orderCode);
         renderSuccess(orderCode);
       } catch (e) {
         showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
