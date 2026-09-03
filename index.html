@@ -44,6 +44,9 @@
       </div>
       <div id="contactTeacherWrap" style="display:none;flex:1;min-width:180px;"></div>
     </div>
+    <!-- Chuyển lên đây (trước ở #studentSection, xổ ra xa nút "Liên hệ") — hiện ngay dưới nút bấm
+         thay vì phải cuộn xuống xa mới thấy (giống lý do chuyển #registerFormCard bên dưới). -->
+    <div class="btn-row" id="contactOptionsRow" style="display:none;margin-top:10px;justify-content:center;flex-wrap:wrap;"></div>
     <!-- Chuyển lên đây (trước ở #studentSection, xổ ra xa nút bấm) — hiện ngay dưới nút "Đăng ký học
          cùng thầy (cô)" ở trên khi bấm, thay vì phải cuộn xuống xa mới thấy. -->
     <div class="card" id="registerFormCard" style="display:none;margin-top:12px;text-align:left;">
@@ -143,8 +146,6 @@
   </div>
 
   <div id="studentSection" style="display:none;">
-    <div class="btn-row" id="contactOptionsRow" style="display:none;margin-top:10px;justify-content:center;flex-wrap:wrap;"></div>
-
     <div class="card" id="studentUpgradeCard" style="display:none;">
       <h2><span class="icon">⭐</span>Gói của bạn</h2>
       <p class="hint" style="margin-top:-4px;" id="studentUpgradeDesc"></p>
