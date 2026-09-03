@@ -21,8 +21,14 @@
   <img id="topHeaderAvatar" alt="" style="display:none;width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" referrerpolicy="no-referrer" />
   <!-- Đăng nhập/đăng xuất nhanh cho cả giáo viên lẫn học sinh — không cần cuộn xuống tìm nút liên
        quan (xem script cuối trang: chỉ hiện "Đăng nhập" khi đã từng chọn vai trò, vì lần đầu mở app
-       chưa chọn vai trò thì màn "Bạn là ai?" đã lo phần đăng nhập rồi). -->
-  <button id="topAuthBtn" class="back-btn" type="button" style="display:none;flex-shrink:0;"></button>
+       chưa chọn vai trò thì màn "Bạn là ai?" đã lo phần đăng nhập rồi).
+       Bấm biểu tượng CHỈ mở menu xổ xuống, KHÔNG tự thực hiện đăng nhập/đăng xuất ngay — phải bấm
+       tiếp đúng nút bên trong menu mới thực hiện, tránh bấm nhầm biểu tượng làm mất tài khoản đang
+       xem giữa chừng. -->
+  <div id="topAuthWrap" style="display:none;position:relative;flex-shrink:0;">
+    <button id="topAuthBtn" class="back-btn" type="button"></button>
+    <div id="topAuthMenu" class="card" style="display:none;position:absolute;top:46px;right:0;z-index:30;min-width:220px;padding:10px;text-align:left;"></div>
+  </div>
 </header>
 
 <main>
@@ -433,35 +439,59 @@
 </script>
 <script>
 (async function () {
+  const wrap = document.getElementById('topAuthWrap');
   const btn = document.getElementById('topAuthBtn');
-  if (!btn || !isFirebaseConfigured()) return;
+  const menu = document.getElementById('topAuthMenu');
+  if (!wrap || !btn || !menu || !isFirebaseConfigured()) return;
 
   const user = await waitForAuthReady();
   const role = getRole();
+  if (!user && !role) return; // xem chú thích ở HTML: lần đầu mở app đã có màn "Bạn là ai?" lo rồi
+
+  // Bấm biểu tượng CHỈ mở/đóng menu — hành động thật (đăng nhập/đăng xuất) nằm ở nút RIÊNG bên trong
+  // menu, phải bấm thêm 1 lần nữa mới thực hiện. Trước đây bấm biểu tượng là làm luôn (logout còn có
+  // confirm() của trình duyệt, login thì không có gì cả) khiến nhiều người bấm nhầm mất tài khoản
+  // đang xem giữa chừng mà không kịp hiểu chuyện gì xảy ra.
+  wrap.style.display = 'flex';
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', (e) => {
+    if (menu.style.display !== 'none' && !menu.contains(e.target) && e.target !== btn) menu.style.display = 'none';
+  });
 
   if (user) {
-    btn.style.display = 'flex';
     btn.textContent = '🚪';
     btn.title = `Đăng xuất (${user.displayName || user.email || ''})`;
-    btn.addEventListener('click', async () => {
-      if (!confirm(`Đăng xuất khỏi tài khoản Google "${user.displayName || user.email || ''}"?`)) return;
+    menu.innerHTML = `
+      <div class="hint" style="margin-bottom:8px;">Đang đăng nhập: <strong>${escapeHtml(user.displayName || user.email || '')}</strong></div>
+      <button class="btn primary block" id="topAuthActionBtn" type="button">🚪 Đăng xuất</button>
+    `;
+    $('#topAuthActionBtn').addEventListener('click', async () => {
+      const actionBtn = $('#topAuthActionBtn');
+      actionBtn.disabled = true;
+      actionBtn.textContent = '⏳ Đang đăng xuất...';
       try { await signOutTeacher(); } catch (e) { /* vẫn tải lại dù lỗi, trang sẽ tự hiện đúng trạng thái */ }
       window.location.reload();
     });
-  } else if (role) {
+  } else {
     // Chỉ hiện nút "Đăng nhập" nhanh khi ĐÃ từng chọn vai trò trước đó (role đã biết) — lần đầu mở
     // app, chưa chọn vai trò thì màn "Bạn là ai?" (#roleChooserCard) đã lo phần đăng nhập rồi, hiện
     // thêm nút này lúc đó dễ gây rối/trùng lặp luồng.
-    btn.style.display = 'flex';
     btn.textContent = '🔑';
     btn.title = 'Đăng nhập bằng Google';
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
+    menu.innerHTML = `<button class="btn primary block" id="topAuthActionBtn" type="button">🔑 Đăng nhập bằng Google</button>`;
+    $('#topAuthActionBtn').addEventListener('click', async () => {
+      const actionBtn = $('#topAuthActionBtn');
+      actionBtn.disabled = true;
+      actionBtn.textContent = '⏳ Đang chuyển sang trang đăng nhập...';
       try {
         await signInWithGoogle(role === 'student');
         window.location.reload();
       } catch (e) {
-        btn.disabled = false;
+        actionBtn.disabled = false;
+        actionBtn.textContent = '🔑 Đăng nhập bằng Google';
         alert(`Đăng nhập không thành công: ${e.message}`);
       }
     });
