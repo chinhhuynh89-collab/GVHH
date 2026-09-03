@@ -46,8 +46,13 @@ async function enforceExclusiveRole(user, wantedRole) {
     }
   } catch (e) { /* không tra được thì cứ khoá theo đúng luồng đang đăng nhập */ }
 
+  // Mã cố định — sinh CÙNG LÚC với việc khoá vai trò, lưu luôn vào accountRoles để mọi nơi cần tra
+  // "mã của tài khoản X" (VD cột "Mã" trong danh sách giáo viên/học sinh ở trang quản trị/quản lý
+  // học sinh) chỉ cần đọc 1 chỗ, không cần biết trước đó là giáo viên hay học sinh.
+  const code = inferredRole === 'teacher' ? deriveTeacherCode(user.uid) : deriveStudentCode(user.uid);
+
   try {
-    await ref.set({ role: inferredRole, createdAt: new Date().toISOString() });
+    await ref.set({ role: inferredRole, code, createdAt: new Date().toISOString() });
   } catch (e) {
     // signInWithGoogle() và onAuthChange() (requireTeacherAuth/requireStudentAuth) đều gọi hàm này
     // ngay khi vừa đăng nhập xong -> có thể ĐỤNG ĐỘ cùng ghi lần đầu, bên kia đã tạo xong trước khi
@@ -61,6 +66,18 @@ async function enforceExclusiveRole(user, wantedRole) {
     throw e; // lỗi khác thật sự (VD mất mạng) -- giữ nguyên để báo cho người dùng
   }
   if (inferredRole !== wantedRole) throw roleConflictError(inferredRole, wantedRole);
+}
+
+// Mã cố định của 1 tài khoản (GV... hoặc HS...) — đọc lại từ accountRoles (đã lưu lúc khoá vai trò).
+// Không có bản ghi (VD tài khoản chưa từng qua enforceExclusiveRole, dữ liệu rất cũ) -> trả về null,
+// nơi gọi tự quyết định hiện gì (thường là "—").
+async function getAccountCode(uid) {
+  if (!uid) return null;
+  try {
+    const { db } = ensureFirebase();
+    const snap = await db.collection('accountRoles').doc(uid).get();
+    return snap.exists ? (snap.data().code || null) : null;
+  } catch (e) { return null; }
 }
 
 function roleConflictError(existingRole, wantedRole) {
@@ -204,12 +221,13 @@ async function fetchTeacherProfile(uid) {
   return snap.exists ? snap.data() : null;
 }
 
-// Mã giáo viên CỐ ĐỊNH — tính thẳng từ uid tài khoản (không random, không cần dò trùng qua
-// Firestore, không có rủi ro 2 giáo viên đăng nhập cùng lúc bị trùng mã như cách random+kiểm tra cũ):
-// cùng 1 tài khoản luôn ra đúng 1 mã, vĩnh viễn không đổi. Vì uid Firebase vốn đã duy nhất tuyệt đối
-// nên 2 tài khoản khác nhau gần như không thể ra trùng mã (không gian mã 32^6 ≈ 1 tỷ tổ hợp, đủ an
-// toàn cho quy mô số giáo viên dùng app này).
-function deriveTeacherCode(uid) {
+// Mã tài khoản CỐ ĐỊNH — tính thẳng từ uid (không random, không cần dò trùng qua Firestore, không
+// có rủi ro 2 tài khoản đăng ký cùng lúc bị trùng mã như cách random+kiểm tra cũ): cùng 1 tài khoản
+// luôn ra đúng 1 mã, vĩnh viễn không đổi. Vì uid Firebase vốn đã duy nhất tuyệt đối nên 2 tài khoản
+// khác nhau gần như không thể ra trùng mã (không gian mã 32^6 ≈ 1 tỷ tổ hợp, đủ an toàn cho quy mô
+// app này). Dùng CHUNG cho cả giáo viên (tiền tố "GV") và học sinh (tiền tố "HS") — xem
+// deriveTeacherCode/deriveStudentCode bên dưới và enforceExclusiveRole() (lưu mã học sinh).
+function deriveAccountCode(uid) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 ký tự, bỏ ký tự dễ nhầm (0,O,1,I)
   let hash = 5381;
   for (let i = 0; i < uid.length; i++) hash = ((hash * 33) ^ uid.charCodeAt(i)) >>> 0;
@@ -219,6 +237,14 @@ function deriveTeacherCode(uid) {
   let code = '';
   for (let i = 0; i < 6; i++) code += chars.charAt((hash >>> (i * 5)) & 31);
   return code;
+}
+
+function deriveTeacherCode(uid) {
+  return 'GV' + deriveAccountCode(uid);
+}
+
+function deriveStudentCode(uid) {
+  return 'HS' + deriveAccountCode(uid);
 }
 
 async function ensureTeacherProfile(user) {

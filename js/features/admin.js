@@ -203,8 +203,9 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
       `;
       const box = $('#teacherRosterBody');
       try {
-        const [profilesSnap, subsSnap, groupsSnap, studentsSnap, commissionsSnap, allOrdersSnap] = await Promise.all([
+        const [profilesSnap, teachersSnap, subsSnap, groupsSnap, studentsSnap, commissionsSnap, allOrdersSnap] = await Promise.all([
           db.collection('teacherProfiles').get(),
+          db.collection('teachers').get(), // admin đọc được toàn bộ (xem firestore.rules) — lấy email
           db.collection('subscriptions').get(),
           db.collection('groups').get(),
           db.collection('students').get(),
@@ -212,6 +213,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
           db.collection('paymentSubmissions').get()
         ]);
 
+        const emailByUid = new Map(teachersSnap.docs.map((d) => [d.id, d.data().email || '']));
         const subsByUid = new Map(subsSnap.docs.map((d) => [d.id, d.data()]));
         const groupTeacherByCode = new Map(groupsSnap.docs.map((d) => [d.data().groupCode, d.data().teacherUid]));
         const studentCountByUid = new Map();
@@ -251,6 +253,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
           const comm = commissionByUid.get(d.id) || { paid: 0, pending: 0 };
           return {
             uid: d.id, teacherCode: p.teacherCode || '—', name: p.displayName || '(chưa đặt tên)',
+            email: emailByUid.get(d.id) || '—',
             tier: sub.tier || 'free', expiresAt: sub.expiresAt || '', referralDisabled: !!sub.referralDisabled,
             studentCount: studentCountByUid.get(d.id) || 0, comm,
             referredCount: referredCountByUid.get(d.id) || 0,
@@ -265,13 +268,14 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
           <div class="roster-table-wrap">
             <table class="roster-table">
               <thead>
-                <tr><th>Mã GV</th><th>Tên</th><th>Trạng thái gói</th><th>Số học sinh</th><th>Đã giới thiệu</th><th>Hoa hồng đã trả</th><th>Hoa hồng chưa trả</th><th></th><th></th></tr>
+                <tr><th>Mã GV</th><th>Tên</th><th>Email</th><th>Trạng thái gói</th><th>Số học sinh</th><th>Đã giới thiệu</th><th>Hoa hồng đã trả</th><th>Hoa hồng chưa trả</th><th></th><th></th></tr>
               </thead>
               <tbody>
                 ${rows.map((r) => `
                   <tr>
                     <td>${escapeHtml(r.teacherCode)}</td>
                     <td>${escapeHtml(r.name)}</td>
+                    <td>${escapeHtml(r.email)}</td>
                     <td>${r.tier === 'pro' ? `Pro (hết hạn ${escapeHtml(r.expiresAt.slice(0, 10))})` : 'Miễn phí'}</td>
                     <td>${r.studentCount}</td>
                     <td>${r.referredCount}${r.recentOrders > ADMIN_FRAUD_ORDER_THRESHOLD_24H ? ` <span title="${r.recentOrders} đơn trong 24h qua">⚠️</span>` : ''}</td>
@@ -280,7 +284,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
                     <td><button class="btn roster-expand-btn" type="button" data-uid="${r.uid}">👥 Xem học sinh</button></td>
                     <td><button class="btn referral-lock-btn" type="button" data-uid="${r.uid}" data-disabled="${r.referralDisabled ? '1' : '0'}">${r.referralDisabled ? '🔓 Mở lại mã' : '🔒 Khoá mã'}</button></td>
                   </tr>
-                  <tr id="roster-students-${r.uid}" style="display:none;"><td colspan="9"></td></tr>
+                  <tr id="roster-students-${r.uid}" style="display:none;"><td colspan="10"></td></tr>
                 `).join('')}
               </tbody>
             </table>
@@ -304,18 +308,23 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
               .map((d) => Object.assign({ id: d.id }, d.data()))
               .sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi'));
             if (!students.length) { cell.innerHTML = '<p class="hint">Chưa có học sinh nào.</p>'; return; }
-            const subs = await Promise.all(students.map((s) => getStudentSubscription(s.studentUid)));
+            const [subs, codes] = await Promise.all([
+              Promise.all(students.map((s) => getStudentSubscription(s.studentUid))),
+              Promise.all(students.map((s) => getAccountCode(s.studentUid)))
+            ]);
             cell.innerHTML = `
               <div class="roster-table-wrap">
                 <table class="roster-table">
                   <thead>
-                    <tr><th>STT</th><th>Họ tên</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Gói</th></tr>
+                    <tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Gói</th></tr>
                   </thead>
                   <tbody>
                     ${students.map((s, i) => `
                       <tr>
                         <td>${i + 1}</td>
+                        <td>${escapeHtml(codes[i] || '—')}</td>
                         <td>${escapeHtml(s.studentName || '—')}</td>
+                        <td>${escapeHtml(s.email || '—')}</td>
                         <td>${escapeHtml(s.school || '—')}</td>
                         <td>${escapeHtml(s.className || '—')}</td>
                         <td>${escapeHtml(s.address || '—')}</td>

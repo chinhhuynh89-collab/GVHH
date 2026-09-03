@@ -301,6 +301,7 @@
       const students = await getStudentsForGroup(groupCode);
       box.dataset.loaded = '1';
       if (!students.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào tham gia.</p>'; return; }
+      const codes = await Promise.all(students.map((s) => getAccountCode(s.studentUid)));
       box.innerHTML = `
         <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
         <div class="roster-table-wrap">
@@ -308,7 +309,9 @@
             <thead>
               <tr>
                 <th>STT</th>
+                <th>Mã HS</th>
                 <th>Họ tên</th>
+                <th>Email</th>
                 <th>Địa chỉ</th>
                 <th>Trường</th>
                 <th>Lớp</th>
@@ -321,7 +324,9 @@
               ${students.map((s, i) => `
                 <tr>
                   <td>${i + 1}</td>
+                  <td>${escapeHtml(codes[i] || '—')}</td>
                   <td>${escapeHtml(s.studentName || '—')}</td>
+                  <td>${escapeHtml(s.email || '—')}</td>
                   <td>${escapeHtml(s.address || '—')}</td>
                   <td>${escapeHtml(s.school || '—')}</td>
                   <td>${escapeHtml(s.className || '—')}</td>

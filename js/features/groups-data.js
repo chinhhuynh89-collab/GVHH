@@ -106,7 +106,8 @@ async function addStudentToGroup(groupCode, student) {
   await db.collection('students').add({
     groupCode, teacherUid: teacher.uid, studentUid: student.studentUid, joinedAt: new Date().toISOString(),
     studentName: student.studentName, school: student.school,
-    className: student.className, address: student.address, phone: student.phone
+    className: student.className, address: student.address, phone: student.phone,
+    email: student.email || ''
   });
 }
 

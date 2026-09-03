@@ -57,7 +57,9 @@ async function listMyGroups(studentUid) {
 //   như vào lại luôn, không bắt xin duyệt lại.
 // - Ngược lại -> tạo 1 yêu cầu CHỜ DUYỆT (studentRegistrations, có kèm groupCode/groupName), giáo
 //   viên nhận thông báo và tự duyệt/từ chối — xem js/features/manage-students.js.
-// info = { studentName, school, className, address, phone } — đủ thông tin để giáo viên liên lạc.
+// info = { studentName, school, className, address, phone, email } — đủ thông tin để giáo viên liên
+// lạc; email lấy từ tài khoản Google đang đăng nhập (xem initJoinGroupPage), dùng để hiện trong danh
+// sách học sinh cho giáo viên đối chiếu chính xác (2 em trùng tên/trùng SĐT gia đình vẫn phân biệt được).
 async function requestJoinGroupByCode(groupCode, info, studentUid) {
   const { db } = ensureFirebase();
   const groupSnap = await db.collection('groups').where('groupCode', '==', groupCode).limit(1).get();
@@ -98,7 +100,7 @@ async function checkPendingJoinStatus(pending) {
 // Đăng ký "chờ xếp nhóm" bằng MÃ GIÁO VIÊN (không cần biết mã nhóm cụ thể) — dùng cho nút "Đăng ký
 // học cùng thầy (cô)" ở trang chủ. Giáo viên nhận thông báo rồi tự xếp học sinh vào 1 nhóm sau, xem
 // js/features/groups-data.js (getPendingRegistrationsForCurrentTeacher/assignRegistrationToGroup).
-// info = { studentName, school, className, address, phone }.
+// info = { studentName, school, className, address, phone, email }.
 async function registerWithTeacherCode(teacherCode, info, studentUid) {
   const { db } = ensureFirebase();
   const code = (teacherCode || '').trim().toUpperCase();
@@ -119,10 +121,10 @@ function initJoinGroupPage() {
     $('#joinBody').innerHTML = `<div class="card"><p class="hint">⚠️ Tính năng nhóm chưa được giáo viên bật (chưa kết nối Firebase).</p></div>`;
     return;
   }
-  requireStudentAuth((user) => renderJoinPage(user.uid));
+  requireStudentAuth((user) => renderJoinPage(user.uid, user.email || ''));
 }
 
-async function renderJoinPage(studentUid) {
+async function renderJoinPage(studentUid, studentEmail) {
   const groupsBox = $('#currentMembership');
   let pendingInfo = null; // { groupCode, groupName } — chỉ tồn tại trong phiên đang mở trang, không
                            // cần lưu bền: mở lại trang là listMyGroups() tự thấy đã duyệt hay chưa.
@@ -215,7 +217,7 @@ async function renderJoinPage(studentUid) {
     }
     showResult(resultBox, '⏳ Đang gửi yêu cầu...');
     try {
-      const info = { studentName, school, className, address, phone };
+      const info = { studentName, school, className, address, phone, email: studentEmail };
       const data = await requestJoinGroupByCode(groupCode, info, studentUid);
       if (data.status === 'approved') {
         setMembership(Object.assign(

@@ -120,12 +120,16 @@
         return;
       }
 
+      const codes = await Promise.all(students.map((s) => getAccountCode(s.studentUid)));
+
       const rows = students.map((s, i) => {
         const groupsText = s.groups.map((g) => escapeHtml(g.groupName)).join(', ');
         return `
           <tr>
             <td>${i + 1}</td>
+            <td>${escapeHtml(codes[i] || '—')}</td>
             <td>${escapeHtml(s.studentName || '')}</td>
+            <td>${escapeHtml(s.email || '')}</td>
             <td>${escapeHtml(s.school || '')}</td>
             <td>${escapeHtml(s.className || '')}</td>
             <td>${escapeHtml(s.address || '')}</td>
@@ -141,7 +145,7 @@
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
-              <tr><th>STT</th><th>Họ tên</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th></tr>
+              <tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th></tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>

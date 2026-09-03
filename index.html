@@ -31,6 +31,16 @@
     <a href="#" id="previewAsStudentBtn" style="display:none;margin-top:10px;font-size:12.5px;font-weight:600;color:var(--text-faint);">👁️ Xem với vai trò học sinh của tôi</a>
   </section>
 
+  <div class="card" id="roleChooserCard" style="display:none;text-align:center;">
+    <h2 style="margin-top:0;"><span class="icon">👋</span>Chào bạn!</h2>
+    <p class="hint">Trước khi bắt đầu, cho biết bạn là giáo viên hay học sinh nhé — lựa chọn này sẽ được ghi nhớ cho lần sau.</p>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn primary" id="chooseRoleTeacherBtn" type="button" style="flex:1;">👩‍🏫 Tôi là giáo viên</button>
+      <button class="btn primary" id="chooseRoleStudentBtn" type="button" style="flex:1;">🎓 Tôi là học sinh</button>
+    </div>
+    <div class="result-box" id="roleChooserResult"></div>
+  </div>
+
   <div class="section-label">Tính năng lõi</div>
   <div class="icon-grid">
     <a class="icon-tile is-active" href="pages/bang-tuan-hoan.html" data-feature="periodicTable">
@@ -259,17 +269,32 @@
     $('#previewAsStudentBtn').style.display = role === 'teacher' ? 'inline-block' : 'none';
   }
 
-  // Không còn hỏi "Bạn là ai?" nữa — tự xác định vai trò:
-  // 1) Đã có link chia sẻ (?tc=/?ref=) hoặc đã từng chọn trước đó -> giữ nguyên (setRole đã chạy ở
-  //    script phía trên, hoặc getRole() còn nhớ từ lần trước).
-  // 2) Lần đầu mở, chưa có gì -> đang đăng nhập ĐÚNG tài khoản giáo viên (resolveEffectiveTeacherUid
-  //    — không tính học sinh lỡ đăng nhập Google bằng tài khoản riêng của các em) thì mặc định Giáo
-  //    viên, ngược lại mặc định Học sinh (đa số người mở app lần đầu qua link của giáo viên là học sinh).
+  // Lần đầu mở app (chưa có link chia sẻ ?tc=/?ref= nào ép sẵn vai trò, chưa từng chọn trước đó) ->
+  // hỏi THẲNG "bạn là ai?" thay vì tự đoán ngầm như trước — bấm chọn xong đăng nhập Google LUÔN (xác
+  // nhận đúng vai trò đó, sinh mã GV.../HS... cố định ngay — xem enforceExclusiveRole trong auth.js)
+  // thay vì chỉ đổi giao diện suông, để lỡ tài khoản đã khoá vai trò khác thì phát hiện được ngay từ
+  // bước này, không phải đợi bấm sâu vào 1 tính năng cụ thể mới biết.
+  const roleChooser = $('#roleChooserCard');
   if (!getRole()) {
-    let isTeacher = false;
-    try { isTeacher = isFirebaseConfigured() && !!(await resolveEffectiveTeacherUid()); } catch (e) { /* ignore */ }
-    setRole(isTeacher ? 'teacher' : 'student');
+    roleChooser.style.display = 'block';
+  } else {
+    renderRoleSections();
   }
+
+  async function chooseRole(role) {
+    const box = $('#roleChooserResult');
+    showResult(box, '⏳ Đang chuyển sang trang đăng nhập Google...');
+    try {
+      if (isFirebaseConfigured()) await signInWithGoogle(role === 'student');
+      setRole(role);
+      roleChooser.style.display = 'none';
+      renderRoleSections();
+    } catch (e) {
+      showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+    }
+  }
+  $('#chooseRoleTeacherBtn').addEventListener('click', () => chooseRole('teacher'));
+  $('#chooseRoleStudentBtn').addEventListener('click', () => chooseRole('student'));
 
   $('#previewAsStudentBtn').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -289,8 +314,6 @@
     try { if (isFirebaseConfigured()) await signInWithGoogle(); } catch (err) { /* vẫn quay lại giao diện GV dù đăng nhập lỗi/bị huỷ — các trang sẽ tự hiện nút đăng nhập khi cần */ }
     window.location.reload();
   });
-
-  renderRoleSections();
 })();
 </script>
 <script>
@@ -368,7 +391,7 @@
         if (!user) { showResult(box, '⚠️ Đăng nhập chưa hoàn tất, thử lại nhé.', true); return; }
         showResult(box, '⏳ Đang đăng ký...');
       }
-      const info = { studentName, school, className, address, phone };
+      const info = { studentName, school, className, address, phone, email: user.email || '' };
       const data = await registerWithTeacherCode(teacherCode, info, user.uid);
       showResult(box, `✓ Đã gửi đăng ký tới ${escapeHtml(data.teacherName || 'giáo viên')}! Thầy/cô sẽ xếp bạn vào nhóm học tập phù hợp.`);
       $('#regName').value = ''; $('#regSchool').value = ''; $('#regClassName').value = '';
