@@ -130,20 +130,18 @@ async function saveCommissionRate(commission, adminEmail) {
   await batch.commit();
 }
 
-// Sinh mã đơn hàng NGẮN, DUY NHẤT — người nộp tiền phải ghi đúng mã này vào nội dung chuyển khoản để
-// admin đối soát (mo-hinh-kinh-doanh-referral.md mục 2+5.2). Kiểm tra trùng giống hệt cách
-// genGroupCodeClient() trong groups-data.js đang làm cho mã nhóm.
-async function genOrderCode() {
+// Sinh mã đơn hàng NGẮN — người nộp tiền phải ghi đúng mã này vào nội dung chuyển khoản để admin đối
+// soát (mo-hinh-kinh-doanh-referral.md mục 2+5.2).
+// KHÔNG dò trùng qua Firestore (khác genGroupCodeClient() trong groups-data.js) — "paymentSubmissions"
+// chỉ cho phép admin hoặc CHÍNH CHỦ đọc (xem firestore.rules), còn hàm này chạy TRƯỚC khi người gửi
+// có bất kỳ bản ghi nào thuộc về họ để đọc; 1 query where("orderCode"=...) không thoả được rule đó
+// (rule cần lọc theo submitterUid, không phải orderCode) nên bị RULES TỪ CHỐI thẳng — lỗi này từng
+// làm VỠ CẢ TRANG "Nâng cấp gói" (không tải được form, không gửi được yêu cầu nào, kể cả giáo viên
+// lẫn học sinh). Bỏ hẳn bước dò trùng: không gian mã 32^6 ≈ 1 tỷ tổ hợp, đủ an toàn cho quy mô app
+// này — giống teacherCode (deriveTeacherCode) cũng không dò trùng qua Firestore.
+function genOrderCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const { db } = ensureFirebase();
-  let code, attempts = 0;
-  do {
-    code = 'DH' + Array.from({ length: 6 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
-    const clash = await db.collection('paymentSubmissions').where('orderCode', '==', code).limit(1).get();
-    if (clash.empty) break;
-    attempts++;
-  } while (attempts < 5);
-  return code;
+  return 'DH' + Array.from({ length: 6 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
 }
 
 // "Job nền" chuyển hoa hồng đã đủ ngày giữ (pending_hold) sang "available" (đủ điều kiện rút) — app
