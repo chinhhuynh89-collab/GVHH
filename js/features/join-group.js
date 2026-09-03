@@ -25,6 +25,25 @@ function clearMembership() {
   localStorage.removeItem(STUDENT_MEMBERSHIP_KEY);
 }
 
+// getMembership() chỉ đọc CACHE cục bộ (đồng bộ, để các trang hiện nhanh không phải chờ mạng) —
+// KHÔNG tự kiểm tra cache đó có còn khớp với tài khoản Google ĐANG đăng nhập hay không. Trên thiết
+// bị dùng chung (VD điện thoại nhiều học sinh thay nhau đăng nhập để test/dùng), nếu không kiểm tra
+// lại thì trang có thể hiện NHẦM dữ liệu của tài khoản trước đó (tiến độ học, trạng thái gói, tên
+// nhóm...) dù đã đổi sang tài khoản Google khác — đây là lỗi thực tế đã gặp (tiến độ học giống nhau
+// dù đăng nhập tài khoản khác nhau). Dùng hàm này (async) ở bất kỳ đâu sắp hiển thị dữ liệu gắn với
+// tài khoản: nếu tài khoản đang đăng nhập KHÔNG khớp studentUid đã cache, tự xoá cache cũ và trả về
+// null (trang sẽ hiện lại đúng trạng thái "chưa vào nhóm nào" thay vì dữ liệu sai chủ).
+async function getVerifiedMembership() {
+  const m = getMembership();
+  if (!m || !m.studentUid) return m;
+  const user = (typeof waitForAuthReady === 'function') ? await waitForAuthReady() : null;
+  if (!user || user.uid !== m.studentUid) {
+    clearMembership();
+    return null;
+  }
+  return m;
+}
+
 // Toàn bộ nhóm tài khoản này ĐÃ được duyệt vào — xem chú thích đầu file (multi-group).
 async function listMyGroups(studentUid) {
   const { db } = ensureFirebase();

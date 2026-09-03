@@ -295,8 +295,9 @@
 </script>
 <script>
 (async function () {
-  const membership = typeof getMembership === 'function' ? getMembership() : null;
-  if (!membership || !membership.studentUid || !isFirebaseConfigured()) return;
+  if (!isFirebaseConfigured()) return;
+  const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
+  if (!membership || !membership.studentUid) return;
   try {
     const { db } = ensureFirebase();
     const now = new Date();
@@ -415,8 +416,9 @@
 </script>
 <script>
 (async function () {
-  const membership = typeof getMembership === 'function' ? getMembership() : null;
-  if (!membership || !membership.teacherUid || !isFirebaseConfigured()) return;
+  if (!isFirebaseConfigured()) return;
+  const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
+  if (!membership || !membership.teacherUid) return;
   try {
     const { db } = ensureFirebase();
     const snap = await db.collection('teacherProfiles').doc(membership.teacherUid).get();
@@ -466,7 +468,7 @@
   // học sinh mới chạy tới đoạn dưới) — đây là lý do chính khiến khoá tính năng "rất lâu không thấy
   // tác dụng": với giáo viên, nó chưa từng chạy chứ không phải chạy chậm.
   async function renderStudentPlanCard() {
-    const membership = typeof getMembership === 'function' ? getMembership() : null;
+    const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
     if (!membership || !membership.groupCode || !membership.studentUid) return;
     const cfg = await getMonetizationConfig();
     if (!cfg.enabled) return;

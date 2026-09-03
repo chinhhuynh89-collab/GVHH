@@ -17,7 +17,7 @@
     if (effectiveUid) { teacherUid = effectiveUid; isOwnTeacher = true; }
   } catch (e) { /* ignore */ }
   if (!teacherUid) {
-    const membership = typeof getMembership === 'function' ? getMembership() : null;
+    const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
     if (membership && membership.teacherUid) teacherUid = membership.teacherUid;
   }
   if (!teacherUid) {

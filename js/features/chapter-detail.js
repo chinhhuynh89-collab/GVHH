@@ -894,6 +894,17 @@
   }
 
   async function init() {
+    // Xác nhận "nhóm đang xem" cache còn khớp tài khoản Google đang đăng nhập TRƯỚC khi đọc/hiện
+    // tiến độ (refreshDots bên dưới) — trang này có thể là trang đầu tiên mở (VD theo link đã lưu),
+    // không chắc đã qua chapter-overview.js trước đó. Đồng thời tải tiến độ đã đồng bộ từ Firestore
+    // về (nếu có) để không mất tiến độ khi mở trên thiết bị mới.
+    if (typeof getVerifiedMembership === 'function') {
+      const membership = await getVerifiedMembership();
+      if (membership && membership.studentId && typeof hydrateProgressFromServer === 'function') {
+        await hydrateProgressFromServer(membership.studentId);
+      }
+    }
+
     owner = isFirebaseConfigured() ? await resolveContentOwner() : { uid: null, isOwner: false };
     initHeaderEdit();
 

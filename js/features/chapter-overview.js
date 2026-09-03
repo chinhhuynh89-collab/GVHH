@@ -56,8 +56,13 @@
       }
     } catch (e) { /* ignore */ }
 
-    const membership = typeof getMembership === 'function' ? getMembership() : null;
+    // getVerifiedMembership() (không phải getMembership() trực tiếp) — kiểm tra cache "nhóm đang
+    // xem" có còn khớp tài khoản Google ĐANG đăng nhập không, tự xoá nếu lệch (VD thiết bị dùng
+    // chung, vừa đổi sang tài khoản khác). Thiếu bước này từng khiến tiến độ học của tài khoản CŨ
+    // hiện nhầm cho tài khoản MỚI trên cùng máy.
+    const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
     if (!membership || !membership.groupCode) { viewerMode = 'guest'; return; }
+    if (typeof hydrateProgressFromServer === 'function') await hydrateProgressFromServer(membership.studentId);
 
     try {
       const { db } = ensureFirebase();

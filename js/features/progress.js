@@ -1,19 +1,58 @@
-// Theo dõi tiến độ học theo chương — lưu trong localStorage (offline, không cần backend).
-
-const PROGRESS_KEY = 'hoahoc_progress_v1';
+// Theo dõi tiến độ học theo chương — lưu localStorage để đọc/ghi TỨC THÌ (không chờ mạng mỗi lần
+// đánh dấu đã xem 1 mục), có đồng bộ lên Firestore chạy nền (syncProgressToServer, không chặn UI).
+//
+// QUAN TRỌNG — khoá lưu trữ GẮN VỚI HỌC SINH đang active (membership.studentId), KHÔNG dùng 1 khoá
+// chung cho cả thiết bị như trước. Lý do: thiết bị dùng chung (nhiều học sinh lần lượt đăng nhập
+// Google khác nhau để học) mà dùng chung 1 khoá sẽ khiến MỌI tài khoản thấy CHUNG 1 tiến độ — đây là
+// lỗi thực tế đã xảy ra. hydrateProgressFromServer() bù thêm chiều ngược lại: tải tiến độ đã đồng bộ
+// trước đó VỀ máy hiện tại, để đổi sang thiết bị mới (cùng tài khoản) cũng không mất tiến độ.
+const PROGRESS_KEY_BASE = 'hoahoc_progress_v1';
 const FREE_MODE_KEY = 'hoahoc_free_mode';
 const QUIZ_PASS_PERCENT = 70;
 
+// Không có membership (khách tự học tự do, hoặc giáo viên xem thử nội dung) -> dùng khoá chung
+// không gắn tài khoản nào (giữ hành vi cũ, không có gì để lẫn giữa các tài khoản trong trường hợp này).
+function progressStorageKey() {
+  const membership = typeof getMembership === 'function' ? getMembership() : null;
+  const scopeId = membership && membership.studentId;
+  return scopeId ? `${PROGRESS_KEY_BASE}__${scopeId}` : PROGRESS_KEY_BASE;
+}
+
 function loadAllProgress() {
   try {
-    return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {};
+    return JSON.parse(localStorage.getItem(progressStorageKey())) || {};
   } catch (e) {
     return {};
   }
 }
 
 function saveAllProgress(all) {
-  localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+  localStorage.setItem(progressStorageKey(), JSON.stringify(all));
+}
+
+// Tải tiến độ đã đồng bộ trước đó (Firestore) VỀ bộ nhớ đệm cục bộ của ĐÚNG học sinh này — gọi 1 lần
+// lúc trang liên quan tiến độ vừa xác nhận membership hợp lệ (xem chapter-overview.js/
+// chapter-detail.js). Chỉ BỔ SUNG chương nào cục bộ CHƯA CÓ hoặc bản trên server MỚI HƠN
+// (updatedAt) — không ghi đè tiến độ vừa làm trên máy này mà có thể chưa kịp đồng bộ lên do mất mạng.
+async function hydrateProgressFromServer(studentId) {
+  if (!studentId || typeof isFirebaseConfigured !== 'function' || !isFirebaseConfigured()) return;
+  try {
+    const { db } = ensureFirebase();
+    const snap = await db.collection('progress').doc(studentId).get();
+    if (!snap.exists) return;
+    const serverChapters = snap.data().chapters || {};
+    const local = loadAllProgress();
+    let changed = false;
+    Object.keys(serverChapters).forEach((chapterId) => {
+      const s = serverChapters[chapterId];
+      const l = local[chapterId];
+      if (!l || (s.updatedAt || '') > (l.updatedAt || '')) {
+        local[chapterId] = s;
+        changed = true;
+      }
+    });
+    if (changed) saveAllProgress(local);
+  } catch (e) { /* mất mạng/lỗi -> vẫn dùng dữ liệu cục bộ hiện có, không chặn trang */ }
 }
 
 function getChapterProgress(chapterId) {
