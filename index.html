@@ -511,6 +511,16 @@
     // #registerResult vì hộp đó nằm bên trong #registerFormCard đang display:none lúc này, thông báo
     // viết vào đó sẽ vô hình, người dùng không biết đang chờ đăng nhập hay đăng nhập lỗi.
     const box = $('#registerToggleResult');
+
+    // Giáo viên đang "xem thử với vai trò học sinh" — đăng ký là 1 HÀNH ĐỘNG THẬT (tạo bản ghi chờ
+    // duyệt thật, hiện trên trang quản trị và làm sai số liệu thống kê), không phải nội dung để xem,
+    // nên không mô phỏng được. Thiếu chặn này trước đây khiến giáo viên xem thử vô tình gửi đăng ký
+    // thật bằng chính tài khoản của mình (đã đăng nhập sẵn nên bỏ qua luôn bước đăng nhập ở dưới).
+    if (typeof isTeacherPreviewingAsStudent === 'function' && isTeacherPreviewingAsStudent()) {
+      showResult(box, '👁️ Bạn đang ở chế độ xem thử với vai trò học sinh. Đăng ký là 1 hành động thật, không mô phỏng được.', true);
+      return;
+    }
+
     let user = await waitForAuthReady();
     if (!user) {
       if (!isFirebaseConfigured()) { showResult(box, '⚠️ Chưa kết nối Firebase.', true); return; }
@@ -542,13 +552,19 @@
   }
 
   document.getElementById('registerSubmitBtn').addEventListener('click', async () => {
+    const box = $('#registerResult');
+    // Chặn thêm 1 lớp nữa ở đây (đã chặn từ lúc bấm mở form ở trên) — phòng trường hợp form vẫn
+    // đang mở sẵn từ trước khi chuyển sang chế độ xem thử.
+    if (typeof isTeacherPreviewingAsStudent === 'function' && isTeacherPreviewingAsStudent()) {
+      showResult(box, '👁️ Bạn đang ở chế độ xem thử với vai trò học sinh. Đăng ký là 1 hành động thật, không mô phỏng được.', true);
+      return;
+    }
     const studentName = $('#regName').value.trim();
     const school = $('#regSchool').value.trim();
     const className = $('#regClassName').value.trim();
     const address = $('#regAddress').value.trim();
     const phone = $('#regPhone').value.trim();
     const teacherCode = $('#regCode').value.trim().toUpperCase();
-    const box = $('#registerResult');
     if (!studentName || !school || !className || !address || !phone || !teacherCode) {
       showResult(box, 'Điền đầy đủ tất cả các mục (đánh dấu *) trước khi đăng ký.', true);
       return;
