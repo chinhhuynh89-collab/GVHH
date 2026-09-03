@@ -19,6 +19,10 @@
 <header class="app-header">
   <h1 id="topHeaderTitle" style="flex:1;">Trợ Lý Giáo Viên Hoá Học</h1>
   <img id="topHeaderAvatar" alt="" style="display:none;width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;" referrerpolicy="no-referrer" />
+  <!-- Đăng nhập/đăng xuất nhanh cho cả giáo viên lẫn học sinh — không cần cuộn xuống tìm nút liên
+       quan (xem script cuối trang: chỉ hiện "Đăng nhập" khi đã từng chọn vai trò, vì lần đầu mở app
+       chưa chọn vai trò thì màn "Bạn là ai?" đã lo phần đăng nhập rồi). -->
+  <button id="topAuthBtn" class="back-btn" type="button" style="display:none;flex-shrink:0;"></button>
 </header>
 
 <main>
@@ -425,6 +429,43 @@
     setRole('teacher');
     window.location.reload();
   });
+})();
+</script>
+<script>
+(async function () {
+  const btn = document.getElementById('topAuthBtn');
+  if (!btn || !isFirebaseConfigured()) return;
+
+  const user = await waitForAuthReady();
+  const role = getRole();
+
+  if (user) {
+    btn.style.display = 'flex';
+    btn.textContent = '🚪';
+    btn.title = `Đăng xuất (${user.displayName || user.email || ''})`;
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Đăng xuất khỏi tài khoản Google "${user.displayName || user.email || ''}"?`)) return;
+      try { await signOutTeacher(); } catch (e) { /* vẫn tải lại dù lỗi, trang sẽ tự hiện đúng trạng thái */ }
+      window.location.reload();
+    });
+  } else if (role) {
+    // Chỉ hiện nút "Đăng nhập" nhanh khi ĐÃ từng chọn vai trò trước đó (role đã biết) — lần đầu mở
+    // app, chưa chọn vai trò thì màn "Bạn là ai?" (#roleChooserCard) đã lo phần đăng nhập rồi, hiện
+    // thêm nút này lúc đó dễ gây rối/trùng lặp luồng.
+    btn.style.display = 'flex';
+    btn.textContent = '🔑';
+    btn.title = 'Đăng nhập bằng Google';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await signInWithGoogle(role === 'student');
+        window.location.reload();
+      } catch (e) {
+        btn.disabled = false;
+        alert(`Đăng nhập không thành công: ${e.message}`);
+      }
+    });
+  }
 })();
 </script>
 <script>
