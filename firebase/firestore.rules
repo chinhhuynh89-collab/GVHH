@@ -235,7 +235,24 @@ service cloud.firestore {
                     && request.resource.data.keys().hasAll(
                       ['teacherUid', 'studentName', 'school', 'className', 'address', 'phone', 'studentUid', 'status', 'createdAt']
                     );
-      allow update, delete: if request.auth != null && (request.auth.uid == resource.data.teacherUid || isAdmin());
+      // Học sinh được GHI ĐÈ đúng đăng ký CHỜ DUYỆT của chính mình — join-group.js giờ dùng ID CỐ
+      // ĐỊNH (studentUid+groupCode / studentUid+teacherCode) thay vì ID ngẫu nhiên, để gửi lại (sửa
+      // thông tin gõ nhầm, hoặc lỡ gửi 2 lần) chỉ ghi đè đúng 1 bản ghi thay vì tạo thêm bản ghi chờ
+      // duyệt trùng lặp (từng là lỗ hổng: 1 tài khoản có thể khai nhiều tên khác nhau để chiếm nhiều
+      // "suất" trong cùng 1 nhóm nếu giáo viên duyệt nhầm). Chỉ cho ghi đè khi bản ghi CŨ vẫn còn
+      // "pending" (chưa bị giáo viên xử lý) và bản ghi MỚI không đổi sang tài khoản/giáo viên/trạng
+      // thái khác — không được dùng để tự duyệt hay đổi chủ đăng ký.
+      allow update: if request.auth != null && (
+                      (request.auth.uid == resource.data.teacherUid || isAdmin())
+                      || (
+                        request.auth.uid == resource.data.studentUid
+                        && resource.data.status == 'pending'
+                        && request.resource.data.studentUid == resource.data.studentUid
+                        && request.resource.data.teacherUid == resource.data.teacherUid
+                        && request.resource.data.status == 'pending'
+                      )
+                    );
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.teacherUid || isAdmin());
     }
 
     // ---------- Phần hồ sơ giáo viên hiện công khai (thương hiệu trang chủ cho học sinh xem) ----------

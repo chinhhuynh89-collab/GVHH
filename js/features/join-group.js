@@ -92,7 +92,15 @@ async function requestJoinGroupByCode(groupCode, info, studentUid) {
     };
   }
 
-  await db.collection('studentRegistrations').add(Object.assign(
+  // Dùng ID CỐ ĐỊNH theo studentUid+groupCode (KHÔNG dùng .add() tự sinh id ngẫu nhiên) — gửi lại
+  // yêu cầu (VD sửa lại thông tin gõ nhầm, hoặc lỡ tay bấm gửi 2 lần) trong lúc CÒN chờ duyệt sẽ chỉ
+  // GHI ĐÈ đúng 1 bản ghi này, không tạo thêm bản ghi chờ duyệt trùng. Trước đây dùng .add() nên 1
+  // tài khoản có thể gửi nhiều yêu cầu chờ duyệt cùng lúc (khai tên khác nhau mỗi lần) cho CÙNG 1
+  // nhóm — nếu giáo viên không để ý duyệt nhầm nhiều yêu cầu, tài khoản đó chiếm nhiều "suất" học
+  // sinh trong cùng 1 nhóm dù thực ra chỉ là 1 người. Yêu cầu đã được duyệt/từ chối thì bị XOÁ hẳn
+  // (xem assignRegistrationToGroup/rejectRegistration trong groups-data.js) nên ID này rảnh lại ngay
+  // sau đó, không cản trở lần đăng ký MỚI hợp lệ sau này.
+  await db.collection('studentRegistrations').doc(`${studentUid}_group_${groupCode}`).set(Object.assign(
     { teacherUid: group.teacherUid, groupCode, groupName: group.groupName, studentUid,
       status: 'pending', createdAt: new Date().toISOString() },
     info
@@ -125,11 +133,14 @@ async function registerWithTeacherCode(teacherCode, info, studentUid) {
   const teacherDoc = profileSnap.docs[0];
   const teacherProfile = teacherDoc.data();
 
-  const ref = await db.collection('studentRegistrations').add(Object.assign(
+  // ID CỐ ĐỊNH theo studentUid+teacherCode — cùng lý do như requestJoinGroupByCode() ở trên: gửi lại
+  // trong lúc còn chờ duyệt chỉ ghi đè, không tạo thêm bản ghi chờ trùng cho cùng 1 giáo viên.
+  const regId = `${studentUid}_teacher_${code}`;
+  await db.collection('studentRegistrations').doc(regId).set(Object.assign(
     { teacherUid: teacherDoc.id, teacherCode: code, studentUid, status: 'pending', createdAt: new Date().toISOString() },
     info
   ));
-  return { registrationId: ref.id, teacherUid: teacherDoc.id, teacherName: teacherProfile.displayName || '' };
+  return { registrationId: regId, teacherUid: teacherDoc.id, teacherName: teacherProfile.displayName || '' };
 }
 
 function initJoinGroupPage() {
