@@ -33,6 +33,12 @@ function clearMembership() {
 // dù đăng nhập tài khoản khác nhau). Dùng hàm này (async) ở bất kỳ đâu sắp hiển thị dữ liệu gắn với
 // tài khoản: nếu tài khoản đang đăng nhập KHÔNG khớp studentUid đã cache, tự xoá cache cũ và trả về
 // null (trang sẽ hiện lại đúng trạng thái "chưa vào nhóm nào" thay vì dữ liệu sai chủ).
+//
+// Kiểm tra THÊM: bản ghi "students" (m.studentId) có còn tồn tại thật trên Firestore không. CÙNG 1
+// tài khoản Google (uid không đổi) vẫn có thể bị "cache sai" nếu dữ liệu server đã bị xoá — VD admin
+// dùng công cụ "Đặt lại tài khoản" (trang quản trị) xoá sạch dữ liệu để tự test lại: chỉ riêng kiểm
+// tra uid ở trên sẽ KHÔNG phát hiện được trường hợp này (uid vẫn khớp, chỉ có dữ liệu server đã mất),
+// khiến trang tiếp tục hiện tiến độ/chương trình học CŨ đọc từ cache cục bộ dù đã "đặt lại" xong.
 async function getVerifiedMembership() {
   const m = getMembership();
   if (!m || !m.studentUid) return m;
@@ -40,6 +46,16 @@ async function getVerifiedMembership() {
   if (!user || user.uid !== m.studentUid) {
     clearMembership();
     return null;
+  }
+  if (m.studentId) {
+    try {
+      const { db } = ensureFirebase();
+      const snap = await db.collection('students').doc(m.studentId).get();
+      if (!snap.exists) {
+        clearMembership();
+        return null;
+      }
+    } catch (e) { /* lỗi mạng tạm thời -> vẫn tạm dùng cache cũ, không chặn trang vì 1 lần lỗi mạng */ }
   }
   return m;
 }
