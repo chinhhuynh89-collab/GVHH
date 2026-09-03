@@ -47,7 +47,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
           submitterName: (profile && profile.displayName) || user.displayName || user.email || '',
           amount: plan.price,
           referrerTeacherUid,
-          contact,
+          submitterContact: contact,
           note
         });
       }
@@ -67,7 +67,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         submitterName: membership.studentName || '',
         amount: plan.price,
         referrerTeacherUid: membership.teacherUid || null,
-        contact,
+        submitterContact: contact,
         note
       })
     });

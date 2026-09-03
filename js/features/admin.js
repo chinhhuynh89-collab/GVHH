@@ -602,7 +602,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
       } else {
         const periodDays = freshCfg.studentPlans[planId].periodDays;
         const expiresAt = new Date(now.getTime() + periodDays * 86400000).toISOString();
-        batch.set(db.collection('studentSubscriptions').doc(sub.submitterDeviceId),
+        batch.set(db.collection('studentSubscriptions').doc(sub.submitterStudentUid),
           { tier: 'premium', expiresAt, updatedAt: nowIso }, { merge: true });
         await createReferralCommissions(sub, freshCfg, freshCfg.commission.studentF1Percent, freshCfg.commission.studentF2Percent, freshCfg.commission.studentHoldDays, nowIso, batch);
       }
