@@ -37,6 +37,10 @@
     <div class="btn-row" style="margin-top:12px;">
       <div id="registerWithTeacherWrap" style="display:none;flex:1;min-width:180px;">
         <button class="btn primary block" id="registerToggleBtn" type="button">📝 Đăng ký học cùng thầy (cô)</button>
+        <!-- Riêng cho thông báo lúc BẤM nút (cần đăng nhập/đăng nhập lỗi) — KHÔNG dùng chung
+             #registerResult vì hộp đó nằm bên trong #registerFormCard đang ẩn (display:none) lúc này,
+             viết thông báo vào đó người dùng sẽ không thấy được gì cả. -->
+        <div class="result-box" id="registerToggleResult"></div>
       </div>
       <div id="contactTeacherWrap" style="display:none;flex:1;min-width:180px;"></div>
     </div>
@@ -389,19 +393,25 @@
   // đã khoá vai trò giáo viên từ trước thì bị từ chối ngay ở đây, đúng như mọi luồng học sinh khác.
   toggleBtn.addEventListener('click', async () => {
     if (formCard.style.display === 'block') { formCard.style.display = 'none'; return; }
-    const box = $('#registerResult');
+    // QUAN TRỌNG: dùng #registerToggleResult (nằm cạnh nút, luôn hiện được) — KHÔNG dùng
+    // #registerResult vì hộp đó nằm bên trong #registerFormCard đang display:none lúc này, thông báo
+    // viết vào đó sẽ vô hình, người dùng không biết đang chờ đăng nhập hay đăng nhập lỗi.
+    const box = $('#registerToggleResult');
     let user = await waitForAuthReady();
     if (!user) {
       if (!isFirebaseConfigured()) { showResult(box, '⚠️ Chưa kết nối Firebase.', true); return; }
-      showResult(box, '⏳ Cần đăng nhập Google trước khi đăng ký...');
+      showResult(box, '🔐 Cần đăng nhập bằng tài khoản Google để đăng ký học cùng thầy (cô) — đang mở cửa sổ đăng nhập...');
       try {
         const result = await signInWithGoogle(true);
         user = result && result.user;
       } catch (e) {
-        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        const friendly = (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')
+          ? 'Bạn đã đóng cửa sổ đăng nhập trước khi hoàn tất. Bấm lại nút để thử lại.'
+          : e.message;
+        showResult(box, `⚠️ Đăng nhập không thành công: ${escapeHtml(friendly)}`, true);
         return;
       }
-      if (!user) { showResult(box, '⚠️ Đăng nhập chưa hoàn tất, thử lại nhé.', true); return; }
+      if (!user) { showResult(box, '⚠️ Đăng nhập chưa hoàn tất, bấm lại nút để thử lại.', true); return; }
       hideResult(box);
     }
     formCard.style.display = 'block';
