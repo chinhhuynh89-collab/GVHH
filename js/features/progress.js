@@ -10,12 +10,20 @@ const PROGRESS_KEY_BASE = 'hoahoc_progress_v1';
 const FREE_MODE_KEY = 'hoahoc_free_mode';
 const QUIZ_PASS_PERCENT = 70;
 
-// Không có membership (khách tự học tự do, hoặc giáo viên xem thử nội dung) -> dùng khoá chung
-// không gắn tài khoản nào (giữ hành vi cũ, không có gì để lẫn giữa các tài khoản trong trường hợp này).
+// Không có membership học sinh thật (khách tự học tự do, HOẶC giáo viên đang xem/luyện tập ngay
+// trên chương do CHÍNH MÌNH soạn) -> vẫn phải tách theo TÀI KHOẢN GOOGLE đang đăng nhập (nếu có),
+// KHÔNG dùng chung 1 khoá cho mọi tài khoản trên cùng thiết bị như trước — thiếu bước này từng khiến
+// đúng lỗi thực tế: giáo viên A luyện tập xong 70% rồi đăng xuất, giáo viên B đăng nhập trên CÙNG
+// THIẾT BỊ lại thấy nguyên 70% đó (2 tài khoản khác nhau nhưng chung 1 khoá "không gắn ai cả"). Chỉ
+// khi THẬT SỰ chưa đăng nhập tài khoản nào (khách vãng lai) mới dùng khoá chung PROGRESS_KEY_BASE
+// không gắn ai — lúc đó không có gì để lẫn giữa các tài khoản. getCurrentTeacher() (auth.js) chỉ là
+// tên gọi cũ, thực chất trả về BẤT KỲ ai đang đăng nhập (giáo viên lẫn học sinh, dùng chung 1 hệ
+// Firebase Auth) nên dùng đúng cho cả 2 trường hợp.
 function progressStorageKey() {
   const membership = typeof getMembership === 'function' ? getMembership() : null;
-  const scopeId = membership && membership.studentId;
-  return scopeId ? `${PROGRESS_KEY_BASE}__${scopeId}` : PROGRESS_KEY_BASE;
+  if (membership && membership.studentId) return `${PROGRESS_KEY_BASE}__${membership.studentId}`;
+  const user = (typeof getCurrentTeacher === 'function') ? getCurrentTeacher() : null;
+  return user ? `${PROGRESS_KEY_BASE}__acct_${user.uid}` : PROGRESS_KEY_BASE;
 }
 
 function loadAllProgress() {
