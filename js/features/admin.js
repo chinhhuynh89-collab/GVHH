@@ -793,7 +793,13 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
       box.innerHTML = '<p class="hint">⏳ Đang tải...</p>';
       try {
         const promoted = await promoteMaturedCommissions();
-        const snap = await db.collection('commissions').get();
+        // Đọc thêm "teachers" (riêng tư, chỉ admin đọc được toàn bộ — xem firestore.rules) để tra ra
+        // tên/mã GV/email của người hưởng thay vì chỉ có uid trơ trọi (khó nhận ra là ai).
+        const [snap, teachersSnap] = await Promise.all([
+          db.collection('commissions').get(),
+          db.collection('teachers').get()
+        ]);
+        const teacherByUid = new Map(teachersSnap.docs.map((d) => [d.id, d.data()]));
         const list = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
           .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         if (!list.length) { box.innerHTML = '<p class="hint">Chưa có hoa hồng nào phát sinh.</p>'; return; }
@@ -803,22 +809,43 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
           { status: 'available', label: '✅ Sẵn sàng rút' },
           { status: 'paid', label: '💰 Đã trả' }
         ];
-        const rowHtml = (c) => `
-          <div class="card" style="margin-top:10px;${c.status === 'paid' ? 'opacity:0.6;' : ''}">
-            <div style="font-weight:700;">${formatVnd(c.amount)} · ${c.tier || '—'} · ${c.percent}%</div>
-            <div class="hint">Người hưởng (uid): ${escapeHtml(c.beneficiaryTeacherUid || '')}</div>
-            <div class="hint">Nguồn: ${escapeHtml(c.sourceName || '')}${c.sourceOrderCode ? ` · Đơn ${escapeHtml(c.sourceOrderCode)}` : ''}</div>
-            ${c.status === 'pending_hold' ? `<div class="hint">Được rút từ: ${escapeHtml((c.holdUntil || '').slice(0, 10))}</div>` : ''}
-            ${c.status === 'available' ? `<button class="btn primary mark-paid-btn" data-id="${c.id}" type="button" style="margin-top:8px;">Đánh dấu đã trả</button>` : ''}
-          </div>
-        `;
+        // Bảng theo cột (giống "Lịch sử giao dịch"/"Danh sách giáo viên") thay vì từng thẻ xếp chồng
+        // — dễ so sánh, gọn hơn khi danh sách dài, và hiện đủ tên/mã GV/email thay vì chỉ uid.
+        const rowHtml = (c) => {
+          const t = teacherByUid.get(c.beneficiaryTeacherUid) || {};
+          return `
+            <tr${c.status === 'paid' ? ' style="opacity:0.6;"' : ''}>
+              <td>${escapeHtml((c.createdAt || '').replace('T', ' ').slice(0, 16))}</td>
+              <td>${escapeHtml(t.displayName || '(chưa rõ tên)')}</td>
+              <td>${escapeHtml(t.teacherCode || '—')}</td>
+              <td>${escapeHtml(t.email || '—')}</td>
+              <td>${escapeHtml(c.tier || '—')}</td>
+              <td>${c.percent}%</td>
+              <td>${formatVnd(c.amount)}</td>
+              <td>${escapeHtml(c.sourceName || '')}${c.sourceOrderCode ? ` · ${escapeHtml(c.sourceOrderCode)}` : ''}</td>
+              <td>${c.status === 'pending_hold' ? `Từ ${escapeHtml((c.holdUntil || '').slice(0, 10))}`
+                : c.status === 'available' ? `<button class="btn primary mark-paid-btn" data-id="${c.id}" type="button">Đánh dấu đã trả</button>`
+                : '✓ Đã trả'}</td>
+            </tr>
+          `;
+        };
         box.innerHTML = `
           ${promoted ? `<p class="hint">✓ Vừa chuyển ${promoted} khoản hoa hồng sang "Sẵn sàng rút".</p>` : ''}
           ${groups.map((g) => {
             const items = list.filter((c) => (c.status || 'pending') === g.status || (g.status === 'pending_hold' && c.status === 'pending'));
             if (!items.length) return '';
             const total = items.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-            return `<div class="hint" style="font-weight:700;margin:14px 0 4px;">${g.label} — ${formatVnd(total)}</div>${items.map(rowHtml).join('')}`;
+            return `
+              <div class="hint" style="font-weight:700;margin:14px 0 4px;">${g.label} — ${formatVnd(total)}</div>
+              <div class="roster-table-wrap">
+                <table class="roster-table">
+                  <thead>
+                    <tr><th>Thời gian</th><th>Tên GV</th><th>Mã GV</th><th>Email</th><th>Cấp</th><th>%</th><th>Số tiền</th><th>Nguồn</th><th></th></tr>
+                  </thead>
+                  <tbody>${items.map(rowHtml).join('')}</tbody>
+                </table>
+              </div>
+            `;
           }).join('')}
         `;
         $$('.mark-paid-btn', box).forEach((btn) => {
