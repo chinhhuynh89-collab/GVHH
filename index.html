@@ -40,6 +40,38 @@
       </div>
       <div id="contactTeacherWrap" style="display:none;flex:1;min-width:180px;"></div>
     </div>
+    <!-- Chuyển lên đây (trước ở #studentSection, xổ ra xa nút bấm) — hiện ngay dưới nút "Đăng ký học
+         cùng thầy (cô)" ở trên khi bấm, thay vì phải cuộn xuống xa mới thấy. -->
+    <div class="card" id="registerFormCard" style="display:none;margin-top:12px;text-align:left;">
+      <div class="field">
+        <label for="regName">Họ và tên *</label>
+        <input type="text" id="regName" placeholder="VD: Nguyễn Văn A" />
+      </div>
+      <div class="field">
+        <label for="regSchool">Trường *</label>
+        <input type="text" id="regSchool" placeholder="VD: THPT Nguyễn Trãi" />
+      </div>
+      <div class="field">
+        <label for="regClassName">Lớp *</label>
+        <input type="text" id="regClassName" placeholder="VD: 10A1" />
+      </div>
+      <div class="field">
+        <label for="regAddress">Địa chỉ *</label>
+        <input type="text" id="regAddress" placeholder="VD: 12 Nguyễn Huệ, Quy Nhơn" />
+      </div>
+      <div class="field">
+        <label for="regPhone">Số điện thoại liên lạc *</label>
+        <input type="tel" id="regPhone" placeholder="VD: 0912345678" />
+      </div>
+      <div class="field">
+        <label for="regCode">Mã giáo viên *</label>
+        <input type="text" id="regCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
+        <div class="hint" style="margin-top:4px;">Mã riêng của thầy/cô (xem trang "Hồ sơ" của giáo viên) — không phải mã nhóm.</div>
+        <div class="hint" id="regCodeLockedHint" style="display:none;margin-top:4px;color:var(--brand);">🔒 Đã tự động điền mã giáo viên từ link chia sẻ.</div>
+      </div>
+      <button class="btn primary block" id="registerSubmitBtn" type="button">Đăng ký</button>
+      <div class="result-box" id="registerResult"></div>
+    </div>
   </section>
 
   <div class="card" id="roleChooserCard" style="display:none;text-align:center;">
@@ -107,36 +139,6 @@
   </div>
 
   <div id="studentSection" style="display:none;">
-    <div class="card" id="registerFormCard" style="display:none;margin-top:12px;text-align:left;">
-      <div class="field">
-        <label for="regName">Họ và tên *</label>
-        <input type="text" id="regName" placeholder="VD: Nguyễn Văn A" />
-      </div>
-      <div class="field">
-        <label for="regSchool">Trường *</label>
-        <input type="text" id="regSchool" placeholder="VD: THPT Nguyễn Trãi" />
-      </div>
-      <div class="field">
-        <label for="regClassName">Lớp *</label>
-        <input type="text" id="regClassName" placeholder="VD: 10A1" />
-      </div>
-      <div class="field">
-        <label for="regAddress">Địa chỉ *</label>
-        <input type="text" id="regAddress" placeholder="VD: 12 Nguyễn Huệ, Quy Nhơn" />
-      </div>
-      <div class="field">
-        <label for="regPhone">Số điện thoại liên lạc *</label>
-        <input type="tel" id="regPhone" placeholder="VD: 0912345678" />
-      </div>
-      <div class="field">
-        <label for="regCode">Mã giáo viên *</label>
-        <input type="text" id="regCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
-        <div class="hint" style="margin-top:4px;">Mã riêng của thầy/cô (xem trang "Hồ sơ" của giáo viên) — không phải mã nhóm.</div>
-        <div class="hint" id="regCodeLockedHint" style="display:none;margin-top:4px;color:var(--brand);">🔒 Đã tự động điền mã giáo viên từ link chia sẻ.</div>
-      </div>
-      <button class="btn primary block" id="registerSubmitBtn" type="button">Đăng ký</button>
-      <div class="result-box" id="registerResult"></div>
-    </div>
     <div class="btn-row" id="contactOptionsRow" style="display:none;margin-top:10px;justify-content:center;flex-wrap:wrap;"></div>
 
     <div class="card" id="studentUpgradeCard" style="display:none;">
@@ -381,8 +383,28 @@
   const toggleBtn = document.getElementById('registerToggleBtn');
   const formCard = document.getElementById('registerFormCard');
   if (!toggleBtn) return;
-  toggleBtn.addEventListener('click', () => {
-    formCard.style.display = formCard.style.display === 'none' ? 'block' : 'none';
+  // Bắt đăng nhập Google NGAY khi bấm mở form (không đợi đến lúc bấm "Đăng ký" mới hỏi) — học sinh
+  // phải có tài khoản trước mới được điền thông tin, tránh gõ hết form xong mới bị chặn đăng nhập ở
+  // bước cuối. signInWithGoogle(true) tự áp dụng enforceExclusiveRole() (auth.js): nếu tài khoản đó
+  // đã khoá vai trò giáo viên từ trước thì bị từ chối ngay ở đây, đúng như mọi luồng học sinh khác.
+  toggleBtn.addEventListener('click', async () => {
+    if (formCard.style.display === 'block') { formCard.style.display = 'none'; return; }
+    const box = $('#registerResult');
+    let user = await waitForAuthReady();
+    if (!user) {
+      if (!isFirebaseConfigured()) { showResult(box, '⚠️ Chưa kết nối Firebase.', true); return; }
+      showResult(box, '⏳ Cần đăng nhập Google trước khi đăng ký...');
+      try {
+        const result = await signInWithGoogle(true);
+        user = result && result.user;
+      } catch (e) {
+        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        return;
+      }
+      if (!user) { showResult(box, '⚠️ Đăng nhập chưa hoàn tất, thử lại nhé.', true); return; }
+      hideResult(box);
+    }
+    formCard.style.display = 'block';
   });
 
   // Mở qua link chia sẻ "?tc=MÃ" (xem đầu index.html) — khoá sẵn mã giáo viên, học sinh không cần
