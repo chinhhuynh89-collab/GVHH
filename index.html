@@ -32,12 +32,7 @@
   </section>
 
   <div class="card" id="roleChooserCard" style="display:none;text-align:center;">
-    <h2 style="margin-top:0;"><span class="icon">👋</span>Chào bạn!</h2>
-    <p class="hint">Trước khi bắt đầu, cho biết bạn là giáo viên hay học sinh nhé — lựa chọn này sẽ được ghi nhớ cho lần sau.</p>
-    <div class="btn-row" style="margin-top:10px;">
-      <button class="btn primary" id="chooseRoleTeacherBtn" type="button" style="flex:1;">👩‍🏫 Tôi là giáo viên</button>
-      <button class="btn primary" id="chooseRoleStudentBtn" type="button" style="flex:1;">🎓 Tôi là học sinh</button>
-    </div>
+    <div id="roleChooserBody"></div>
     <div class="result-box" id="roleChooserResult"></div>
   </div>
 
@@ -231,17 +226,23 @@
 (function () {
   // Link chia sẻ mang theo mã: ?tc=MÃ GIÁO VIÊN (chia sẻ cho học sinh — trang tự nhận diện thương
   // hiệu giáo viên, khoá sẵn mã khi đăng ký) hoặc ?ref=MÃ GIÁO VIÊN (chia sẻ cho giáo viên khác —
-  // tự chuyển sang vai trò Giáo viên, lưu mã người giới thiệu để dùng sau này).
+  // gợi ý vai trò Giáo viên, lưu mã người giới thiệu để dùng sau này).
+  //
+  // KHÔNG tự setRole() ngay ở đây nữa — chỉ GHI NHỚ vai trò link này GỢI Ý (window.__linkSuggestedRole),
+  // để script role-chooser bên dưới hỏi lại người mở link 1 câu xác nhận trước khi chốt ("Vâng, tôi là
+  // giáo viên/học sinh" hoặc chọn lại vai trò khác). Lý do: người CHIA SẺ link có thể gửi nhầm loại
+  // link (VD định gửi link mời học sinh nhưng lỡ copy nhầm link giới thiệu cho giáo viên khác) — nếu
+  // tự chốt vai trò ngay không hỏi lại thì người nhận link sai sẽ bị gán nhầm vai trò mà không biết.
   const params = new URLSearchParams(window.location.search);
   const tc = params.get('tc');
   const ref = params.get('ref');
   if (tc) {
     localStorage.setItem('hoahoc_shared_teacher_code', tc.trim().toUpperCase());
-    if (typeof setRole === 'function') setRole('student');
+    window.__linkSuggestedRole = 'student';
   }
   if (ref) {
     localStorage.setItem('hoahoc_referred_by', ref.trim().toUpperCase());
-    if (typeof setRole === 'function') setRole('teacher');
+    window.__linkSuggestedRole = 'teacher';
   }
   if (tc || ref) window.history.replaceState({}, '', window.location.pathname);
 })();
@@ -269,16 +270,49 @@
     $('#previewAsStudentBtn').style.display = role === 'teacher' ? 'inline-block' : 'none';
   }
 
-  // Lần đầu mở app (chưa có link chia sẻ ?tc=/?ref= nào ép sẵn vai trò, chưa từng chọn trước đó) ->
-  // hỏi THẲNG "bạn là ai?" thay vì tự đoán ngầm như trước — bấm chọn xong đăng nhập Google LUÔN (xác
-  // nhận đúng vai trò đó, sinh mã GV.../HS... cố định ngay — xem enforceExclusiveRole trong auth.js)
-  // thay vì chỉ đổi giao diện suông, để lỡ tài khoản đã khoá vai trò khác thì phát hiện được ngay từ
-  // bước này, không phải đợi bấm sâu vào 1 tính năng cụ thể mới biết.
+  // Hỏi THẲNG "bạn là ai?" thay vì tự đoán/tự chốt ngầm — 2 trường hợp cần hỏi:
+  // 1) Mở qua link chia sẻ (?tc=/?ref=, xem window.__linkSuggestedRole đặt ở script phía trên) — link
+  //    chỉ GỢI Ý vai trò, LUÔN hỏi lại xác nhận (kể cả đã từng chọn vai trò khác trước đó trên máy
+  //    này) vì người CHIA SẺ có thể gửi nhầm loại link (VD định gửi link mời học sinh nhưng lỡ gửi
+  //    nhầm link giới thiệu cho giáo viên khác) — không hỏi lại thì người nhận bị gán nhầm vai trò.
+  // 2) Lần đầu mở app, không qua link nào, chưa từng chọn trước đó — hỏi vai trò từ đầu.
+  // Cả 2 trường hợp: bấm chọn xong đăng nhập Google LUÔN (xác nhận đúng vai trò đó, sinh mã GV.../
+  // HS... cố định ngay — xem enforceExclusiveRole trong auth.js) thay vì chỉ đổi giao diện suông, để
+  // lỡ tài khoản đã khoá vai trò khác thì phát hiện được ngay từ bước này.
   const roleChooser = $('#roleChooserCard');
-  if (!getRole()) {
+  const linkSuggestedRole = window.__linkSuggestedRole || null;
+  if (linkSuggestedRole || !getRole()) {
+    renderRoleChooserBody(linkSuggestedRole);
     roleChooser.style.display = 'block';
   } else {
     renderRoleSections();
+  }
+
+  function renderRoleChooserBody(suggestedRole) {
+    const body = $('#roleChooserBody');
+    if (!suggestedRole) {
+      body.innerHTML = `
+        <h2 style="margin-top:0;"><span class="icon">👋</span>Chào bạn!</h2>
+        <p class="hint">Trước khi bắt đầu, cho biết bạn là giáo viên hay học sinh nhé — lựa chọn này sẽ được ghi nhớ cho lần sau.</p>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn primary" id="chooseRoleTeacherBtn" type="button" style="flex:1;">👩‍🏫 Tôi là giáo viên</button>
+          <button class="btn primary" id="chooseRoleStudentBtn" type="button" style="flex:1;">🎓 Tôi là học sinh</button>
+        </div>
+      `;
+      $('#chooseRoleTeacherBtn').addEventListener('click', () => chooseRole('teacher'));
+      $('#chooseRoleStudentBtn').addEventListener('click', () => chooseRole('student'));
+      return;
+    }
+    const label = (r) => r === 'teacher' ? 'giáo viên' : 'học sinh';
+    const otherRole = suggestedRole === 'teacher' ? 'student' : 'teacher';
+    body.innerHTML = `
+      <h2 style="margin-top:0;"><span class="icon">👋</span>Chào bạn!</h2>
+      <p class="hint">Link này dành cho <strong>${label(suggestedRole)}</strong>. Đúng vậy không?</p>
+      <button class="btn primary block" id="chooseRoleConfirmBtn" type="button">✅ Vâng, tôi là ${label(suggestedRole)}</button>
+      <button class="btn block" id="chooseRoleOtherBtn" type="button" style="margin-top:8px;">↩️ Không đúng, tôi là ${label(otherRole)}</button>
+    `;
+    $('#chooseRoleConfirmBtn').addEventListener('click', () => chooseRole(suggestedRole));
+    $('#chooseRoleOtherBtn').addEventListener('click', () => chooseRole(otherRole));
   }
 
   async function chooseRole(role) {
@@ -293,8 +327,6 @@
       showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
     }
   }
-  $('#chooseRoleTeacherBtn').addEventListener('click', () => chooseRole('teacher'));
-  $('#chooseRoleStudentBtn').addEventListener('click', () => chooseRole('student'));
 
   $('#previewAsStudentBtn').addEventListener('click', async (e) => {
     e.preventDefault();
