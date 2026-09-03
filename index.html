@@ -38,6 +38,10 @@
     <div class="card" id="previewGroupChooserCard" style="display:none;margin-top:12px;text-align:left;">
       <div id="previewGroupChooserBody"></div>
     </div>
+    <!-- Xác nhận đã chọn góc nhìn nào (startPreview) — hiện NGAY SAU KHI ẩn #previewGroupChooserCard,
+         trước khi tải lại trang, để người dùng thấy rõ đã bấm có tác dụng, không tưởng nhầm là bấm
+         không ăn vì thẻ chọn nhóm biến mất quá đột ngột không có phản hồi gì. -->
+    <div class="result-box" id="previewGroupChooserStatus" style="margin-top:12px;"></div>
     <!-- Chuyển lên đây (trước ở #studentSection, nằm khá thấp) — mỗi ô con tự ẩn/hiện riêng theo vai
          trò (registerWithTeacherWrap: renderRoleSections; contactTeacherWrap: branding.js), bản thân
          hàng này không cần điều kiện gì thêm. -->
@@ -381,7 +385,7 @@
 
     const groupsHtml = groups.length
       ? groups.map((g) => `
-          <button class="btn block preview-group-btn" type="button" data-code="${escapeHtml(g.groupCode)}" style="text-align:left;margin-top:6px;">
+          <button class="btn block preview-group-btn" type="button" data-code="${escapeHtml(g.groupCode)}" data-name="${escapeHtml(g.groupName)}" style="text-align:left;margin-top:6px;">
             👥 ${escapeHtml(g.groupName)} <span class="hint">(${g.studentCount} học sinh · mã ${escapeHtml(g.groupCode)})</span>
           </button>
         `).join('')
@@ -396,16 +400,22 @@
       <button class="btn block" id="previewGroupCancelBtn" type="button" style="margin-top:14px;">Huỷ</button>
     `;
 
-    $('#previewNewStudentBtn').addEventListener('click', () => startPreview(null));
-    $$('.preview-group-btn').forEach((btn) => btn.addEventListener('click', () => startPreview(btn.dataset.code)));
+    $('#previewNewStudentBtn').addEventListener('click', () => startPreview(null, 'học sinh mới (chưa vào nhóm nào)'));
+    $$('.preview-group-btn').forEach((btn) => btn.addEventListener('click', () => startPreview(btn.dataset.code, `nhóm ${btn.dataset.name}`)));
     $('#previewGroupCancelBtn').addEventListener('click', () => { card.style.display = 'none'; });
   }
 
-  function startPreview(groupCode) {
+  // Ẩn thẻ chọn nhóm NGAY (không đợi tải xong trang mới) rồi hiện thông báo xác nhận đã chọn góc
+  // nhìn nào — thiếu bước này, thẻ chọn biến mất đột ngột lúc reload() mà không có phản hồi gì, dễ
+  // khiến người dùng tưởng bấm không có tác dụng ("chọn vào nó không ẩn"). Trễ 1 nhịp trước khi tải
+  // lại trang để kịp cho người dùng thấy được thông báo, không bị nuốt mất ngay lập tức.
+  function startPreview(groupCode, label) {
+    $('#previewGroupChooserCard').style.display = 'none';
+    showResult($('#previewGroupChooserStatus'), `✅ Đang chuyển sang góc nhìn: <strong>${escapeHtml(label)}</strong>...`);
     setPreviewGroupCode(groupCode);
     localStorage.setItem(PREVIEW_KEY, '1');
     setRole('student');
-    window.location.reload();
+    setTimeout(() => window.location.reload(), 700);
   }
 
   $('#exitPreviewBtn').addEventListener('click', async (e) => {
