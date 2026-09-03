@@ -7,23 +7,88 @@
 //
 // asStudent = true: chỉ đăng nhập Google thuần t, KHÔNG tự tạo hồ sơ giáo viên (teachers/{uid}) —
 // học sinh không cần hồ sơ kiểu đó, dữ liệu của các em nằm ở collection "students" (1 bản ghi/nhóm).
+//
+// 1 TÀI KHOẢN GOOGLE CHỈ ĐƯỢC LÀ 1 VAI TRÒ (giáo viên HOẶC học sinh), không được lẫn lộn — xem
+// enforceExclusiveRole() bên dưới: vai trò được khoá CỨNG vào "accountRoles/{uid}" ngay lần đầu tài
+// khoản đó đăng nhập ở MỘT trong hai luồng, không đổi được sau đó (kể cả từ trong app). Nếu 1 tài
+// khoản đã khoá vai trò A mà cố đăng nhập/đang đăng nhập ở luồng B -> bị đăng xuất ngay + báo lỗi.
 
 // Ưu tiên signInWithPopup: không cần rời trang nên không phụ thuộc trình duyệt lưu đúng trạng thái
 // "đang chờ đăng nhập" qua vòng chuyển trang đi-về — vòng này rất dễ bị các trình duyệt hiện đại
 // chặn cookie/storage bên thứ 3 làm mất, khiến signInWithRedirect quay về im lặng, không báo lỗi gì.
 // Chỉ khi popup bị chặn (thường gặp khi app được cài như PWA trên điện thoại) mới rơi về
 // signInWithRedirect như phương án dự phòng.
+// Khoá CỨNG 1 tài khoản Google chỉ dùng được cho 1 vai trò — xem chú thích đầu file. Ghi vào
+// "accountRoles/{uid}" (rules: create 1 lần, không update/delete được — xem firestore.rules) NGAY
+// LẦN ĐẦU xác định được, các lần sau chỉ đọc lại để đối chiếu.
+// - Đã có bản ghi vai trò: khớp thì thôi (return); không khớp -> ném lỗi role-conflict.
+// - Chưa có bản ghi: có thể là tài khoản THẬT đã dùng từ TRƯỚC KHI có cơ chế này (giáo viên/học sinh
+//   cũ) — suy luận lại từ dữ liệu sẵn có (đã có "teachers/{uid}" -> giáo viên; đã có bản ghi
+//   "students" nào đó -> học sinh) thay vì khoá nhầm luôn theo luồng đang đăng nhập, tránh khoá oan
+//   người dùng cũ. Hoàn toàn MỚI (chưa từng dùng luồng nào) -> khoá theo đúng luồng đang đăng nhập.
+async function enforceExclusiveRole(user, wantedRole) {
+  const { db } = ensureFirebase();
+  const ref = db.collection('accountRoles').doc(user.uid);
+  const snap = await ref.get();
+  if (snap.exists) {
+    if (snap.data().role !== wantedRole) throw roleConflictError(snap.data().role, wantedRole);
+    return;
+  }
+
+  let inferredRole = wantedRole;
+  try {
+    const teacherDoc = await db.collection('teachers').doc(user.uid).get();
+    if (teacherDoc.exists) {
+      inferredRole = 'teacher';
+    } else {
+      const studentSnap = await db.collection('students').where('studentUid', '==', user.uid).limit(1).get();
+      if (!studentSnap.empty) inferredRole = 'student';
+    }
+  } catch (e) { /* không tra được thì cứ khoá theo đúng luồng đang đăng nhập */ }
+
+  try {
+    await ref.set({ role: inferredRole, createdAt: new Date().toISOString() });
+  } catch (e) {
+    // signInWithGoogle() và onAuthChange() (requireTeacherAuth/requireStudentAuth) đều gọi hàm này
+    // ngay khi vừa đăng nhập xong -> có thể ĐỤNG ĐỘ cùng ghi lần đầu, bên kia đã tạo xong trước khi
+    // ghi này tới nơi (rules chỉ cho "create", bên thua cuộc bị từ chối vì lúc đó doc đã tồn tại).
+    // Đọc lại bản đã có thay vì coi đây là lỗi thật.
+    const raced = await ref.get();
+    if (raced.exists) {
+      if (raced.data().role !== wantedRole) throw roleConflictError(raced.data().role, wantedRole);
+      return;
+    }
+    throw e; // lỗi khác thật sự (VD mất mạng) -- giữ nguyên để báo cho người dùng
+  }
+  if (inferredRole !== wantedRole) throw roleConflictError(inferredRole, wantedRole);
+}
+
+function roleConflictError(existingRole, wantedRole) {
+  const err = new Error(
+    wantedRole === 'teacher'
+      ? 'Tài khoản Google này đã dùng làm tài khoản HỌC SINH trước đó, không thể dùng làm giáo viên. Hãy đăng nhập bằng 1 tài khoản Google khác.'
+      : 'Tài khoản Google này đã dùng làm tài khoản GIÁO VIÊN trước đó, không thể dùng để vào nhóm học sinh. Hãy đăng nhập bằng 1 tài khoản Google khác.'
+  );
+  err.code = 'role-conflict';
+  return err;
+}
+
 async function signInWithGoogle(asStudent) {
   const { auth } = ensureFirebase();
   const provider = new firebase.auth.GoogleAuthProvider();
   try {
     const result = await auth.signInWithPopup(provider);
     if (result && result.user) {
+      await enforceExclusiveRole(result.user, asStudent ? 'student' : 'teacher');
       _lastRedirectError = null;
       if (!asStudent) await ensureTeacherProfile(result.user);
     }
     return result;
   } catch (e) {
+    if (e && e.code === 'role-conflict') {
+      try { await auth.signOut(); } catch (e2) { /* ignore */ }
+      throw e;
+    }
     if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) {
       return auth.signInWithRedirect(provider);
     }
@@ -45,11 +110,15 @@ async function checkRedirectResult(asStudent) {
     const { auth } = ensureFirebase();
     const result = await auth.getRedirectResult();
     if (result && result.user) {
+      await enforceExclusiveRole(result.user, asStudent ? 'student' : 'teacher');
       _lastRedirectError = null;
       if (!asStudent) await ensureTeacherProfile(result.user);
       return result.user;
     }
   } catch (e) {
+    if (e && e.code === 'role-conflict') {
+      try { const { auth } = ensureFirebase(); await auth.signOut(); } catch (e2) { /* ignore */ }
+    }
     console.warn('Lỗi đăng nhập:', e.code, e.message);
     _lastRedirectError = e;
   }
@@ -251,9 +320,20 @@ function requireTeacherAuth(onReady) {
       // Chờ xử lý xong kết quả chuyển hướng (và lỗi, nếu có) TRƯỚC khi vẽ giao diện lần đầu —
       // nếu không đợi, màn hình "chưa đăng nhập" có thể vẽ ra trước khi lỗi kịp ghi nhận.
       await checkRedirectResult();
-      onAuthChange((user) => {
-        if (user) { renderSignedIn(user); if (onReady) onReady(user); }
-        else renderSignedOut();
+      // Kiểm tra vai trò ở ĐÂY nữa (không chỉ trong signInWithGoogle/checkRedirectResult) vì Firebase
+      // Auth tự khôi phục phiên đăng nhập CŨ (đã đăng nhập từ trước, không qua nút bấm lần này) —
+      // trường hợp đó không đi qua 2 hàm trên nên nếu không kiểm tra lại ở đây, 1 tài khoản đã khoá
+      // vai trò học sinh vẫn lọt được vào thẳng giao diện giáo viên chỉ bằng cách mở đúng trang.
+      onAuthChange(async (user) => {
+        if (!user) { renderSignedOut(); return; }
+        try {
+          await enforceExclusiveRole(user, 'teacher');
+          renderSignedIn(user);
+          if (onReady) onReady(user);
+        } catch (e) {
+          _lastRedirectError = e;
+          try { await signOutTeacher(); } catch (e2) { /* ignore */ } // kích onAuthChange chạy lại với user=null -> renderSignedOut() tự hiện lỗi
+        }
       });
     } catch (e) {
       gate.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
@@ -323,9 +403,18 @@ function requireStudentAuth(onReady) {
   (async () => {
     try {
       await checkRedirectResult(true);
-      onAuthChange((user) => {
-        if (user) { renderSignedIn(user); if (onReady) onReady(user); }
-        else renderSignedOut();
+      // Xem chú thích tương ứng trong requireTeacherAuth — phiên đăng nhập cũ tự khôi phục không đi
+      // qua signInWithGoogle/checkRedirectResult nên cần kiểm tra lại vai trò ở đây.
+      onAuthChange(async (user) => {
+        if (!user) { renderSignedOut(); return; }
+        try {
+          await enforceExclusiveRole(user, 'student');
+          renderSignedIn(user);
+          if (onReady) onReady(user);
+        } catch (e) {
+          _lastRedirectError = e;
+          try { await signOutTeacher(); } catch (e2) { /* ignore */ }
+        }
       });
     } catch (e) {
       gate.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;

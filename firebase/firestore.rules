@@ -80,6 +80,18 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ---------- 1 tài khoản Google CHỈ 1 vai trò (giáo viên HOẶC học sinh), không lẫn lộn ----------
+    // Xem js/features/auth.js: enforceExclusiveRole(). Ghi ĐÚNG 1 LẦN lúc tài khoản lần đầu xác định
+    // được vai trò (create), sau đó KHOÁ CỨNG — không update/delete được từ app (kể cả admin), tránh
+    // mọi đường lách đổi vai trò qua lại. Chỉ chứa "role" (không nhạy cảm) nên cho đọc công khai.
+    match /accountRoles/{uid} {
+      allow read: if true;
+      allow create: if request.auth != null && request.auth.uid == uid
+                    && request.resource.data.keys().hasOnly(['role', 'createdAt'])
+                    && request.resource.data.role in ['teacher', 'student'];
+      allow update, delete: if false;
+    }
+
     // ---------- Dữ liệu riêng của giáo viên ----------
     // Hồ sơ giáo viên: chỉ chính họ đọc/ghi (chứa cả email — KHÔNG công khai). Phần cần hiện cho
     // học sinh (tên hiển thị, khẩu hiệu, ảnh đại diện) tách riêng ở collection teacherProfiles bên
