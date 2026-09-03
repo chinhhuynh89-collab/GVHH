@@ -332,7 +332,7 @@ async function renderSubscriptionAndCommissions(user) {
     `;
   } else {
     subBody.innerHTML = `
-      <p class="hint">Trạng thái: <strong>Miễn phí</strong> — giới hạn ${cfg.teacherPlan.maxGroupsFree} nhóm, ${cfg.teacherPlan.maxStudentsFree} học sinh.</p>
+      <p class="hint">Trạng thái: <strong>Miễn phí</strong> — giới hạn ${cfg.teacherFreeLimits.maxGroupsFree} nhóm, ${cfg.teacherFreeLimits.maxStudentsFree} học sinh.</p>
       <a class="btn primary block" href="nang-cap.html">⭐ Nâng cấp lên Pro</a>
     `;
   }

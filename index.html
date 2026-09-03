@@ -467,7 +467,7 @@
     const code = shortStudentCode(membership.studentId);
     $('#studentUpgradeDesc').innerHTML = isPremium
       ? `<strong>HS-${escapeHtml(code)}-Premium</strong> — hết hạn ${escapeHtml((sub.expiresAt || '').slice(0, 10))}.`
-      : `<strong>HS-${escapeHtml(code)}-Miễn phí</strong> — mở khoá tính năng nâng cao chỉ ${formatVnd(cfg.studentPlan.price)}/${cfg.studentPlan.periodDays} ngày.`;
+      : `<strong>HS-${escapeHtml(code)}-Miễn phí</strong> — mở khoá tính năng nâng cao chỉ từ ${formatVnd(cfg.studentPlans.month1.price)}/tháng.`;
     $('#studentUpgradeBtn').style.display = isPremium ? 'none' : 'block';
     $('#studentUpgradeCard').style.display = 'block';
   }

@@ -314,8 +314,8 @@ async function enforceTeacherGroupLimit(teacherUid) {
   const sub = await getTeacherSubscription(teacherUid);
   if (sub.tier === 'pro') return;
   const groups = await listGroupsForCurrentTeacher();
-  if (groups.length >= cfg.teacherPlan.maxGroupsFree) {
-    throw new Error(`Gói miễn phí chỉ được tối đa ${cfg.teacherPlan.maxGroupsFree} nhóm. Vào trang "Hồ sơ" để nâng cấp gói Pro (không giới hạn).`);
+  if (groups.length >= cfg.teacherFreeLimits.maxGroupsFree) {
+    throw new Error(`Gói miễn phí chỉ được tối đa ${cfg.teacherFreeLimits.maxGroupsFree} nhóm. Vào trang "Hồ sơ" để nâng cấp gói Pro (không giới hạn).`);
   }
 }
 
@@ -327,7 +327,7 @@ async function enforceTeacherStudentLimit(teacherUid) {
   if (sub.tier === 'pro') return;
   const groups = await listGroupsForCurrentTeacher();
   const totalStudents = groups.reduce((sum, g) => sum + (g.studentCount || 0), 0);
-  if (totalStudents >= cfg.teacherPlan.maxStudentsFree) {
-    throw new Error(`Gói miễn phí chỉ được tối đa ${cfg.teacherPlan.maxStudentsFree} học sinh. Vào trang "Hồ sơ" để nâng cấp gói Pro (không giới hạn).`);
+  if (totalStudents >= cfg.teacherFreeLimits.maxStudentsFree) {
+    throw new Error(`Gói miễn phí chỉ được tối đa ${cfg.teacherFreeLimits.maxStudentsFree} học sinh. Vào trang "Hồ sơ" để nâng cấp gói Pro (không giới hạn).`);
   }
 }

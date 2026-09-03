@@ -12,8 +12,22 @@ const MONETIZATION_ADMIN_EMAIL = 'chinhhuynh89@gmail.com';
 
 const MONETIZATION_DEFAULTS = {
   enabled: false,
-  teacherPlan: { price: 199000, periodDays: 30, maxGroupsFree: 2, maxStudentsFree: 40, maxCustomChaptersFree: 3 },
-  studentPlan: { price: 49000, periodDays: 30 },
+  // Giới hạn gói MIỄN PHÍ của giáo viên — tách khỏi giá gói trả phí (teacherPlans bên dưới) vì đây
+  // là 1 cấu hình độc lập, không gắn với thời hạn/gói cụ thể nào.
+  teacherFreeLimits: { maxGroupsFree: 2, maxStudentsFree: 40, maxCustomChaptersFree: 3 },
+  // 3 mức thời hạn cho MỖI đối tượng (giáo viên/học sinh) — người mua tự chọn 1 trong 3 lúc nâng
+  // cấp (xem upgrade.js). Giá mặc định giảm dần theo tháng khi mua thời hạn dài hơn, admin chỉnh
+  // được tự do ở trang quản trị.
+  teacherPlans: {
+    month1: { label: '1 tháng', price: 199000, periodDays: 30 },
+    month6: { label: '6 tháng', price: 999000, periodDays: 180 },
+    year1: { label: '1 năm', price: 1790000, periodDays: 365 }
+  },
+  studentPlans: {
+    month1: { label: '1 tháng', price: 49000, periodDays: 30 },
+    month6: { label: '6 tháng', price: 249000, periodDays: 180 },
+    year1: { label: '1 năm', price: 449000, periodDays: 365 }
+  },
   // Hoa hồng 2 CẤP, tính CẢ 2 loại gói (giáo viên mua Pro LẪN học sinh mua Premium) — nhưng người
   // NHẬN hoa hồng LUÔN LUÔN là giáo viên (F1 = giáo viên trực tiếp đưa app tới người mua — với học
   // sinh chính là giáo viên chủ nhóm của em đó; F2 = giáo viên đã giới thiệu F1). Tài khoản học sinh
@@ -73,11 +87,18 @@ function shortStudentCode(studentId) {
 // thường gán "cfg = await getMonetizationConfig()" rồi sau đó SỬA TRỰC TIẾP field trên cfg (VD
 // "cfg.enabled = next"); nếu lỡ trả thẳng object hằng số dùng chung, sửa như vậy sẽ làm hỏng luôn
 // giá trị mặc định cho phần còn lại của trang.
+function clonePlans(plans) {
+  const out = {};
+  Object.keys(plans).forEach((k) => { out[k] = Object.assign({}, plans[k]); });
+  return out;
+}
+
 function cloneDefaults() {
   return {
     enabled: MONETIZATION_DEFAULTS.enabled,
-    teacherPlan: Object.assign({}, MONETIZATION_DEFAULTS.teacherPlan),
-    studentPlan: Object.assign({}, MONETIZATION_DEFAULTS.studentPlan),
+    teacherFreeLimits: Object.assign({}, MONETIZATION_DEFAULTS.teacherFreeLimits),
+    teacherPlans: clonePlans(MONETIZATION_DEFAULTS.teacherPlans),
+    studentPlans: clonePlans(MONETIZATION_DEFAULTS.studentPlans),
     commission: Object.assign({}, MONETIZATION_DEFAULTS.commission),
     payment: Object.assign({}, MONETIZATION_DEFAULTS.payment),
     lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures)
@@ -98,8 +119,9 @@ async function getMonetizationConfig() {
     const data = snap.exists ? snap.data() : {};
     return {
       enabled: !!data.enabled,
-      teacherPlan: Object.assign({}, MONETIZATION_DEFAULTS.teacherPlan, data.teacherPlan),
-      studentPlan: Object.assign({}, MONETIZATION_DEFAULTS.studentPlan, data.studentPlan),
+      teacherFreeLimits: Object.assign({}, MONETIZATION_DEFAULTS.teacherFreeLimits, data.teacherFreeLimits),
+      teacherPlans: Object.assign({}, MONETIZATION_DEFAULTS.teacherPlans, data.teacherPlans),
+      studentPlans: Object.assign({}, MONETIZATION_DEFAULTS.studentPlans, data.studentPlans),
       commission: Object.assign({}, MONETIZATION_DEFAULTS.commission, data.commission),
       payment: Object.assign({}, MONETIZATION_DEFAULTS.payment, data.payment),
       lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures, data.lockedFeatures)

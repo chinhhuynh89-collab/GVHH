@@ -14,6 +14,7 @@
 // dưới). Tài khoản học sinh không bao giờ nhận hoa hồng dù có chia sẻ link cho ai.
 
 const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thiệu phát sinh > N đơn/24h
+const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
 
 (function () {
   requireTeacherAuth(async (user) => {
@@ -38,7 +39,7 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
       $('#monetizationEnabledToggle').classList.toggle('on', cfg.enabled);
       return c;
     }).catch((e) => {
-      cfg = { teacherPlan: {}, studentPlan: {}, commission: {}, payment: {}, lockedFeatures: {}, enabled: false };
+      cfg = { teacherFreeLimits: {}, teacherPlans: {}, studentPlans: {}, commission: {}, payment: {}, lockedFeatures: {}, enabled: false };
       throw e;
     });
 
@@ -70,16 +71,14 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
     // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
     // Gắn nút bấm NGAY LẬP TỨC (đồng bộ, không chờ await nào ở trên) — đây là phần quan trọng nhất
     // của trang nên phải chắc chắn hoạt động dù mạng chậm hay cfg tải lỗi.
-    const NEEDS_CFG = { plans: true, payment: true, locked: true };
+    const NEEDS_CFG = { plans: true, payment: true, locked: true, commissions: true };
     const SECTION_BUILDERS = {
       stats: buildStatsSection,
       roster: buildRosterSection,
       locked: buildLockedFeaturesSection,
       plans: buildPlansSection,
       payment: buildPaymentSection,
-      pending: buildPendingSection,
-      commissions: buildCommissionsSection,
-      rateHistory: buildRateHistorySection
+      commissions: buildCommissionsSection
     };
 
     $$('.admin-menu-btn').forEach((btn) => {
@@ -392,72 +391,72 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
     }
 
     // ---------- 💳 Gói & giá ----------
+    // Lưới nút phụ (giống kiểu điều hướng chính) — chỉ mở đúng 1 mục con vào #plansSubPanel.
     async function buildPlansSection(panel) {
       panel.innerHTML = `
         <div class="card">
           <h2><span class="icon">💳</span>Gói &amp; giá</h2>
-          <div class="field"><label for="planTeacherPrice">Giá gói Pro cho giáo viên (đ/kỳ)</label><input type="number" id="planTeacherPrice" min="0" step="1000" /></div>
-          <div class="field"><label for="planTeacherPeriod">Thời hạn 1 kỳ (số ngày)</label><input type="number" id="planTeacherPeriod" min="1" step="1" /></div>
-          <div class="field"><label for="planMaxGroups">Gói miễn phí: tối đa số nhóm</label><input type="number" id="planMaxGroups" min="0" step="1" /></div>
-          <div class="field"><label for="planMaxStudents">Gói miễn phí: tối đa số học sinh</label><input type="number" id="planMaxStudents" min="0" step="1" /></div>
-          <div class="field"><label for="planMaxChapters">Gói miễn phí: tối đa số chương tự soạn</label><input type="number" id="planMaxChapters" min="0" step="1" /></div>
-          <div class="field"><label for="planStudentPrice">Giá gói Premium cho học sinh (đ/kỳ)</label><input type="number" id="planStudentPrice" min="0" step="1000" /></div>
-          <div class="field"><label for="planStudentPeriod">Thời hạn 1 kỳ (số ngày)</label><input type="number" id="planStudentPeriod" min="1" step="1" /></div>
-          <p class="hint" style="font-weight:700;margin:14px 0 -2px;">Hoa hồng khi giáo viên mua Pro — người nhận LUÔN LÀ giáo viên (F1: người giới thiệu trực tiếp, F2: người giới thiệu F1)</p>
-          <div class="field"><label for="commissionTF1">Hoa hồng cấp 1 (F1) %</label><input type="number" id="commissionTF1" min="0" max="100" step="1" /></div>
-          <div class="field"><label for="commissionTF2">Hoa hồng cấp 2 (F2) %</label><input type="number" id="commissionTF2" min="0" max="100" step="1" /></div>
-          <div class="field"><label for="commissionTHold">Số ngày giữ trước khi được rút</label><input type="number" id="commissionTHold" min="0" step="1" /></div>
-          <p class="hint" style="font-weight:700;margin:14px 0 -2px;">Hoa hồng khi học sinh mua Premium — học sinh KHÔNG nhận hoa hồng (chỉ là kênh chia sẻ); F1 = giáo viên chủ nhóm của học sinh đó, F2 = người giới thiệu giáo viên đó</p>
-          <div class="field"><label for="commissionSF1">Hoa hồng cấp 1 (F1) %</label><input type="number" id="commissionSF1" min="0" max="100" step="1" /></div>
-          <div class="field"><label for="commissionSF2">Hoa hồng cấp 2 (F2) %</label><input type="number" id="commissionSF2" min="0" max="100" step="1" /></div>
-          <div class="field"><label for="commissionSHold">Số ngày giữ trước khi được rút</label><input type="number" id="commissionSHold" min="0" step="1" /></div>
-          <button class="btn primary block" id="savePlansBtn">Lưu gói &amp; giá &amp; hoa hồng</button>
-          <div class="result-box" id="savePlansResult"></div>
+          <p class="hint" style="margin-top:-4px;">Chọn 1 mục để chỉnh giá / giới hạn.</p>
+          <div class="action-grid">
+            <button class="btn plans-sub-btn" data-sub="teacher" type="button">🧑‍🏫 Gói giáo viên</button>
+            <button class="btn plans-sub-btn" data-sub="student" type="button">🎓 Gói học sinh</button>
+            <button class="btn plans-sub-btn" data-sub="free" type="button">🆓 Giới hạn miễn phí</button>
+          </div>
+        </div>
+        <div id="plansSubPanel"></div>
+      `;
+      let openSub = null;
+      $$('.plans-sub-btn', panel).forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.sub;
+          const sub = $('#plansSubPanel');
+          if (openSub === key) {
+            sub.innerHTML = '';
+            btn.classList.remove('has-open');
+            openSub = null;
+            return;
+          }
+          $$('.plans-sub-btn', panel).forEach((b) => b.classList.remove('has-open'));
+          btn.classList.add('has-open');
+          openSub = key;
+          if (key === 'teacher') renderPlanTiersEditor(sub, 'teacherPlans', '🧑‍🏫 Gói giáo viên (Pro)');
+          else if (key === 'student') renderPlanTiersEditor(sub, 'studentPlans', '🎓 Gói học sinh (Premium)');
+          else renderFreeLimitsEditor(sub);
+        });
+      });
+    }
+
+    // Form 3 mức (1 tháng/6 tháng/1 năm) dùng chung cho cả gói giáo viên lẫn học sinh —
+    // cfgKey là 'teacherPlans' hoặc 'studentPlans' (xem MONETIZATION_DEFAULTS trong monetization.js).
+    function renderPlanTiersEditor(container, cfgKey, title) {
+      const plans = cfg[cfgKey];
+      container.innerHTML = `
+        <div class="card">
+          <h3 style="margin:0 0 8px;">${escapeHtml(title)}</h3>
+          ${PLAN_TIER_ORDER.map((id) => `
+            <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;">
+              <p class="hint" style="font-weight:700;margin:0 0 6px;">${escapeHtml(plans[id].label)}</p>
+              <div class="field"><label for="tier_${id}_price">Giá (đ)</label><input type="number" id="tier_${id}_price" min="0" step="1000" value="${plans[id].price}" /></div>
+              <div class="field"><label for="tier_${id}_period">Số ngày</label><input type="number" id="tier_${id}_period" min="1" step="1" value="${plans[id].periodDays}" /></div>
+            </div>
+          `).join('')}
+          <button class="btn primary block" id="saveTierBtn" style="margin-top:12px;">Lưu</button>
+          <div class="result-box" id="saveTierResult"></div>
         </div>
       `;
-      $('#planTeacherPrice').value = cfg.teacherPlan.price;
-      $('#planTeacherPeriod').value = cfg.teacherPlan.periodDays;
-      $('#planMaxGroups').value = cfg.teacherPlan.maxGroupsFree;
-      $('#planMaxStudents').value = cfg.teacherPlan.maxStudentsFree;
-      $('#planMaxChapters').value = cfg.teacherPlan.maxCustomChaptersFree;
-      $('#planStudentPrice').value = cfg.studentPlan.price;
-      $('#planStudentPeriod').value = cfg.studentPlan.periodDays;
-      $('#commissionTF1').value = cfg.commission.teacherF1Percent;
-      $('#commissionTF2').value = cfg.commission.teacherF2Percent;
-      $('#commissionTHold').value = cfg.commission.teacherHoldDays;
-      $('#commissionSF1').value = cfg.commission.studentF1Percent;
-      $('#commissionSF2').value = cfg.commission.studentF2Percent;
-      $('#commissionSHold').value = cfg.commission.studentHoldDays;
-
-      $('#savePlansBtn').addEventListener('click', async () => {
-        const box = $('#savePlansResult');
+      $('#saveTierBtn').addEventListener('click', async () => {
+        const box = $('#saveTierResult');
         showResult(box, '⏳ Đang lưu...');
         try {
-          const pct = (id) => Math.min(100, Math.max(0, Number($(id).value) || 0));
-          const commission = {
-            teacherF1Percent: pct('#commissionTF1'),
-            teacherF2Percent: pct('#commissionTF2'),
-            teacherHoldDays: Math.max(0, Number($('#commissionTHold').value) || 0),
-            studentF1Percent: pct('#commissionSF1'),
-            studentF2Percent: pct('#commissionSF2'),
-            studentHoldDays: Math.max(0, Number($('#commissionSHold').value) || 0)
-          };
-          await Promise.all([
-            saveMonetizationConfig({
-              teacherPlan: {
-                price: Number($('#planTeacherPrice').value) || 0,
-                periodDays: Math.max(1, Number($('#planTeacherPeriod').value) || 30),
-                maxGroupsFree: Math.max(0, Number($('#planMaxGroups').value) || 0),
-                maxStudentsFree: Math.max(0, Number($('#planMaxStudents').value) || 0),
-                maxCustomChaptersFree: Math.max(0, Number($('#planMaxChapters').value) || 0)
-              },
-              studentPlan: {
-                price: Number($('#planStudentPrice').value) || 0,
-                periodDays: Math.max(1, Number($('#planStudentPeriod').value) || 30)
-              }
-            }),
-            saveCommissionRate(commission, MONETIZATION_ADMIN_EMAIL)
-          ]);
+          const updated = {};
+          PLAN_TIER_ORDER.forEach((id) => {
+            updated[id] = {
+              label: plans[id].label,
+              price: Math.max(0, Number($(`#tier_${id}_price`).value) || 0),
+              periodDays: Math.max(1, Number($(`#tier_${id}_period`).value) || 1)
+            };
+          });
+          await saveMonetizationConfig({ [cfgKey]: updated });
           cfg = await getMonetizationConfig();
           showResult(box, '✅ Đã lưu.');
         } catch (e) {
@@ -466,25 +465,35 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
       });
     }
 
-    // ---------- 📜 Lịch sử % hoa hồng ----------
-    async function buildRateHistorySection(panel) {
-      panel.innerHTML = `<div class="card"><h2><span class="icon">📜</span>Lịch sử % hoa hồng</h2><div id="rateHistoryBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
-      const box = $('#rateHistoryBody');
-      try {
-        const snap = await db.collection('commissionRateHistory').get();
-        const list = snap.docs.map((d) => d.data()).sort((a, b) => (b.changedAt || '').localeCompare(a.changedAt || ''));
-        if (!list.length) { box.innerHTML = '<p class="hint">Chưa có thay đổi nào — vẫn đang dùng mức mặc định.</p>'; return; }
-        box.innerHTML = list.map((r) => `
-          <div class="hint" style="padding:8px 0;border-top:1px solid var(--border);">
-            ${escapeHtml((r.changedAt || '').replace('T', ' ').slice(0, 16))} —
-            Giáo viên: F1 ${r.teacherF1Percent}%/F2 ${r.teacherF2Percent}% (giữ ${r.teacherHoldDays} ngày) ·
-            Học sinh: F1 ${r.studentF1Percent}%/F2 ${r.studentF2Percent}% (giữ ${r.studentHoldDays} ngày)
-            <span style="color:var(--text-faint);">(${escapeHtml(r.changedBy || '')})</span>
-          </div>
-        `).join('');
-      } catch (e) {
-        box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
-      }
+    function renderFreeLimitsEditor(container) {
+      const lim = cfg.teacherFreeLimits;
+      container.innerHTML = `
+        <div class="card">
+          <h3 style="margin:0 0 8px;">🆓 Giới hạn gói miễn phí (giáo viên)</h3>
+          <div class="field"><label for="planMaxGroups">Tối đa số nhóm</label><input type="number" id="planMaxGroups" min="0" step="1" value="${lim.maxGroupsFree}" /></div>
+          <div class="field"><label for="planMaxStudents">Tối đa số học sinh</label><input type="number" id="planMaxStudents" min="0" step="1" value="${lim.maxStudentsFree}" /></div>
+          <div class="field"><label for="planMaxChapters">Tối đa số chương tự soạn</label><input type="number" id="planMaxChapters" min="0" step="1" value="${lim.maxCustomChaptersFree}" /></div>
+          <button class="btn primary block" id="saveFreeLimitsBtn" style="margin-top:12px;">Lưu</button>
+          <div class="result-box" id="saveFreeLimitsResult"></div>
+        </div>
+      `;
+      $('#saveFreeLimitsBtn').addEventListener('click', async () => {
+        const box = $('#saveFreeLimitsResult');
+        showResult(box, '⏳ Đang lưu...');
+        try {
+          await saveMonetizationConfig({
+            teacherFreeLimits: {
+              maxGroupsFree: Math.max(0, Number($('#planMaxGroups').value) || 0),
+              maxStudentsFree: Math.max(0, Number($('#planMaxStudents').value) || 0),
+              maxCustomChaptersFree: Math.max(0, Number($('#planMaxChapters').value) || 0)
+            }
+          });
+          cfg = await getMonetizationConfig();
+          showResult(box, '✅ Đã lưu.');
+        } catch (e) {
+          showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        }
+      });
     }
 
     // ---------- 🏦 Thông tin chuyển khoản ----------
@@ -571,13 +580,19 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
       const nowIso = now.toISOString();
       const batch = db.batch();
 
+      // sub.planId do người mua tự chọn lúc gửi yêu cầu (xem upgrade.js) — đơn cũ trước khi có lựa
+      // chọn nhiều mức thì mặc định về 'month1' để vẫn duyệt được bình thường.
+      const planId = (sub.planId && PLAN_TIER_ORDER.includes(sub.planId)) ? sub.planId : 'month1';
+
       if (sub.type === 'teacher_upgrade') {
-        const expiresAt = new Date(now.getTime() + freshCfg.teacherPlan.periodDays * 86400000).toISOString();
+        const periodDays = freshCfg.teacherPlans[planId].periodDays;
+        const expiresAt = new Date(now.getTime() + periodDays * 86400000).toISOString();
         batch.set(db.collection('subscriptions').doc(sub.submitterUid),
           { tier: 'pro', expiresAt, updatedAt: nowIso, updatedBy: MONETIZATION_ADMIN_EMAIL }, { merge: true });
         await createReferralCommissions(sub, freshCfg, freshCfg.commission.teacherF1Percent, freshCfg.commission.teacherF2Percent, freshCfg.commission.teacherHoldDays, nowIso, batch);
       } else {
-        const expiresAt = new Date(now.getTime() + freshCfg.studentPlan.periodDays * 86400000).toISOString();
+        const periodDays = freshCfg.studentPlans[planId].periodDays;
+        const expiresAt = new Date(now.getTime() + periodDays * 86400000).toISOString();
         batch.set(db.collection('studentSubscriptions').doc(sub.submitterDeviceId),
           { tier: 'premium', expiresAt, updatedAt: nowIso }, { merge: true });
         await createReferralCommissions(sub, freshCfg, freshCfg.commission.studentF1Percent, freshCfg.commission.studentF2Percent, freshCfg.commission.studentHoldDays, nowIso, batch);
@@ -591,11 +606,6 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
       await db.collection('paymentSubmissions').doc(sub.id).update({
         status: 'rejected', reviewedAt: new Date().toISOString(), reviewedBy: MONETIZATION_ADMIN_EMAIL
       });
-    }
-
-    async function buildPendingSection(panel) {
-      panel.innerHTML = `<div class="card"><h2><span class="icon">🧾</span>Duyệt thanh toán</h2><div id="pendingPaymentsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
-      await renderPendingPayments();
     }
 
     async function renderPendingPayments() {
@@ -655,10 +665,116 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
       }
     }
 
-    // ---------- 💰 Hoa hồng cần trả ----------
+    // ---------- 💰 Hoa hồng ----------
+    // 1 hub gộp cả 3 mục liên quan hoa hồng (trước đây là 3 nút riêng: "Gói & giá" phần %, "Duyệt
+    // thanh toán", "Lịch sử % hoa hồng") — cùng kiểu lưới nút phụ như buildPlansSection ở trên.
     async function buildCommissionsSection(panel) {
-      panel.innerHTML = `<div class="card"><h2><span class="icon">💰</span>Hoa hồng cần trả</h2><div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
-      await renderCommissions();
+      panel.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">💰</span>Hoa hồng</h2>
+          <div class="action-grid">
+            <button class="btn comm-sub-btn" data-sub="settings" type="button">⚙️ Cài đặt hoa hồng</button>
+            <button class="btn comm-sub-btn" data-sub="history" type="button">🧾 Lịch sử chi trả hoa hồng</button>
+            <button class="btn comm-sub-btn" data-sub="pending" type="button">📋 Chờ duyệt</button>
+          </div>
+        </div>
+        <div id="commSubPanel"></div>
+      `;
+      let openSub = null;
+      $$('.comm-sub-btn', panel).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const key = btn.dataset.sub;
+          const sub = $('#commSubPanel');
+          if (openSub === key) {
+            sub.innerHTML = '';
+            btn.classList.remove('has-open');
+            openSub = null;
+            return;
+          }
+          $$('.comm-sub-btn', panel).forEach((b) => b.classList.remove('has-open'));
+          btn.classList.add('has-open');
+          openSub = key;
+          sub.innerHTML = '<div class="card"><p class="hint">⏳ Đang tải...</p></div>';
+          try {
+            if (key === 'settings') {
+              await renderCommissionSettings(sub);
+            } else if (key === 'history') {
+              sub.innerHTML = `<div class="card"><h3 style="margin:0 0 8px;">🧾 Lịch sử chi trả hoa hồng</h3><div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+              await renderCommissions();
+            } else {
+              sub.innerHTML = `<div class="card"><h3 style="margin:0 0 8px;">📋 Chờ duyệt</h3><div id="pendingPaymentsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+              await renderPendingPayments();
+            }
+          } catch (e) {
+            sub.innerHTML = `<div class="card"><p class="hint">⚠️ ${escapeHtml(e.message)}</p></div>`;
+          }
+        });
+      });
+    }
+
+    // ---------- ⚙️ Cài đặt hoa hồng (sub-mục trong "💰 Hoa hồng") ----------
+    async function renderCommissionSettings(container) {
+      container.innerHTML = `
+        <div class="card">
+          <h3 style="margin:0 0 8px;">⚙️ Cài đặt hoa hồng</h3>
+          <p class="hint" style="font-weight:700;margin:0 0 -2px;">Khi giáo viên mua gói Pro — người nhận LUÔN LÀ giáo viên (F1: người giới thiệu trực tiếp, F2: người giới thiệu F1)</p>
+          <div class="field"><label for="commissionTF1">Hoa hồng cấp 1 (F1) %</label><input type="number" id="commissionTF1" min="0" max="100" step="1" value="${cfg.commission.teacherF1Percent}" /></div>
+          <div class="field"><label for="commissionTF2">Hoa hồng cấp 2 (F2) %</label><input type="number" id="commissionTF2" min="0" max="100" step="1" value="${cfg.commission.teacherF2Percent}" /></div>
+          <div class="field"><label for="commissionTHold">Số ngày giữ trước khi được rút</label><input type="number" id="commissionTHold" min="0" step="1" value="${cfg.commission.teacherHoldDays}" /></div>
+          <p class="hint" style="font-weight:700;margin:14px 0 -2px;">Khi học sinh mua gói Premium — học sinh KHÔNG nhận hoa hồng (chỉ là kênh chia sẻ); F1 = giáo viên chủ nhóm của học sinh đó, F2 = người giới thiệu giáo viên đó</p>
+          <div class="field"><label for="commissionSF1">Hoa hồng cấp 1 (F1) %</label><input type="number" id="commissionSF1" min="0" max="100" step="1" value="${cfg.commission.studentF1Percent}" /></div>
+          <div class="field"><label for="commissionSF2">Hoa hồng cấp 2 (F2) %</label><input type="number" id="commissionSF2" min="0" max="100" step="1" value="${cfg.commission.studentF2Percent}" /></div>
+          <div class="field"><label for="commissionSHold">Số ngày giữ trước khi được rút</label><input type="number" id="commissionSHold" min="0" step="1" value="${cfg.commission.studentHoldDays}" /></div>
+          <button class="btn primary block" id="saveCommissionBtn" style="margin-top:8px;">Lưu cài đặt hoa hồng</button>
+          <div class="result-box" id="saveCommissionResult"></div>
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 8px;">📜 Lịch sử thay đổi</h3>
+          <div id="rateHistoryBody"><p class="hint">⏳ Đang tải...</p></div>
+        </div>
+      `;
+      $('#saveCommissionBtn').addEventListener('click', async () => {
+        const box = $('#saveCommissionResult');
+        showResult(box, '⏳ Đang lưu...');
+        try {
+          const pct = (id) => Math.min(100, Math.max(0, Number($(id).value) || 0));
+          const commission = {
+            teacherF1Percent: pct('#commissionTF1'),
+            teacherF2Percent: pct('#commissionTF2'),
+            teacherHoldDays: Math.max(0, Number($('#commissionTHold').value) || 0),
+            studentF1Percent: pct('#commissionSF1'),
+            studentF2Percent: pct('#commissionSF2'),
+            studentHoldDays: Math.max(0, Number($('#commissionSHold').value) || 0)
+          };
+          await saveCommissionRate(commission, MONETIZATION_ADMIN_EMAIL);
+          cfg = await getMonetizationConfig();
+          showResult(box, '✅ Đã lưu.');
+          await renderRateHistory();
+        } catch (e) {
+          showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        }
+      });
+      await renderRateHistory();
+    }
+
+    async function renderRateHistory() {
+      const box = $('#rateHistoryBody');
+      if (!box) return;
+      try {
+        const snap = await db.collection('commissionRateHistory').get();
+        const list = snap.docs.map((d) => d.data()).sort((a, b) => (b.changedAt || '').localeCompare(a.changedAt || ''));
+        if (!list.length) { box.innerHTML = '<p class="hint">Chưa có thay đổi nào — vẫn đang dùng mức mặc định.</p>'; return; }
+        box.innerHTML = list.map((r) => `
+          <div class="hint" style="padding:8px 0;border-top:1px solid var(--border);">
+            ${escapeHtml((r.changedAt || '').replace('T', ' ').slice(0, 16))} —
+            Giáo viên: F1 ${r.teacherF1Percent}%/F2 ${r.teacherF2Percent}% (giữ ${r.teacherHoldDays} ngày) ·
+            Học sinh: F1 ${r.studentF1Percent}%/F2 ${r.studentF2Percent}% (giữ ${r.studentHoldDays} ngày)
+            <span style="color:var(--text-faint);">(${escapeHtml(r.changedBy || '')})</span>
+          </div>
+        `).join('');
+      } catch (e) {
+        box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+      }
     }
 
     async function renderCommissions() {

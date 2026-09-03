@@ -2,6 +2,13 @@
 // tránh viết trùng form "Tôi đã chuyển khoản" ở 2 nơi. Tự nhận diện đang là giáo viên hay học sinh
 // giống hệt cách trang chủ (index.html) đang làm: resolveEffectiveTeacherUid() (auth.js) kết hợp vai
 // trò đang chọn (role.js) — xem chú thích trong resolveContentOwner() (auth.js) để hiểu đầy đủ lý do.
+//
+// Mỗi đối tượng (giáo viên/học sinh) có 3 mức thời hạn (1 tháng/6 tháng/1 năm, xem
+// MONETIZATION_DEFAULTS.teacherPlans/studentPlans trong monetization.js) — người mua tự chọn 1 mức
+// bằng lưới nút trước khi xác nhận chuyển khoản, mã "planId" được gửi kèm để admin biết đúng thời
+// hạn cần cấp khi duyệt (xem approvePayment() trong admin.js).
+
+const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
 
 (async function () {
   const main = $('#upgradeMain');
@@ -22,9 +29,48 @@
   const membership = getMembership();
 
   if (effectiveTeacherUid && role !== 'student') {
-    await renderTeacherUpgrade(effectiveTeacherUid);
+    await renderUpgradeFlow({
+      plans: cfg.teacherPlans,
+      title: 'Gói Pro cho giáo viên',
+      currentSub: await getTeacherSubscription(effectiveTeacherUid),
+      currentTierLabel: 'Pro',
+      extraDesc: 'Không giới hạn số nhóm, số học sinh, số chương tự soạn.',
+      submit: async (plan, planId, contact, note) => {
+        const user = getCurrentTeacher();
+        const profile = await fetchTeacherProfile(effectiveTeacherUid).catch(() => null);
+        let referrerTeacherUid = null;
+        if (profile && profile.referredBy) referrerTeacherUid = await findTeacherUidByCode(profile.referredBy);
+        return submitPaymentRequest({
+          type: 'teacher_upgrade',
+          planId,
+          submitterUid: effectiveTeacherUid,
+          submitterName: (profile && profile.displayName) || user.displayName || user.email || '',
+          amount: plan.price,
+          referrerTeacherUid,
+          contact,
+          note
+        });
+      }
+    });
   } else if (membership && membership.groupCode) {
-    await renderStudentUpgrade(membership);
+    await renderUpgradeFlow({
+      plans: cfg.studentPlans,
+      title: 'Gói Premium cho học sinh',
+      currentSub: await getStudentSubscription(getDeviceId()),
+      currentTierLabel: 'Premium',
+      extraDesc: 'Mở khoá tính năng nâng cao.',
+      defaultContact: membership.phone || '',
+      submit: async (plan, planId, contact, note) => submitPaymentRequest({
+        type: 'student_upgrade',
+        planId,
+        submitterDeviceId: getDeviceId(),
+        submitterName: membership.studentName || '',
+        amount: plan.price,
+        referrerTeacherUid: membership.teacherUid || null,
+        contact,
+        note
+      })
+    });
   } else {
     main.innerHTML = `
       <div class="card">
@@ -74,78 +120,37 @@
     `;
   }
 
-  async function renderTeacherUpgrade(uid) {
-    const user = getCurrentTeacher();
-    const [sub, profile, orderCode] = await Promise.all([
-      getTeacherSubscription(uid), fetchTeacherProfile(uid).catch(() => null), genOrderCode()
-    ]);
-    const plan = cfg.teacherPlan;
-    main.innerHTML = `
-      <div class="card">
-        <h2><span class="icon">⭐</span>Gói Pro cho giáo viên</h2>
-        <p class="hint">Trạng thái hiện tại: <strong>${sub.tier === 'pro' ? `Pro (hết hạn ${escapeHtml((sub.expiresAt || '').slice(0, 10))})` : 'Miễn phí'}</strong></p>
-        <p class="hint">Không giới hạn số nhóm, số học sinh, số chương tự soạn. Giá: <strong>${formatVnd(plan.price)}</strong> / ${plan.periodDays} ngày.</p>
-      </div>
-      <div class="card">
-        <h2><span class="icon">🏦</span>Chuyển khoản</h2>
-        ${paymentInfoHtml(orderCode)}
-      </div>
-      <div class="card">
-        <h2><span class="icon">✍️</span>Xác nhận đã chuyển khoản</h2>
-        <div class="field">
-          <label for="upgradeContact">Số điện thoại/Zalo để admin liên hệ nếu cần</label>
-          <input type="tel" id="upgradeContact" placeholder="VD: 0912345678" />
-        </div>
-        <div class="field">
-          <label for="upgradeNote">Ghi chú (VD: đã chuyển khoản lúc mấy giờ)</label>
-          <textarea id="upgradeNote" rows="2"></textarea>
-        </div>
-        <button class="btn primary block" id="upgradeSubmitBtn">Tôi đã chuyển khoản</button>
-        <div class="result-box" id="upgradeResult"></div>
-      </div>
-    `;
-    $('#upgradeSubmitBtn').addEventListener('click', async () => {
-      const box = $('#upgradeResult');
-      showResult(box, '⏳ Đang gửi...');
-      try {
-        let referrerTeacherUid = null;
-        if (profile && profile.referredBy) referrerTeacherUid = await findTeacherUidByCode(profile.referredBy);
-        await submitPaymentRequest({
-          type: 'teacher_upgrade',
-          orderCode,
-          submitterUid: uid,
-          submitterName: (profile && profile.displayName) || user.displayName || user.email || '',
-          submitterContact: $('#upgradeContact').value.trim(),
-          note: $('#upgradeNote').value.trim(),
-          amount: plan.price,
-          referrerTeacherUid
-        });
-        renderSuccess(orderCode);
-      } catch (e) {
-        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
-      }
-    });
-  }
+  // opts = { plans: {month1,month6,year1}, title, currentSub, currentTierLabel, extraDesc,
+  //          defaultContact, submit(plan, planId) }
+  async function renderUpgradeFlow(opts) {
+    const orderCode = await genOrderCode();
+    let selectedId = PLAN_TIER_ORDER.find((id) => opts.plans[id]) || 'month1';
 
-  async function renderStudentUpgrade(m) {
-    const deviceId = getDeviceId();
-    const [sub, orderCode] = await Promise.all([getStudentSubscription(deviceId), genOrderCode()]);
-    const plan = cfg.studentPlan;
+    function currentPlan() { return opts.plans[selectedId]; }
+
     main.innerHTML = `
       <div class="card">
-        <h2><span class="icon">⭐</span>Gói Premium cho học sinh</h2>
-        <p class="hint">Trạng thái hiện tại: <strong>${sub.tier === 'premium' ? `Premium (hết hạn ${escapeHtml((sub.expiresAt || '').slice(0, 10))})` : 'Miễn phí'}</strong></p>
-        <p class="hint">Mở khoá tính năng nâng cao. Giá: <strong>${formatVnd(plan.price)}</strong> / ${plan.periodDays} ngày.</p>
+        <h2><span class="icon">⭐</span>${escapeHtml(opts.title)}</h2>
+        <p class="hint">Trạng thái hiện tại: <strong>${opts.currentSub.tier === 'pro' || opts.currentSub.tier === 'premium' ? `${opts.currentTierLabel} (hết hạn ${escapeHtml((opts.currentSub.expiresAt || '').slice(0, 10))})` : 'Miễn phí'}</strong></p>
+        <p class="hint" style="margin-top:-4px;">${escapeHtml(opts.extraDesc)} Chọn thời hạn:</p>
+        <div class="action-grid" id="planPicker">
+          ${PLAN_TIER_ORDER.filter((id) => opts.plans[id]).map((id) => `
+            <button class="btn plan-pick-btn ${id === selectedId ? 'has-open' : ''}" type="button" data-plan="${id}">
+              ${escapeHtml(opts.plans[id].label)}<br/><strong>${formatVnd(opts.plans[id].price)}</strong>
+            </button>
+          `).join('')}
+        </div>
       </div>
       <div class="card">
         <h2><span class="icon">🏦</span>Chuyển khoản</h2>
+        <p class="hint">Số tiền cần chuyển: <strong id="planAmountDisplay" style="color:var(--brand);">${formatVnd(currentPlan().price)}</strong></p>
         ${paymentInfoHtml(orderCode)}
       </div>
       <div class="card">
         <h2><span class="icon">✍️</span>Xác nhận đã chuyển khoản</h2>
         <div class="field">
           <label for="upgradeContact">Số điện thoại/Zalo để admin liên hệ nếu cần</label>
-          <input type="tel" id="upgradeContact" value="${escapeHtml(m.phone || '')}" placeholder="VD: 0912345678" />
+          <input type="tel" id="upgradeContact" value="${escapeHtml(opts.defaultContact || '')}" placeholder="VD: 0912345678" />
         </div>
         <div class="field">
           <label for="upgradeNote">Ghi chú (VD: đã chuyển khoản lúc mấy giờ)</label>
@@ -155,20 +160,23 @@
         <div class="result-box" id="upgradeResult"></div>
       </div>
     `;
+
+    $$('.plan-pick-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedId = btn.dataset.plan;
+        $$('.plan-pick-btn').forEach((b) => b.classList.toggle('has-open', b.dataset.plan === selectedId));
+        $('#planAmountDisplay').textContent = formatVnd(currentPlan().price);
+      });
+    });
+
     $('#upgradeSubmitBtn').addEventListener('click', async () => {
       const box = $('#upgradeResult');
       showResult(box, '⏳ Đang gửi...');
       try {
-        await submitPaymentRequest({
-          type: 'student_upgrade',
-          orderCode,
-          submitterDeviceId: deviceId,
-          submitterName: m.studentName || '',
-          submitterContact: $('#upgradeContact').value.trim(),
-          note: $('#upgradeNote').value.trim(),
-          amount: plan.price,
-          referrerTeacherUid: m.teacherUid || null
-        });
+        const plan = currentPlan();
+        const contact = $('#upgradeContact').value.trim();
+        const note = $('#upgradeNote').value.trim();
+        await opts.submit(plan, selectedId, contact, note);
         renderSuccess(orderCode);
       } catch (e) {
         showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
