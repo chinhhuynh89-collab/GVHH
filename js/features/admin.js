@@ -565,6 +565,26 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         } catch (e) { /* không tra được F2 thì bỏ qua, F1 vẫn được trả bình thường */ }
       }
 
+      // Chụp lại email người mua + tên gói NGAY LÚC DUYỆT (không tra lại mỗi lần xem sau này) —
+      // giống cách "percent" đã snapshot sẵn: tránh mỗi lần giáo viên mở "Thống kê hoa hồng của tôi"
+      // lại phải đọc thêm N lần, và giữ đúng dữ liệu lịch sử dù sau này người mua đổi email hay admin
+      // đổi tên gói. Bản ghi hoa hồng CŨ (tạo trước khi có 2 field này) sẽ không có — nơi hiển thị tự
+      // hiện "—" cho trường hợp đó.
+      const planId = (sub.planId && PLAN_TIER_ORDER.includes(sub.planId)) ? sub.planId : 'month1';
+      const planLabel = sub.type === 'teacher_upgrade'
+        ? ((freshCfg.teacherPlans[planId] && freshCfg.teacherPlans[planId].label) || planId)
+        : ((freshCfg.studentPlans[planId] && freshCfg.studentPlans[planId].label) || planId);
+      let sourceEmail = '';
+      try {
+        if (sub.type === 'teacher_upgrade' && sub.submitterUid) {
+          const buyerDoc = await db.collection('teachers').doc(sub.submitterUid).get();
+          sourceEmail = buyerDoc.exists ? (buyerDoc.data().email || '') : '';
+        } else if (sub.submitterStudentUid) {
+          const studentsSnap = await db.collection('students').where('studentUid', '==', sub.submitterStudentUid).limit(1).get();
+          sourceEmail = !studentsSnap.empty ? (studentsSnap.docs[0].data().email || '') : '';
+        }
+      } catch (e) { /* không tra được email thì bỏ qua, không chặn duyệt */ }
+
       const holdUntil = new Date(Date.now() + (Number(holdDays) || 0) * 86400000).toISOString();
       const tiers = [];
       if (f1Uid) tiers.push({ uid: f1Uid, tier: 'F1', percent: f1Percent });
@@ -579,6 +599,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
           beneficiaryTeacherUid: t.uid, tier: t.tier,
           sourceType: sub.type === 'teacher_upgrade' ? 'teacher_referral' : 'student_referral',
           sourcePaymentId: sub.id, sourceName: sub.submitterName || '', sourceOrderCode: sub.orderCode || '',
+          sourceEmail, sourcePlanLabel: planLabel,
           amount, percent: t.percent, status: 'pending_hold', holdUntil, createdAt: nowIso
         });
       }

@@ -288,101 +288,198 @@ function resizeImageToDataUrl(file) {
     }
 
     // ---------- ⭐ Gói & hoa hồng ----------
+    // Đổi từ 3 khối hiện sẵn cùng lúc sang 1 hub lưới nút phụ (giống "💰 Hoa hồng" ở trang quản trị)
+    // — bấm nút nào chỉ mở đúng khung đó, đỡ phải cuộn qua nhiều khối không cần xem ngay.
     async function buildPlanSection(panel) {
       panel.innerHTML = `
         <div class="card">
-          <h2><span class="icon">⭐</span>Gói của bạn</h2>
-          <div id="subscriptionBody"><p class="hint">⏳ Đang tải...</p></div>
+          <h2><span class="icon">⭐</span>Gói &amp; hoa hồng</h2>
+          <div class="action-grid">
+            <button class="btn plan-sub-btn" data-sub="sub" type="button">⭐ Gói của bạn</button>
+            <button class="btn plan-sub-btn" data-sub="guide" type="button">📖 Hướng dẫn</button>
+            <button class="btn plan-sub-btn" data-sub="program" type="button">💰 Chương trình hoa hồng</button>
+            <button class="btn plan-sub-btn" data-sub="stats" type="button">📊 Thống kê hoa hồng của tôi</button>
+            <button class="btn plan-sub-btn" data-sub="referred" type="button">🌳 Đã giới thiệu</button>
+          </div>
         </div>
-        <div class="card">
-          <h2><span class="icon">💰</span>Hoa hồng của tôi</h2>
-          <p class="hint" style="margin-top:-4px;">Nhận hoa hồng khi: (1) giáo viên bạn giới thiệu nâng cấp gói Pro, hoặc (2) học sinh trong nhóm của bạn nâng cấp Premium — cấp 1 (F1) là người/nhóm trực tiếp của bạn, cấp 2 (F2) là 1 tầng xa hơn (VD giáo viên bạn giới thiệu lại giới thiệu tiếp người khác). Học sinh không bao giờ nhận hoa hồng, kể cả khi tự chia sẻ link cho bạn bè.</p>
-          <div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div>
-        </div>
-        <div class="card">
-          <h2><span class="icon">🌳</span>Giáo viên bạn đã giới thiệu</h2>
-          <div id="referredTeachersBody"><p class="hint">⏳ Đang tải...</p></div>
-        </div>
+        <div id="planSubPanel"></div>
       `;
-      await renderSubscriptionAndCommissions(user);
+      let openSub = null;
+      $$('.plan-sub-btn', panel).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const key = btn.dataset.sub;
+          const sub = $('#planSubPanel');
+          if (openSub === key) {
+            sub.innerHTML = '';
+            btn.classList.remove('has-open');
+            openSub = null;
+            return;
+          }
+          $$('.plan-sub-btn', panel).forEach((b) => b.classList.remove('has-open'));
+          btn.classList.add('has-open');
+          openSub = key;
+          sub.innerHTML = '<div class="card"><p class="hint">⏳ Đang tải...</p></div>';
+          try {
+            if (key === 'sub') await renderSubscriptionPanel(user, sub);
+            else if (key === 'guide') renderCommissionGuide(sub);
+            else if (key === 'program') await renderCommissionProgram(sub);
+            else if (key === 'stats') await renderCommissionStats(user, sub);
+            else await renderReferredTeachers(user, sub);
+          } catch (e) {
+            sub.innerHTML = `<div class="card"><p class="hint">⚠️ ${escapeHtml(e.message)}</p></div>`;
+          }
+        });
+      });
     }
   });
 })();
 
-// "Gói của bạn" + "Hoa hồng của tôi" + "Giáo viên bạn đã giới thiệu" — chỉ hiện nội dung thật khi
-// admin đã bật công tắc tổng (config/monetization); ngược lại báo rõ để giáo viên không thắc mắc
-// sao trống trơn.
-async function renderSubscriptionAndCommissions(user) {
-  const subBody = $('#subscriptionBody');
-  const commBody = $('#commissionsBody');
-  const referredBody = $('#referredTeachersBody');
+// ---------- ⭐ Gói của bạn (sub-mục trong "Gói & hoa hồng") ----------
+async function renderSubscriptionPanel(user, container) {
+  container.innerHTML = `<div class="card"><h3 style="margin:0 0 8px;">⭐ Gói của bạn</h3><div id="subscriptionBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+  const box = $('#subscriptionBody');
   const cfg = await getMonetizationConfig();
-  if (!cfg.enabled) {
-    subBody.innerHTML = '<p class="hint">Chưa mở tính năng gói trả phí vào lúc này.</p>';
-    commBody.innerHTML = '<p class="hint">Chưa mở tính năng hoa hồng vào lúc này.</p>';
-    referredBody.innerHTML = '<p class="hint">Chưa mở tính năng hoa hồng vào lúc này.</p>';
-    return;
-  }
-
+  if (!cfg.enabled) { box.innerHTML = '<p class="hint">Chưa mở tính năng gói trả phí vào lúc này.</p>'; return; }
   const sub = await getTeacherSubscription(user.uid);
   if (sub.tier === 'pro') {
-    subBody.innerHTML = `
+    box.innerHTML = `
       <p class="hint">Trạng thái: <strong style="color:var(--brand);">Pro</strong> — hết hạn ${escapeHtml((sub.expiresAt || '').slice(0, 10))}.</p>
       <a class="btn block" href="nang-cap.html">Gia hạn / xem lại thông tin gói</a>
     `;
   } else {
-    subBody.innerHTML = `
+    box.innerHTML = `
       <p class="hint">Trạng thái: <strong>Miễn phí</strong> — giới hạn ${cfg.teacherFreeLimits.maxGroupsFree} nhóm, ${cfg.teacherFreeLimits.maxStudentsFree} học sinh.</p>
       <a class="btn primary block" href="nang-cap.html">⭐ Nâng cấp lên Pro</a>
     `;
   }
+}
 
+// ---------- 📖 Hướng dẫn (sub-mục trong "Gói & hoa hồng") ----------
+// Nội dung tĩnh, không cần tải gì — chỉ giải thích lại cơ chế F1/F2 (trước đây là 1 dòng hint nhỏ
+// phía trên bảng hoa hồng, giờ tách hẳn ra để dễ tìm/đọc hơn).
+function renderCommissionGuide(container) {
+  container.innerHTML = `
+    <div class="card">
+      <h3 style="margin:0 0 8px;">📖 Hướng dẫn hoa hồng</h3>
+      <p class="hint">Bạn nhận hoa hồng khi:</p>
+      <ol class="hint" style="padding-left:18px;line-height:1.8;margin:0 0 10px;">
+        <li><strong style="color:var(--text);">Giáo viên bạn giới thiệu</strong> nâng cấp gói Pro — bạn là <strong style="color:var(--brand);">F1</strong> của họ.</li>
+        <li><strong style="color:var(--text);">Học sinh trong nhóm của bạn</strong> nâng cấp Premium — bạn là <strong style="color:var(--brand);">F1</strong> của em học sinh đó (dù em có tự chia sẻ link cho bạn bè, hoa hồng vẫn về đúng bạn — giáo viên chủ nhóm).</li>
+      </ol>
+      <p class="hint">Nếu người bạn giới thiệu (F1) lại giới thiệu tiếp 1 giáo viên khác, và giáo viên đó nâng cấp — bạn nhận thêm hoa hồng <strong style="color:var(--brand);">F2</strong> (thấp hơn F1). Học sinh không bao giờ nhận hoa hồng, dù có mua gói hay chia sẻ link cho ai.</p>
+      <p class="hint">Mỗi khoản hoa hồng được <strong>giữ 1 số ngày</strong> (xem mục "💰 Chương trình hoa hồng") trước khi đủ điều kiện rút, để phòng người mua huỷ/hoàn tiền. Xem chi tiết từng khoản ở mục "📊 Thống kê hoa hồng của tôi".</p>
+      <p class="hint" style="margin-bottom:0;">👉 Lấy link giới thiệu ở mục "🔑 Mã &amp; chia sẻ".</p>
+    </div>
+  `;
+}
+
+// ---------- 💰 Chương trình hoa hồng (sub-mục trong "Gói & hoa hồng") ----------
+// Đọc THẲNG config/monetization mỗi lần mở mục này (getMonetizationConfig() không cache, xem
+// monetization.js) — luôn hiện đúng mức % hiện hành, tự cập nhật ngay khi admin đổi, không cần
+// deploy lại hay giáo viên phải làm gì thêm.
+async function renderCommissionProgram(container) {
+  container.innerHTML = `<div class="card"><h3 style="margin:0 0 8px;">💰 Chương trình hoa hồng hiện tại</h3><div id="commProgramBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+  const box = $('#commProgramBody');
+  const cfg = await getMonetizationConfig();
+  if (!cfg.enabled) { box.innerHTML = '<p class="hint">Chưa mở tính năng hoa hồng vào lúc này.</p>'; return; }
+  const c = cfg.commission;
+  box.innerHTML = `
+    <p class="hint" style="margin-top:-4px;">Luôn hiện đúng mức mới nhất — tự cập nhật ngay khi quản trị viên điều chỉnh, không cần làm gì thêm.</p>
+    <div class="hint" style="font-weight:700;margin:10px 0 4px;">Khi giáo viên bạn giới thiệu mua gói Pro</div>
+    <p class="hint">F1: <strong style="color:var(--brand);">${c.teacherF1Percent}%</strong> · F2: <strong style="color:var(--brand);">${c.teacherF2Percent}%</strong> · Giữ <strong>${c.teacherHoldDays} ngày</strong> trước khi rút được</p>
+    <div class="hint" style="font-weight:700;margin:14px 0 4px;">Khi học sinh trong nhóm của bạn mua Premium</div>
+    <p class="hint">F1: <strong style="color:var(--brand);">${c.studentF1Percent}%</strong> · F2: <strong style="color:var(--brand);">${c.studentF2Percent}%</strong> · Giữ <strong>${c.studentHoldDays} ngày</strong> trước khi rút được</p>
+    <p class="hint" style="margin-top:10px;margin-bottom:0;">⚠️ Mức % này chỉ áp dụng cho giao dịch MỚI — hoa hồng đã phát sinh trước đó giữ nguyên mức % lúc phát sinh, không đổi ngược.</p>
+  `;
+}
+
+// ---------- 📊 Thống kê hoa hồng của tôi (sub-mục trong "Gói & hoa hồng") ----------
+// Bảng theo cột (giống các bảng ở trang quản trị) — đủ thời gian/mã giao dịch/người mua/email/cấp
+// F1-F2/gói/%/số tiền nhận được, cộng dòng tổng ở cuối. sourceEmail/sourcePlanLabel chỉ có ở bản ghi
+// TẠO SAU khi admin.js được cập nhật snapshot 2 field này lúc duyệt — bản ghi cũ hơn tự hiện "—".
+async function renderCommissionStats(user, container) {
+  container.innerHTML = `<div class="card"><h3 style="margin:0 0 8px;">📊 Thống kê hoa hồng của tôi</h3><div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+  const box = $('#commissionsBody');
   try {
     const { db } = ensureFirebase();
     const snap = await db.collection('commissions').where('beneficiaryTeacherUid', '==', user.uid).get();
     const list = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     if (!list.length) {
-      commBody.innerHTML = '<p class="hint">Chưa có hoa hồng nào — chia sẻ link giới thiệu để bắt đầu nhé!</p>';
-    } else {
-      // Bản ghi cũ (trước khi có hold period) có thể chưa có "status" mới — coi như "pending_hold".
-      const normStatus = (c) => (c.status === 'pending' || !c.status) ? 'pending_hold' : c.status;
-      const groups = [
-        { status: 'pending_hold', label: '⏳ Chờ giữ' },
-        { status: 'available', label: '✅ Sẵn sàng rút' },
-        { status: 'paid', label: '💰 Đã trả' }
-      ];
-      const totalsByStatus = {};
-      groups.forEach((g) => { totalsByStatus[g.status] = list.filter((c) => normStatus(c) === g.status).reduce((s, c) => s + (Number(c.amount) || 0), 0); });
-      commBody.innerHTML = `
-        <p class="hint">${groups.map((g) => `${g.label}: <strong>${formatVnd(totalsByStatus[g.status])}</strong>`).join(' · ')}</p>
-        ${list.map((c) => `
-          <div class="hint" style="padding:8px 0;border-top:1px solid var(--border);">
-            ${formatVnd(c.amount)} · ${c.tier || '—'} (${c.percent}%) · ${escapeHtml(c.sourceName || '')}${c.sourceOrderCode ? ` · Đơn ${escapeHtml(c.sourceOrderCode)}` : ''} ·
-            ${normStatus(c) === 'paid' ? '💰 Đã trả' : normStatus(c) === 'available' ? '✅ Sẵn sàng rút' : '⏳ Chờ giữ'}
-          </div>
-        `).join('')}
-      `;
+      box.innerHTML = '<p class="hint">Chưa có hoa hồng nào — chia sẻ link giới thiệu để bắt đầu nhé!</p>';
+      return;
     }
+    // Bản ghi cũ (trước khi có hold period) có thể chưa có "status" mới — coi như "pending_hold".
+    const normStatus = (c) => (c.status === 'pending' || !c.status) ? 'pending_hold' : c.status;
+    const statusLabel = (s) => s === 'paid' ? '💰 Đã trả' : s === 'available' ? '✅ Sẵn sàng rút' : '⏳ Chờ giữ';
+    const groups = [
+      { status: 'pending_hold', label: '⏳ Chờ giữ' },
+      { status: 'available', label: '✅ Sẵn sàng rút' },
+      { status: 'paid', label: '💰 Đã trả' }
+    ];
+    const totalsByStatus = {};
+    groups.forEach((g) => { totalsByStatus[g.status] = list.filter((c) => normStatus(c) === g.status).reduce((s, c) => s + (Number(c.amount) || 0), 0); });
+    const total = list.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    box.innerHTML = `
+      <p class="hint">${groups.map((g) => `${g.label}: <strong>${formatVnd(totalsByStatus[g.status])}</strong>`).join(' · ')}</p>
+      <p class="hint">👉 Kéo ngang bảng để xem đủ các cột.</p>
+      <div class="roster-table-wrap">
+        <table class="roster-table">
+          <thead>
+            <tr>
+              <th>Thời gian</th><th>Mã giao dịch</th><th>Người mua</th><th>Email</th>
+              <th>Cấp</th><th>Gói</th><th>%</th><th>Hoa hồng nhận được</th><th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((c) => `
+              <tr>
+                <td>${escapeHtml((c.createdAt || '').replace('T', ' ').slice(0, 16))}</td>
+                <td>${escapeHtml(c.sourceOrderCode || '—')}</td>
+                <td>${escapeHtml(c.sourceName || '—')}</td>
+                <td>${escapeHtml(c.sourceEmail || '—')}</td>
+                <td>${escapeHtml(c.tier || '—')}</td>
+                <td>${escapeHtml(c.sourcePlanLabel || '—')}</td>
+                <td>${c.percent}%</td>
+                <td>${formatVnd(c.amount)}</td>
+                <td>${statusLabel(normStatus(c))}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="7" style="text-align:right;font-weight:700;">Tổng cộng</td>
+              <td style="font-weight:700;color:var(--brand);">${formatVnd(total)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `;
   } catch (e) {
-    commBody.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+    box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
   }
+}
 
+// ---------- 🌳 Giáo viên bạn đã giới thiệu (sub-mục trong "Gói & hoa hồng") ----------
+async function renderReferredTeachers(user, container) {
+  container.innerHTML = `<div class="card"><h3 style="margin:0 0 8px;">🌳 Giáo viên bạn đã giới thiệu</h3><div id="referredTeachersBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+  const box = $('#referredTeachersBody');
   try {
     const { db } = ensureFirebase();
     const snap = await db.collection('teacherProfiles').where('referredByUid', '==', user.uid).get();
     const list = snap.docs.map((d) => Object.assign({ uid: d.id }, d.data()));
     if (!list.length) {
-      referredBody.innerHTML = '<p class="hint">Bạn chưa giới thiệu giáo viên nào — dùng nút "Chia sẻ cho giáo viên khác" ở mục "Mã &amp; chia sẻ" để bắt đầu nhận hoa hồng.</p>';
+      box.innerHTML = '<p class="hint">Bạn chưa giới thiệu giáo viên nào — dùng nút "Chia sẻ cho giáo viên khác" ở mục "🔑 Mã &amp; chia sẻ" để bắt đầu nhận hoa hồng.</p>';
       return;
     }
     const subs = await Promise.all(list.map((t) => getTeacherSubscription(t.uid)));
-    referredBody.innerHTML = list.map((t, i) => `
+    box.innerHTML = list.map((t, i) => `
       <div class="hint" style="padding:6px 0;border-top:1px solid var(--border);">
         ${escapeHtml(t.displayName || '(chưa đặt tên)')} · ${subs[i].tier === 'pro' ? 'Pro' : 'Miễn phí'}
       </div>
     `).join('');
   } catch (e) {
-    referredBody.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+    box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
   }
 }
