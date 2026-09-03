@@ -109,20 +109,37 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
       });
     });
 
-    // ---------- 📈 Thống kê nhanh ----------
+    // ---------- 📈 Thống kê nhanh + Lịch sử giao dịch ----------
     async function buildStatsSection(panel) {
-      panel.innerHTML = `<div class="card"><h2><span class="icon">📈</span>Thống kê nhanh</h2><div id="adminStatsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
-      const box = $('#adminStatsBody');
+      panel.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">📈</span>Thống kê nhanh</h2>
+          <div id="adminStatsBody"><p class="hint">⏳ Đang tải...</p></div>
+        </div>
+        <div class="card">
+          <h2><span class="icon">🧾</span>Lịch sử giao dịch</h2>
+          <p class="hint" style="margin-top:-4px;">Toàn bộ yêu cầu nâng cấp đã gửi — chờ duyệt, đã duyệt, đã từ chối — mới nhất lên đầu.</p>
+          <div id="txHistoryBody"><p class="hint">⏳ Đang tải...</p></div>
+        </div>
+      `;
+      const statsBox = $('#adminStatsBody');
+      const txBox = $('#txHistoryBody');
       try {
-        const [subsSnap, studentSubsSnap, paymentsSnap, commissionsSnap] = await Promise.all([
+        const [subsSnap, studentSubsSnap, allSubmissionsSnap, commissionsSnap, profilesSnap] = await Promise.all([
           db.collection('subscriptions').where('tier', '==', 'pro').get(),
           db.collection('studentSubscriptions').where('tier', '==', 'premium').get(),
-          db.collection('paymentSubmissions').where('status', '==', 'approved').get(),
-          db.collection('commissions').where('status', 'in', ['pending_hold', 'available']).get()
+          db.collection('paymentSubmissions').get(),
+          db.collection('commissions').where('status', 'in', ['pending_hold', 'available']).get(),
+          db.collection('teacherProfiles').get()
         ]);
-        const totalRevenue = paymentsSnap.docs.reduce((sum, d) => sum + (Number(d.data().amount) || 0), 0);
+
+        const nameByUid = new Map(profilesSnap.docs.map((d) => [d.id, d.data().displayName || '(chưa đặt tên)']));
+
+        const totalRevenue = allSubmissionsSnap.docs
+          .filter((d) => d.data().status === 'approved')
+          .reduce((sum, d) => sum + (Number(d.data().amount) || 0), 0);
         const totalCommissionOwed = commissionsSnap.docs.reduce((sum, d) => sum + (Number(d.data().amount) || 0), 0);
-        box.innerHTML = `
+        statsBox.innerHTML = `
           <div class="action-grid">
             <div class="chapter-card" style="text-align:center;"><div class="cc-title">${subsSnap.size}</div><div class="hint">Giáo viên Pro</div></div>
             <div class="chapter-card" style="text-align:center;"><div class="cc-title">${studentSubsSnap.size}</div><div class="hint">Học sinh Premium</div></div>
@@ -130,8 +147,46 @@ const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thi
             <div class="chapter-card" style="text-align:center;"><div class="cc-title">${formatVnd(totalCommissionOwed)}</div><div class="hint">Hoa hồng chưa trả</div></div>
           </div>
         `;
+
+        const txList = allSubmissionsSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
+          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        if (!txList.length) {
+          txBox.innerHTML = '<p class="hint">Chưa có giao dịch nào.</p>';
+        } else {
+          const statusLabel = (s) => s === 'approved' ? '✅ Đã duyệt' : s === 'rejected' ? '❌ Từ chối' : '⏳ Chờ duyệt';
+          txBox.innerHTML = `
+            <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. "Người giới thiệu" = người sẽ nhận hoa hồng F1 từ giao dịch này (giáo viên trực tiếp giới thiệu, hoặc giáo viên chủ nhóm nếu người nộp là học sinh).</p>
+            <div class="roster-table-wrap">
+              <table class="roster-table">
+                <thead>
+                  <tr>
+                    <th>Thời gian</th><th>Loại</th><th>Người nộp</th><th>Liên hệ</th><th>Số tiền</th>
+                    <th>Mã đơn</th><th>Người giới thiệu</th><th>Trạng thái</th><th>Xử lý lúc</th><th>Người xử lý</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${txList.map((t) => `
+                    <tr>
+                      <td>${escapeHtml((t.createdAt || '').replace('T', ' ').slice(0, 16))}</td>
+                      <td>${t.type === 'teacher_upgrade' ? 'Giáo viên Pro' : 'Học sinh Premium'}</td>
+                      <td>${escapeHtml(t.submitterName || '—')}</td>
+                      <td>${escapeHtml(t.submitterContact || '—')}</td>
+                      <td>${formatVnd(t.amount)}</td>
+                      <td>${escapeHtml(t.orderCode || '—')}</td>
+                      <td>${t.referrerTeacherUid ? escapeHtml(nameByUid.get(t.referrerTeacherUid) || t.referrerTeacherUid) : '—'}</td>
+                      <td>${statusLabel(t.status)}</td>
+                      <td>${t.reviewedAt ? escapeHtml(t.reviewedAt.replace('T', ' ').slice(0, 16)) : '—'}</td>
+                      <td>${escapeHtml(t.reviewedBy || '—')}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
       } catch (e) {
-        box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+        statsBox.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+        txBox.innerHTML = '';
       }
     }
 
