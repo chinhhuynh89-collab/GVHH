@@ -31,6 +31,13 @@
     <a href="#" id="previewAsStudentBtn" style="display:none;margin-top:10px;font-size:12.5px;font-weight:600;color:var(--text-faint);">👁️ Xem với vai trò học sinh của tôi</a>
     <!-- Cùng vị trí/kiểu với nút trên — chỉ 1 trong 2 nút hiện tại 1 thời điểm (renderRoleSections) -->
     <a href="#" id="exitPreviewBtn" style="display:none;margin-top:10px;font-size:12.5px;font-weight:600;color:var(--text-faint);">🔙 Quay lại vai trò giáo viên</a>
+    <!-- Bấm "Xem với vai trò học sinh" mở ra đây (previewAsStudentBtn) — để giáo viên chọn ĐÚNG góc
+         nhìn cần xem thử: học sinh mới chưa vào nhóm, hay học sinh của 1 nhóm cụ thể (chỉ thấy đúng
+         những chương đã giao cho nhóm đó) — tránh mặc định thấy TOÀN BỘ chương trình của chính mình
+         (không đúng trải nghiệm học sinh thật). -->
+    <div class="card" id="previewGroupChooserCard" style="display:none;margin-top:12px;text-align:left;">
+      <div id="previewGroupChooserBody"></div>
+    </div>
     <!-- Chuyển lên đây (trước ở #studentSection, nằm khá thấp) — mỗi ô con tự ẩn/hiện riêng theo vai
          trò (registerWithTeacherWrap: renderRoleSections; contactTeacherWrap: branding.js), bản thân
          hàng này không cần điều kiện gì thêm. -->
@@ -273,7 +280,15 @@
     $('#teacherSection').style.display = role === 'teacher' ? 'block' : 'none';
     $('#studentSection').style.display = role === 'student' ? 'block' : 'none';
     $('#registerWithTeacherWrap').style.display = role === 'student' ? 'block' : 'none';
-    $('#exitPreviewBtn').style.display = (role === 'student' && localStorage.getItem(PREVIEW_KEY)) ? 'inline-block' : 'none';
+    const inPreview = role === 'student' && !!localStorage.getItem(PREVIEW_KEY);
+    const exitBtn = $('#exitPreviewBtn');
+    exitBtn.style.display = inPreview ? 'inline-block' : 'none';
+    if (inPreview) {
+      const groupCode = typeof getPreviewGroupCode === 'function' ? getPreviewGroupCode() : null;
+      exitBtn.textContent = groupCode
+        ? `🔙 Đang xem thử — nhóm ${groupCode} (bấm để quay lại vai trò giáo viên)`
+        : '🔙 Đang xem thử — học sinh mới (bấm để quay lại vai trò giáo viên)';
+    }
     $('#previewAsStudentBtn').style.display = role === 'teacher' ? 'inline-block' : 'none';
   }
 
@@ -335,26 +350,68 @@
     }
   }
 
-  // KHÔNG đăng xuất Google khi vào chế độ xem thử — trước đây có đăng xuất, nhưng resolveContentOwner()
-  // (auth.js) vốn đã được thiết kế để nhận diện đúng chế độ "xem thử": vẫn đăng nhập tài khoản giáo
-  // viên thật, chỉ đổi role='student' (role.js) để mọi trang hiện đúng NỘI DUNG CỦA CHÍNH GIÁO VIÊN
-  // ĐÓ nhưng ở chế độ chỉ-xem (owner.isOwner luôn false khi role là học sinh, xem chapter-detail.js).
-  // Đăng xuất khiến effectiveTeacherUid mất, trang phải dựa vào #hoahoc_student_membership cũ (nếu
-  // có, từ lần test bằng 1 tài khoản học sinh thật khác trên cùng máy) — đây chính là nguyên nhân
-  // "lẫn lộn thật và ảo" người dùng gặp: có lúc hiện dữ liệu học sinh thật cũ, có lúc trống trơn, tuỳ
-  // máy có cache gì sẵn. Giữ nguyên đăng nhập giúp preview LUÔN mô phỏng đúng 1 việc duy nhất, không
-  // phụ thuộc dữ liệu cache nào khác: "chính giáo viên này, nhìn qua lăng kính học sinh".
+  // KHÔNG đăng xuất Google khi vào chế độ xem thử — resolveContentOwner() (auth.js) được thiết kế để
+  // nhận diện đúng chế độ "xem thử": vẫn đăng nhập tài khoản giáo viên thật, chỉ đổi role='student'
+  // (role.js) để mọi trang hiện đúng NỘI DUNG CỦA CHÍNH GIÁO VIÊN ĐÓ nhưng ở chế độ chỉ-xem
+  // (owner.isOwner luôn false khi role là học sinh, xem chapter-detail.js).
+  //
+  // "Xem thử" cần hỏi rõ đang mô phỏng góc nhìn nào TRƯỚC khi chuyển, vì 1 giáo viên thường có nhiều
+  // nhóm với chương trình được giao KHÁC NHAU (group.chapterIds, xem chapter-overview.js) — mặc định
+  // xem thử sẽ luôn thấy TOÀN BỘ chương trình của chính mình (như giáo viên thật), không đúng thực tế
+  // học sinh chỉ thấy đúng chương đã được giao cho nhóm của mình. Cho chọn "học sinh mới chưa vào
+  // nhóm" hoặc "học sinh của 1 nhóm cụ thể" (setPreviewGroupCode, role.js) để xem thử đúng góc nhìn.
   $('#previewAsStudentBtn').addEventListener('click', async (e) => {
     e.preventDefault();
-    if (!confirm('Xem thử với vai trò học sinh sẽ chuyển giao diện sang chế độ mô phỏng học sinh (chỉ xem, không sửa được) — tài khoản Google của bạn vẫn giữ nguyên đăng nhập. Tiếp tục?')) return;
+    await openPreviewGroupChooser();
+  });
+
+  async function openPreviewGroupChooser() {
+    const card = $('#previewGroupChooserCard');
+    const body = $('#previewGroupChooserBody');
+    card.style.display = 'block';
+    body.innerHTML = '<p class="hint">⏳ Đang tải danh sách nhóm của bạn...</p>';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    let groups = [];
+    try {
+      if (isFirebaseConfigured() && typeof listGroupsForCurrentTeacher === 'function') {
+        groups = await listGroupsForCurrentTeacher();
+      }
+    } catch (err) { /* hiện danh sách rỗng nếu tải lỗi, không chặn "học sinh mới" bên dưới */ }
+
+    const groupsHtml = groups.length
+      ? groups.map((g) => `
+          <button class="btn block preview-group-btn" type="button" data-code="${escapeHtml(g.groupCode)}" style="text-align:left;margin-top:6px;">
+            👥 ${escapeHtml(g.groupName)} <span class="hint">(${g.studentCount} học sinh · mã ${escapeHtml(g.groupCode)})</span>
+          </button>
+        `).join('')
+      : '<p class="hint">Bạn chưa có nhóm học sinh nào.</p>';
+
+    body.innerHTML = `
+      <h2 style="margin-top:0;"><span class="icon">👁️</span>Xem thử với vai trò học sinh</h2>
+      <p class="hint">Chọn đúng góc nhìn cần xem thử — tài khoản Google của bạn vẫn giữ nguyên đăng nhập, chỉ đổi giao diện, không sửa được nội dung.</p>
+      <button class="btn primary block" id="previewNewStudentBtn" type="button" style="margin-top:8px;">🆕 Học sinh mới (chưa vào nhóm nào)</button>
+      <div class="section-label" style="margin-top:14px;margin-bottom:0;">Hoặc xem như học sinh của 1 nhóm cụ thể</div>
+      ${groupsHtml}
+      <button class="btn block" id="previewGroupCancelBtn" type="button" style="margin-top:14px;">Huỷ</button>
+    `;
+
+    $('#previewNewStudentBtn').addEventListener('click', () => startPreview(null));
+    $$('.preview-group-btn').forEach((btn) => btn.addEventListener('click', () => startPreview(btn.dataset.code)));
+    $('#previewGroupCancelBtn').addEventListener('click', () => { card.style.display = 'none'; });
+  }
+
+  function startPreview(groupCode) {
+    setPreviewGroupCode(groupCode);
     localStorage.setItem(PREVIEW_KEY, '1');
     setRole('student');
     window.location.reload();
-  });
+  }
 
   $('#exitPreviewBtn').addEventListener('click', async (e) => {
     e.preventDefault();
     localStorage.removeItem(PREVIEW_KEY);
+    setPreviewGroupCode(null);
     setRole('teacher');
     window.location.reload();
   });

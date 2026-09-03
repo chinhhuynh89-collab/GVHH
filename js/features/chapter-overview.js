@@ -46,15 +46,43 @@
   // ---------- Ngữ cảnh người xem ----------
   async function initContext() {
     if (typeof isFirebaseConfigured !== 'function' || !isFirebaseConfigured()) { viewerMode = 'no-firebase'; return; }
-    try {
-      const teacher = await waitForAuthReady();
-      if (teacher) {
-        viewerMode = 'teacher';
-        try { ownPrograms = await listProgramsForCurrentTeacher(); } catch (e) { ownPrograms = []; }
-        try { chapterActivity = await getTeacherChapterActivity(); } catch (e) { chapterActivity = {}; }
-        return;
+
+    // "Xem thử với vai trò học sinh" (previewAsStudentBtn, index.html): giáo viên vẫn đăng nhập bằng
+    // chính tài khoản của mình nhưng đã CHỌN role='student' để mô phỏng góc nhìn học sinh — phải rẽ
+    // xuống nhánh 'group'/'guest' bên dưới NHƯ HỌC SINH THẬT, không được vào thẳng nhánh 'teacher'
+    // chỉ vì đang có tài khoản Google đăng nhập (nếu không sẽ luôn thấy TOÀN BỘ chương trình của
+    // chính mình thay vì đúng những chương đã giao cho 1 nhóm cụ thể — không mô phỏng đúng thực tế).
+    const previewing = typeof isTeacherPreviewingAsStudent === 'function' && isTeacherPreviewingAsStudent();
+
+    if (!previewing) {
+      try {
+        const teacher = await waitForAuthReady();
+        if (teacher) {
+          viewerMode = 'teacher';
+          try { ownPrograms = await listProgramsForCurrentTeacher(); } catch (e) { ownPrograms = []; }
+          try { chapterActivity = await getTeacherChapterActivity(); } catch (e) { chapterActivity = {}; }
+          return;
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    if (previewing) {
+      // Giáo viên đã chọn 1 nhóm cụ thể để xem thử (xem index.html) — dùng thẳng group.chapterIds
+      // của nhóm đó, không cần (và không thể) có bản ghi "students" thật vì tài khoản đăng nhập vẫn
+      // là chính giáo viên, không phải học sinh thật trong nhóm. Chưa chọn nhóm nào (mô phỏng "học
+      // sinh mới, chưa vào nhóm") -> chặn giống hệt học sinh thật chưa vào nhóm (viewerMode='guest').
+      const previewGroupCode = typeof getPreviewGroupCode === 'function' ? getPreviewGroupCode() : null;
+      if (!previewGroupCode) { viewerMode = 'guest'; return; }
+      try {
+        const { db } = ensureFirebase();
+        const snap = await db.collection('groups').where('groupCode', '==', previewGroupCode).limit(1).get();
+        if (snap.empty) { viewerMode = 'guest'; return; }
+        await applyGroupData(snap.docs[0].data());
+      } catch (e) {
+        viewerMode = 'guest';
       }
-    } catch (e) { /* ignore */ }
+      return;
+    }
 
     // getVerifiedMembership() (không phải getMembership() trực tiếp) — kiểm tra cache "nhóm đang
     // xem" có còn khớp tài khoản Google ĐANG đăng nhập không, tự xoá nếu lệch (VD thiết bị dùng
@@ -68,36 +96,42 @@
       const { db } = ensureFirebase();
       const snap = await db.collection('groups').where('groupCode', '==', membership.groupCode).limit(1).get();
       if (snap.empty) { viewerMode = 'guest'; return; }
-      const group = snap.docs[0].data();
-      setGroupFreeModeOverride(!!group.freeMode);
-      freeModeLockedByGroup = true;
-      const chapterIds = group.chapterIds || [];
-      groupChapterIdSet = new Set(chapterIds);
-
-      const gradesSet = new Set();
-      const nonGradeIds = [];
-      chapterIds.forEach((id) => {
-        const found = findChapterAnywhere(id);
-        if (found) gradesSet.add(found.grade); else nonGradeIds.push(id);
-      });
-      groupGrades = Array.from(gradesSet).sort((a, b) => a - b);
-
-      if (nonGradeIds.length) {
-        const docs = await Promise.all(nonGradeIds.map((id) => db.collection('programChapters').doc(id).get()));
-        const programIdsSet = new Set();
-        docs.forEach((doc, i) => {
-          if (!doc.exists) return;
-          const pid = doc.data().programId;
-          programIdsSet.add(pid);
-          (groupProgramChapterIds[pid] = groupProgramChapterIds[pid] || []).push(nonGradeIds[i]);
-        });
-        groupPrograms = await getProgramsByIds(Array.from(programIdsSet));
-      }
-
-      viewerMode = (groupGrades.length || groupPrograms.length) ? 'group' : 'guest';
+      await applyGroupData(snap.docs[0].data());
     } catch (e) {
       viewerMode = 'guest';
     }
+  }
+
+  // Dùng chung cho cả học sinh thật (membership) LẪN giáo viên xem thử 1 nhóm cụ thể — nạp
+  // group.chapterIds thành danh sách khối lớp/chương trình riêng được giao, xác định viewerMode.
+  async function applyGroupData(group) {
+    const { db } = ensureFirebase();
+    setGroupFreeModeOverride(!!group.freeMode);
+    freeModeLockedByGroup = true;
+    const chapterIds = group.chapterIds || [];
+    groupChapterIdSet = new Set(chapterIds);
+
+    const gradesSet = new Set();
+    const nonGradeIds = [];
+    chapterIds.forEach((id) => {
+      const found = findChapterAnywhere(id);
+      if (found) gradesSet.add(found.grade); else nonGradeIds.push(id);
+    });
+    groupGrades = Array.from(gradesSet).sort((a, b) => a - b);
+
+    if (nonGradeIds.length) {
+      const docs = await Promise.all(nonGradeIds.map((id) => db.collection('programChapters').doc(id).get()));
+      const programIdsSet = new Set();
+      docs.forEach((doc, i) => {
+        if (!doc.exists) return;
+        const pid = doc.data().programId;
+        programIdsSet.add(pid);
+        (groupProgramChapterIds[pid] = groupProgramChapterIds[pid] || []).push(nonGradeIds[i]);
+      });
+      groupPrograms = await getProgramsByIds(Array.from(programIdsSet));
+    }
+
+    viewerMode = (groupGrades.length || groupPrograms.length) ? 'group' : 'guest';
   }
 
   function renderGate() {
