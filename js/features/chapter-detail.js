@@ -96,10 +96,10 @@
     if (owner.isOwner || !isFirebaseConfigured()) {
       hint.style.display = 'none';
     } else if (getCurrentTeacher() && (typeof getRole === 'function') && getRole() === 'student') {
-      // Đã đăng nhập giáo viên nhưng đang xem thử ở vai trò Học sinh — không phải chưa đăng nhập.
-      hint.href = '../index.html';
-      hint.textContent = '👁️ Đang xem thử vai trò Học sinh — đổi lại vai trò Giáo viên để sửa';
-      hint.style.display = 'inline';
+      // Đã đăng nhập giáo viên nhưng đang xem thử ở vai trò Học sinh (không phải chưa đăng nhập) —
+      // ẩn hẳn, không hiện gợi ý "đổi lại vai trò" ở đây nữa để trang hiện rõ nội dung, đúng trải
+      // nghiệm học sinh thật (đã có nút "Quay lại vai trò giáo viên" riêng ở trang chủ).
+      hint.style.display = 'none';
     } else {
       hint.href = 'ket-noi-dong-bo.html';
       hint.textContent = '🔒 Đăng nhập giáo viên để sửa';
