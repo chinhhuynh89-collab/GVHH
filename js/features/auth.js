@@ -382,6 +382,22 @@ function requireStudentAuth(onReady) {
     `;
     return;
   }
+
+  // Giáo viên đang "xem thử với vai trò học sinh" (index.html: previewAsStudentBtn) — trang này đòi
+  // hỏi 1 tài khoản HỌC SINH THẬT (enforceExclusiveRole bên dưới sẽ từ chối tài khoản giáo viên đang
+  // xem thử vì đã khoá cứng vai trò 'teacher', rồi ĐĂNG XUẤT để ép đăng nhập lại bằng tài khoản khác
+  // — rất khó hiểu và không cần thiết chỉ để xem thử). Chặn sớm ở đây, không chạy qua bước xác thực
+  // thật: đây là 1 HÀNH ĐỘNG thật (vào nhóm/nộp bài), không phải nội dung để xem, nên không mô phỏng
+  // được — chỉ báo rõ lý do thay vì âm thầm đăng xuất.
+  if (typeof isTeacherPreviewingAsStudent === 'function' && isTeacherPreviewingAsStudent()) {
+    $('main').innerHTML = `
+      <div class="card">
+        <p class="hint">👁️ Bạn đang ở chế độ xem thử với vai trò học sinh. Đây là 1 hành động thật (không phải nội dung để xem), cần tài khoản học sinh thật để thực hiện — không mô phỏng được.</p>
+        <a class="btn primary block" href="../index.html">Quay lại trang chủ</a>
+      </div>
+    `;
+    return;
+  }
   const gate = document.createElement('div');
   gate.id = 'studentAuthGate';
   gate.className = 'card';
