@@ -73,18 +73,22 @@
         `).join('')}
       `;
     }).join('');
-    const programsHtml = ownProgramsWithChapters.map(({ program, chapters }) => {
-      if (!chapters.length) return '';
-      return `
-        <div class="hint" style="font-weight:700;margin:10px 0 6px;">${program.icon || '🎓'} ${escapeHtml(program.name)}</div>
-        ${chapters.map((c) => `
-          <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
-            <input type="checkbox" class="chapter-check" value="${c.id}" ${checkedSet.has(c.id) ? 'checked' : ''} style="margin-top:3px;" />
-            <span>${escapeHtml(c.title)}</span>
-          </label>
-        `).join('')}
-      `;
-    }).join('');
+    // Trước đây bỏ qua HẲN chương trình riêng chưa có chương nào (return '') — giáo viên mới tạo
+    // chương trình xong (chưa kịp thêm chương bên trong) sẽ thấy như thể chương trình vừa tạo biến
+    // mất hoàn toàn ở đây, dễ tưởng nhầm là lỗi. Giờ vẫn hiện TÊN chương trình kèm hướng dẫn rõ ràng
+    // khi chưa có chương nào để chọn, thay vì im lặng ẩn đi.
+    const programsHtml = ownProgramsWithChapters.map(({ program, chapters }) => `
+      <div class="hint" style="font-weight:700;margin:10px 0 6px;">${program.icon || '🎓'} ${escapeHtml(program.name)}</div>
+      ${chapters.length
+        ? chapters.map((c) => `
+            <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
+              <input type="checkbox" class="chapter-check" value="${c.id}" ${checkedSet.has(c.id) ? 'checked' : ''} style="margin-top:3px;" />
+              <span>${escapeHtml(c.title)}</span>
+            </label>
+          `).join('')
+        : `<p class="hint" style="margin:0 0 8px;">Chương trình này chưa có chương nào — vào "Học theo chương" ở trang chủ, chọn chương trình này rồi bấm "+ Thêm chương mới vào chương trình này" trước, sau đó quay lại đây để chọn giao cho nhóm.</p>`
+      }
+    `).join('');
     return gradesHtml + programsHtml;
   }
 
