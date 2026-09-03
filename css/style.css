@@ -954,6 +954,12 @@ sub { font-size: 0.72em; }
 .roster-table tbody tr:last-child td { border-bottom: none; }
 .roster-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
 
+/* Cây hoa hồng giới thiệu (trang quản trị) — mỗi nhánh con thụt vào + có đường nối dọc bên trái để
+   thấy rõ quan hệ giới thiệu nhiều tầng (F1 của F1 = F2...) mà không cần bảng. */
+.comm-tree-node { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 8px; }
+.comm-tree-branch { margin-left: 14px; padding-left: 14px; border-left: 2px solid var(--border); }
+.comm-tree-student { font-size: 13px; color: var(--text-dim); padding: 3px 0; }
+
 /* Banner "có bản cập nhật mới" (xem app.js) — sticky trên đầu trang, màu thương hiệu (khác màu vàng
    cảnh báo của inAppBrowserWarning vì đây là tin tốt, không phải lỗi). */
 #updateAvailableBanner {

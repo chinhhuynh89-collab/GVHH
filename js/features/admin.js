@@ -686,6 +686,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
             <button class="btn comm-sub-btn" data-sub="settings" type="button">⚙️ Cài đặt hoa hồng</button>
             <button class="btn comm-sub-btn" data-sub="history" type="button">🧾 Lịch sử chi trả hoa hồng</button>
             <button class="btn comm-sub-btn" data-sub="pending" type="button">📋 Chờ duyệt</button>
+            <button class="btn comm-sub-btn" data-sub="tree" type="button">🌳 Cây hoa hồng</button>
           </div>
         </div>
         <div id="commSubPanel"></div>
@@ -711,6 +712,8 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
             } else if (key === 'history') {
               sub.innerHTML = `<div class="card"><h3 style="margin:0 0 8px;">🧾 Lịch sử chi trả hoa hồng</h3><div id="commissionsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
               await renderCommissions();
+            } else if (key === 'tree') {
+              await renderCommissionTree(sub);
             } else {
               sub.innerHTML = `<div class="card"><h3 style="margin:0 0 8px;">📋 Chờ duyệt</h3><div id="pendingPaymentsBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
               await renderPendingPayments();
@@ -862,6 +865,105 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
             }
           });
         });
+      } catch (e) {
+        box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+      }
+    }
+
+    // ---------- 🌳 Cây hoa hồng (sub-mục trong "💰 Hoa hồng") ----------
+    // Vẽ cây quan hệ giới thiệu GIỮA CÁC GIÁO VIÊN qua referredByUid (công khai — xem
+    // auth.js:ensureTeacherProfile): nhánh con của 1 giáo viên = người ĐƯỢC giáo viên đó giới thiệu,
+    // tức F1 của chính giáo viên đó. Hoa hồng chỉ tính tối đa 2 cấp NGƯỢC LÊN từ người mua (F1/F2,
+    // xem createReferralCommissions), nhưng cây này vẽ ĐỦ mọi tầng để admin nhìn được toàn bộ mạng
+    // lưới, không chỉ 2 cấp gần nhất. Học sinh (không bao giờ tự nhận hoa hồng) lồng làm lá dưới
+    // đúng giáo viên chủ nhóm — đó chính là người nhận hoa hồng F1 khi học sinh đó mua Premium.
+    async function renderCommissionTree(container) {
+      container.innerHTML = `<div class="card"><h3 style="margin:0 0 8px;">🌳 Cây hoa hồng giới thiệu</h3><div id="commTreeBody"><p class="hint">⏳ Đang tải...</p></div></div>`;
+      const box = $('#commTreeBody');
+      try {
+        const [profilesSnap, teachersSnap, subsSnap, groupsSnap, studentsSnap] = await Promise.all([
+          db.collection('teacherProfiles').get(),
+          db.collection('teachers').get(),
+          db.collection('subscriptions').get(),
+          db.collection('groups').get(),
+          db.collection('students').get()
+        ]);
+
+        const emailByUid = new Map(teachersSnap.docs.map((d) => [d.id, d.data().email || '']));
+        const subsByUid = new Map(subsSnap.docs.map((d) => [d.id, d.data()]));
+        const groupTeacherByCode = new Map(groupsSnap.docs.map((d) => [d.data().groupCode, d.data().teacherUid]));
+        const studentsByTeacherUid = new Map();
+        studentsSnap.docs.forEach((d) => {
+          const s = d.data();
+          const uid = s.teacherUid || groupTeacherByCode.get(s.groupCode);
+          if (!uid) return;
+          if (!studentsByTeacherUid.has(uid)) studentsByTeacherUid.set(uid, []);
+          studentsByTeacherUid.get(uid).push(s);
+        });
+
+        const nodeByUid = new Map();
+        profilesSnap.docs.forEach((d) => {
+          const p = d.data();
+          const sub = subsByUid.get(d.id) || { tier: 'free' };
+          nodeByUid.set(d.id, {
+            uid: d.id, name: p.displayName || '(chưa đặt tên)', code: p.teacherCode || '—',
+            email: emailByUid.get(d.id) || '—', isPro: sub.tier === 'pro',
+            referredByUid: p.referredByUid || null,
+            students: (studentsByTeacherUid.get(d.id) || []).sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi')),
+            children: []
+          });
+        });
+
+        const roots = [];
+        nodeByUid.forEach((node) => {
+          // Phòng dữ liệu lỗi (referredByUid trỏ tới chính mình hoặc tới uid không còn tồn tại) —
+          // coi như gốc thay vì tạo vòng lặp vô hạn lúc vẽ đệ quy bên dưới.
+          if (node.referredByUid && node.referredByUid !== node.uid && nodeByUid.has(node.referredByUid)) {
+            nodeByUid.get(node.referredByUid).children.push(node);
+          } else {
+            roots.push(node);
+          }
+        });
+        const sortChildren = (n) => { n.children.sort((a, b) => a.name.localeCompare(b.name, 'vi')); n.children.forEach(sortChildren); };
+        roots.forEach(sortChildren);
+
+        // Chỉ hiện những cây CÓ quan hệ giới thiệu thật (ít nhất 1 nhánh con) — giáo viên đơn lẻ
+        // (chưa giới thiệu ai, chưa được ai giới thiệu) không có gì để vẽ, xem đầy đủ ở "Danh sách
+        // giáo viên" thay vì làm rối cây này.
+        const treeRoots = roots.filter((n) => n.children.length > 0).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+        if (!treeRoots.length) {
+          box.innerHTML = '<p class="hint">Chưa có quan hệ giới thiệu nào giữa các giáo viên.</p>';
+          return;
+        }
+
+        const studentsHtml = (node) => {
+          if (!node.students.length) return '';
+          return `
+            <details style="margin-top:6px;">
+              <summary class="hint" style="cursor:pointer;">🎓 ${node.students.length} học sinh trong nhóm</summary>
+              <div style="margin-top:4px;">
+                ${node.students.map((s) => `<div class="comm-tree-student">• ${escapeHtml(s.studentName || '(chưa rõ tên)')}</div>`).join('')}
+              </div>
+            </details>
+          `;
+        };
+
+        const nodeHtml = (node, parentName, grandparentName) => `
+          <div class="comm-tree-node">
+            <div><strong>${escapeHtml(node.name)}</strong> (${escapeHtml(node.code)}) ${node.isPro ? '⭐ Pro' : ''}</div>
+            <div class="hint">${escapeHtml(node.email)}</div>
+            ${parentName ? `<div class="hint" style="color:var(--brand);">↳ F1 của: ${escapeHtml(parentName)}</div>` : '<div class="hint">🌱 Giáo viên gốc (chưa được ai giới thiệu)</div>'}
+            ${grandparentName ? `<div class="hint">↳ F2 của: ${escapeHtml(grandparentName)}</div>` : ''}
+            ${studentsHtml(node)}
+          </div>
+          ${node.children.length ? `<div class="comm-tree-branch">${node.children.map((c) => nodeHtml(c, node.name, parentName)).join('')}</div>` : ''}
+        `;
+
+        box.innerHTML = `
+          <p class="hint">👉 Mỗi nhánh con = được giáo viên phía trên giới thiệu (F1 của giáo viên đó). Học sinh lồng dưới đúng giáo viên chủ nhóm — chính là người nhận hoa hồng F1 khi các em đó mua Premium.</p>
+          ${treeRoots.map((r) => nodeHtml(r, null, null)).join('')}
+        `;
       } catch (e) {
         box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
       }
