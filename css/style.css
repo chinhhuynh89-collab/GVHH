@@ -1002,6 +1002,15 @@ sub { font-size: 0.72em; }
 .roster-table tbody tr:last-child td { border-bottom: none; }
 .roster-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
 
+/* Màn máy tính đủ rộng: cho phép chữ XUỐNG DÒNG trong ô thay vì ép 1 dòng dài rồi phải cuộn ngang mới
+   xem hết (lý do dùng white-space:nowrap ở trên là để phục vụ ĐIỆN THOẠI — màn hẹp buộc phải cuộn
+   ngang, ép chữ nhỏ lại còn khó đọc hơn). Từ 900px trở lên (máy tính/tablet ngang) coi là đủ chỗ để
+   vừa hết các cột trong 1 màn hình mà không cần cuộn, miễn cho chữ tự ngắt dòng khi cần. */
+@media (min-width: 900px) {
+  .roster-table { width: 100%; min-width: 0; white-space: normal; table-layout: auto; }
+  .roster-table th, .roster-table td { white-space: normal; overflow-wrap: break-word; }
+}
+
 /* Cây hoa hồng giới thiệu (trang quản trị) — mỗi nhánh con thụt vào + có đường nối dọc bên trái để
    thấy rõ quan hệ giới thiệu nhiều tầng (F1 của F1 = F2...) mà không cần bảng. */
 .comm-tree-node { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 8px; }
