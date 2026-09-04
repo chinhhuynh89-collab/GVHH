@@ -308,7 +308,7 @@
       if (!students.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào tham gia.</p>'; return; }
       const codes = await Promise.all(students.map((s) => getAccountCode(s.studentUid)));
       box.innerHTML = `
-        <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. Muốn xoá học sinh, vào trang "Quản lý học sinh" — đó là nơi duy nhất xoá được (tránh xoá nhầm khi chỉ đang xem theo từng nhóm).</p>
+        <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. Nút "Bỏ khỏi nhóm" chỉ gỡ học sinh ra khỏi NHÓM NÀY (tài khoản vẫn còn, có thể xếp lại nhóm khác) — muốn xoá HẲN tài khoản học sinh, vào trang "Quản lý học sinh".</p>
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
@@ -322,6 +322,7 @@
                 <th>Lớp</th>
                 <th>SĐT</th>
                 <th>Tham gia lúc</th>
+                <th>Bỏ khỏi nhóm</th>
               </tr>
             </thead>
             <tbody>
@@ -336,12 +337,30 @@
                   <td>${escapeHtml(s.className || '—')}</td>
                   <td>${escapeHtml(s.phone || '—')}</td>
                   <td>${s.joinedAt ? new Date(s.joinedAt).toLocaleString('vi-VN') : '—'}</td>
+                  <td><button class="btn remove-from-group-btn" type="button" data-student-id="${s.id}" data-name="${escapeHtml(s.studentName || '')}" style="color:#dc2626;">🚪 Bỏ khỏi nhóm</button></td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
       `;
+      $$('.remove-from-group-btn', box).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const studentId = btn.dataset.studentId;
+          const name = btn.dataset.name;
+          if (!confirm(`Bỏ "${name}" khỏi nhóm này? Tài khoản học sinh vẫn còn, chỉ không còn thuộc nhóm này nữa — có thể xếp vào nhóm khác sau. Không thể hoàn tác thao tác này.`)) return;
+          btn.disabled = true;
+          try {
+            await deleteStudent(studentId);
+            await loadAndRenderRoster(box, groupCode);
+            const g = groupsCache.find((gr) => gr.groupCode === groupCode);
+            if (g) g.studentCount = Math.max(0, (g.studentCount || 1) - 1);
+          } catch (e) {
+            alert('Không thực hiện được: ' + e.message);
+            btn.disabled = false;
+          }
+        });
+      });
     } catch (e) {
       box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
     }
