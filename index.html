@@ -102,9 +102,16 @@
     </div>
   </section>
 
-  <div class="card" id="roleChooserCard" style="display:none;text-align:center;">
-    <div id="roleChooserBody"></div>
-    <div class="result-box" id="roleChooserResult"></div>
+  <!-- Bắt buộc chọn vai trò trước khi dùng bất kỳ tính năng nào khác — hiện dạng cửa sổ nổi CHE HẾT
+       toàn trang (không có nút đóng, không bấm ra ngoài để tắt được) thay vì chỉ 1 thẻ nằm giữa
+       trang: trước đây chỉ là 1 <div class="card">, các mục khác (bảng tuần hoàn, công cụ tính
+       toán...) vẫn nằm ngay bên dưới và bấm được bình thường dù chưa chọn vai trò, dẫn tới nhiều xử
+       lý không mong muốn (owner/role chưa xác định). -->
+  <div class="el-modal-backdrop" id="roleChooserBackdrop">
+    <div class="card el-modal" id="roleChooserCard" style="text-align:center;">
+      <div id="roleChooserBody"></div>
+      <div class="result-box" id="roleChooserResult"></div>
+    </div>
   </div>
 
   <div class="section-label">Tính năng lõi</div>
@@ -336,11 +343,10 @@
   // nhập bị chặn/lỗi mạng, và không cần thiết — người dùng có thể chỉ đang xem thử app, chưa cần đăng
   // nhập). Việc đăng nhập thật (Google hoặc mã học sinh) chuyển hẳn sang nút "Đăng nhập" góc phải
   // trang chủ (xem script topAuthBtn bên dưới) — bấm vào lúc nào mới cần thì lúc đó mới đăng nhập.
-  const roleChooser = $('#roleChooserCard');
   const linkSuggestedRole = window.__linkSuggestedRole || null;
   if (linkSuggestedRole || !getRole()) {
     renderRoleChooserBody(linkSuggestedRole);
-    roleChooser.style.display = 'block';
+    $('#roleChooserBackdrop').classList.add('show');
   } else {
     renderRoleSections();
   }
