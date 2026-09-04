@@ -201,7 +201,13 @@ async function isSignedInAs(uid) {
 async function resolveEffectiveTeacherUid() {
   const user = await waitForAuthReady();
   if (!user) return null;
-  const membership = (typeof getMembership === 'function') ? getMembership() : null;
+  // Dùng getVerifiedMembership() (không phải getMembership() thô) — cache "đã vào nhóm của giáo viên
+  // X" lưu trên thiết bị, KHÔNG tự hết hạn khi đổi tài khoản/đăng xuất. Nếu chỉ đọc cache thô, 1 tài
+  // khoản giáo viên thật đăng nhập lại trên thiết bị TỪNG dùng để đăng nhập thử 1 tài khoản học sinh
+  // khác trước đó sẽ bị hiểu NHẦM là "học sinh của nhóm kia", không được công nhận là chính giáo viên
+  // trên chính thiết bị của mình. getVerifiedMembership() tự đối chiếu với tài khoản ĐANG đăng nhập,
+  // tự xoá cache không còn khớp — xem chú thích đầy đủ ở join-group.js.
+  const membership = (typeof getVerifiedMembership === 'function') ? await getVerifiedMembership() : null;
   if (membership && membership.teacherUid && membership.teacherUid !== user.uid) return null;
   return user.uid;
 }
@@ -221,7 +227,14 @@ async function resolveContentOwner() {
   const role = (typeof getRole === 'function') ? getRole() : null;
   const effectiveTeacherUid = await resolveEffectiveTeacherUid();
   if (effectiveTeacherUid && role !== 'student') return { uid: effectiveTeacherUid, isOwner: true };
-  const membership = (typeof getMembership === 'function') ? getMembership() : null;
+  // Dùng getVerifiedMembership() (không phải getMembership() thô) — LỖI THỰC TẾ đã gặp: sau khi đăng
+  // xuất (không còn tài khoản nào đăng nhập), cache "đã vào nhóm của giáo viên X" từ lần học sinh
+  // đăng nhập TRƯỚC ĐÓ trên thiết bị này vẫn còn nguyên trong localStorage (đăng xuất chỉ xoá vai trò
+  // đã chọn — xem signOutAndResetRole() — không xoá cache nhóm này). Đọc thô sẽ tiếp tục hiện đúng
+  // chương trình học của nhóm CŨ dù đã đăng xuất/đổi tài khoản, "giáo án"/chương trình học nhìn như bị
+  // lẫn giữa các tài khoản. getVerifiedMembership() tự kiểm tra cache có còn khớp tài khoản ĐANG đăng
+  // nhập không (không khớp, hoặc không ai đăng nhập -> tự xoá cache, trả về null).
+  const membership = (typeof getVerifiedMembership === 'function') ? await getVerifiedMembership() : null;
   if (membership && membership.teacherUid) return { uid: membership.teacherUid, isOwner: false };
   if (effectiveTeacherUid) return { uid: effectiveTeacherUid, isOwner: false };
   return { uid: null, isOwner: false };

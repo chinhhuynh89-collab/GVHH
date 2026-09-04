@@ -270,7 +270,11 @@ async function isViewerPremium() {
       const sub = await getTeacherSubscription(effectiveTeacherUid);
       return sub.tier === 'pro';
     }
-    const membership = typeof getMembership === 'function' ? getMembership() : null;
+    // getVerifiedMembership() (không phải getMembership() thô) — tránh lỗi thực tế: sau khi đăng xuất
+    // (không còn ai đăng nhập), cache "đã vào nhóm" của lần học sinh đăng nhập TRƯỚC ĐÓ trên thiết bị
+    // này vẫn còn, đọc thô sẽ tưởng NHẦM khách đang xem (đã đăng xuất) là học sinh đó, tự mở khoá tính
+    // năng Premium dù không hề đăng nhập. Xem chú thích đầy đủ ở resolveContentOwner() (auth.js).
+    const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
     if (membership && membership.groupCode && membership.studentUid) {
       const sub = await getStudentSubscription(membership.studentUid);
       return sub.tier === 'premium';
