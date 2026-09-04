@@ -10,6 +10,8 @@
 //    thể xuất hiện với nhiều nhóm nếu học cùng lúc nhiều nhóm).
 
 (function () {
+  let ownPrograms = []; // chương trình riêng do giáo viên tự tạo — dùng ở 2 form tạo nhóm nhanh bên dưới
+
   // Bỏ dấu tiếng Việt + thường hoá để tìm kiếm không phân biệt dấu/hoa-thường (gõ "an" vẫn ra "Ẩn", "Ân"...).
   function normalizeSearchText(str) {
     return (str || '').toString().toLowerCase()
@@ -17,9 +19,37 @@
       .replace(/đ/g, 'd');
   }
 
+  // Tạo lựa chọn "khối lớp mặc định" HOẶC "chương trình riêng" trong 1 <select> duy nhất — dùng cho
+  // 2 form tạo nhóm nhanh bên dưới (chờ duyệt / nạp danh sách). value dạng "g:<số khối>" (khối mặc
+  // định) hoặc "p:<id chương trình>" (chương trình riêng do giáo viên tự tạo, xem programs-data.js) —
+  // trước đây 2 form này CHỈ cho chọn khối 6-12, không có cách nào chọn chương trình riêng.
+  function gradeOrProgramOptionsHtml() {
+    const gradesHtml = [6, 7, 8, 9, 10, 11, 12].map((g) => `<option value="g:${g}">Lớp ${g}</option>`).join('');
+    const programsHtml = ownPrograms.map((p) => `<option value="p:${p.id}">${escapeHtml(p.icon || '🎓')} ${escapeHtml(p.name)}</option>`).join('');
+    return `
+      <optgroup label="Khối lớp mặc định">${gradesHtml}</optgroup>
+      ${ownPrograms.length ? `<optgroup label="Chương trình riêng của tôi">${programsHtml}</optgroup>` : ''}
+    `;
+  }
+
+  // Từ giá trị select ở trên -> { grade, chapterIds } để truyền thẳng vào createGroupForCurrentTeacher.
+  // Chọn chương trình riêng -> gán LUÔN toàn bộ chương của chương trình đó cho nhóm mới, khỏi phải
+  // vào lại "Nhóm học sinh" chọn tay lần nữa. Chọn khối mặc định -> giữ hành vi cũ (chưa gán chương
+  // nào, chọn sau).
+  async function resolveGradeOrProgramValue(rawValue) {
+    if (rawValue.startsWith('p:')) {
+      const programId = rawValue.slice(2);
+      const program = ownPrograms.find((p) => p.id === programId);
+      const chapters = await getProgramChapters(programId);
+      return { grade: program ? program.name : 'Chương trình riêng', chapterIds: chapters.map((c) => c.id) };
+    }
+    return { grade: Number(rawValue.slice(2)), chapterIds: [] };
+  }
+
   requireTeacherAuth(async (user) => {
     let groups = [];
     try { groups = await listGroupsForCurrentTeacher(); } catch (e) { /* xử lý khi render */ }
+    try { ownPrograms = await listProgramsForCurrentTeacher(); } catch (e) { /* xử lý khi render */ }
 
     // Đếm nhanh số học sinh chờ duyệt ngay lúc tải trang để hiện huy hiệu trên nút — không cần bấm
     // mở mới biết có việc cần xử lý.
@@ -117,12 +147,10 @@
               <input type="text" id="pendingNewGroupName" placeholder="VD: 6A1 - Trường THCS ABC" />
             </div>
             <div class="field">
-              <label for="pendingNewGroupGrade">Khối lớp</label>
-              <select id="pendingNewGroupGrade">
-                ${[6, 7, 8, 9, 10, 11, 12].map((g) => `<option value="${g}">Lớp ${g}</option>`).join('')}
-              </select>
+              <label for="pendingNewGroupGrade">Khối lớp / chương trình</label>
+              <select id="pendingNewGroupGrade">${gradeOrProgramOptionsHtml()}</select>
             </div>
-            <p class="hint" style="margin-top:-2px;">Nhóm mới sẽ chưa có chương trình học — vào "Nhóm học sinh" để chọn chương sau khi tạo.</p>
+            <p class="hint" style="margin-top:-2px;">Chọn khối mặc định: nhóm mới chưa có chương trình học, vào "Nhóm học sinh" để chọn chương sau. Chọn 1 chương trình riêng: tự gán luôn toàn bộ chương của chương trình đó cho nhóm.</p>
             <button class="btn primary block" id="pendingCreateGroupBtn" type="button">Tạo nhóm</button>
             <div class="result-box" id="pendingCreateGroupResult"></div>
           </div>
@@ -181,12 +209,12 @@
       });
       $('#pendingCreateGroupBtn', panel).addEventListener('click', async () => {
         const name = $('#pendingNewGroupName', panel).value.trim();
-        const grade = Number($('#pendingNewGroupGrade', panel).value);
         const box = $('#pendingCreateGroupResult', panel);
         if (!name) { showResult(box, '⚠️ Nhập tên nhóm.', true); return; }
         showResult(box, '⏳ Đang tạo nhóm...');
         try {
-          const group = await createGroupForCurrentTeacher(name, grade, []);
+          const { grade, chapterIds } = await resolveGradeOrProgramValue($('#pendingNewGroupGrade', panel).value);
+          const group = await createGroupForCurrentTeacher(name, grade, chapterIds);
           groups.push(group);
           showResult(box, `✓ Đã tạo nhóm "${escapeHtml(name)}" — mã ${escapeHtml(group.groupCode)}. Đã có thể xếp học sinh vào nhóm này.`);
           setTimeout(() => renderPendingPanel(panel), 1400);
@@ -416,10 +444,8 @@
             <input type="text" id="importNewGroupName" placeholder="VD: 6A1 - Trường THCS ABC" />
           </div>
           <div class="field">
-            <label for="importNewGroupGrade">Khối lớp</label>
-            <select id="importNewGroupGrade">
-              ${[6, 7, 8, 9, 10, 11, 12].map((g) => `<option value="${g}">Lớp ${g}</option>`).join('')}
-            </select>
+            <label for="importNewGroupGrade">Khối lớp / chương trình</label>
+            <select id="importNewGroupGrade">${gradeOrProgramOptionsHtml()}</select>
           </div>
           <button class="btn primary block" id="importNewGroupCreateBtn" type="button">Tạo nhóm</button>
           <div class="result-box" id="importNewGroupResult"></div>
@@ -436,12 +462,12 @@
       });
       $('#importNewGroupCreateBtn', panel).addEventListener('click', async () => {
         const name = $('#importNewGroupName', panel).value.trim();
-        const grade = $('#importNewGroupGrade', panel).value;
         const box2 = $('#importNewGroupResult', panel);
         if (!name) { showResult(box2, 'Nhập tên nhóm.', true); return; }
         showResult(box2, '⏳ Đang tạo...');
         try {
-          const group = await createGroupForCurrentTeacher(name, grade, [], '');
+          const { grade, chapterIds } = await resolveGradeOrProgramValue($('#importNewGroupGrade', panel).value);
+          const group = await createGroupForCurrentTeacher(name, grade, chapterIds, '');
           groups.push(group);
           showResult(box2, `✓ Đã tạo nhóm "${escapeHtml(group.groupName)}".`);
           $('#importNewGroupName', panel).value = '';

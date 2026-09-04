@@ -60,6 +60,27 @@
   // VÀ chương thuộc chương trình riêng do giáo viên tự tạo (xem programs-data.js).
   function chapterChecklistHtml(checkedIds) {
     const checkedSet = new Set(checkedIds || []);
+    // Chương trình riêng lên ĐẦU TIÊN, trước cả khối 6-12 mặc định — khung "#groupChapters" chỉ cao
+    // 340px và cuộn được (xem pages/nhom-hoc-sinh.html); để chương trình riêng ở CUỐI (sau toàn bộ
+    // hàng chục chương của 7 khối mặc định) khiến giáo viên phải cuộn rất sâu mới thấy, nhiều người
+    // tưởng nhầm là không có/không hiện được (đã bị phản ánh y hệt việc này). Có thêm 2 tiêu đề nổi
+    // bật (nền màu) để tách rõ 2 nhóm, dễ nhận ra ngay cả khi chỉ liếc qua.
+    const programsHtml = ownProgramsWithChapters.length ? `
+      <div class="hint" style="font-weight:700;margin:0 0 8px;padding:6px 8px;background:rgba(13,148,136,0.1);border-radius:6px;">🎓 Chương trình riêng của tôi</div>
+      ${ownProgramsWithChapters.map(({ program, chapters }) => `
+        <div class="hint" style="font-weight:700;margin:10px 0 6px;">${program.icon || '🎓'} ${escapeHtml(program.name)}</div>
+        ${chapters.length
+          ? chapters.map((c) => `
+              <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
+                <input type="checkbox" class="chapter-check" value="${c.id}" ${checkedSet.has(c.id) ? 'checked' : ''} style="margin-top:3px;" />
+                <span>${escapeHtml(c.title)}</span>
+              </label>
+            `).join('')
+          : `<p class="hint" style="margin:0 0 8px;">Chương trình này chưa có chương nào — vào "Học theo chương" ở trang chủ, chọn chương trình này rồi bấm "+ Thêm chương mới vào chương trình này" trước, sau đó quay lại đây để chọn giao cho nhóm.</p>`
+        }
+      `).join('')}
+      <div class="hint" style="font-weight:700;margin:14px 0 8px;padding:6px 8px;background:rgba(100,116,139,0.1);border-radius:6px;">📚 Chương trình mặc định (khối 6-12)</div>
+    ` : '';
     const gradesHtml = GRADES.map((g) => {
       const chapters = getChaptersByGrade(g.grade);
       if (!chapters.length) return '';
@@ -73,23 +94,7 @@
         `).join('')}
       `;
     }).join('');
-    // Trước đây bỏ qua HẲN chương trình riêng chưa có chương nào (return '') — giáo viên mới tạo
-    // chương trình xong (chưa kịp thêm chương bên trong) sẽ thấy như thể chương trình vừa tạo biến
-    // mất hoàn toàn ở đây, dễ tưởng nhầm là lỗi. Giờ vẫn hiện TÊN chương trình kèm hướng dẫn rõ ràng
-    // khi chưa có chương nào để chọn, thay vì im lặng ẩn đi.
-    const programsHtml = ownProgramsWithChapters.map(({ program, chapters }) => `
-      <div class="hint" style="font-weight:700;margin:10px 0 6px;">${program.icon || '🎓'} ${escapeHtml(program.name)}</div>
-      ${chapters.length
-        ? chapters.map((c) => `
-            <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
-              <input type="checkbox" class="chapter-check" value="${c.id}" ${checkedSet.has(c.id) ? 'checked' : ''} style="margin-top:3px;" />
-              <span>${escapeHtml(c.title)}</span>
-            </label>
-          `).join('')
-        : `<p class="hint" style="margin:0 0 8px;">Chương trình này chưa có chương nào — vào "Học theo chương" ở trang chủ, chọn chương trình này rồi bấm "+ Thêm chương mới vào chương trình này" trước, sau đó quay lại đây để chọn giao cho nhóm.</p>`
-      }
-    `).join('');
-    return gradesHtml + programsHtml;
+    return programsHtml + gradesHtml;
   }
 
   function renderChapterChecklist() {
