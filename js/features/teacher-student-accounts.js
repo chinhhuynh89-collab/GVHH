@@ -265,11 +265,14 @@ function downloadStudentCodesCSV(results, groupName) {
       r.reused ? 'Đã cấp trước đó — xem file cũ, hoặc dùng "Cấp mã thay thế" nếu học sinh quên' : r.password
     ])
   ];
-  downloadCSV(rows, `ma-hoc-sinh-${(groupName || 'nhom').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.csv`);
+  return downloadCSV(rows, `ma-hoc-sinh-${(groupName || 'nhom').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.csv`);
 }
 
 // Dùng CHUNG cơ chế tải CSV đã có (xem quiz-excel.js: downloadQuizTemplateCSV) — BOM UTF-8 để Excel
-// mở đúng tiếng Việt có dấu, không cần viết lại logic đọc/ghi CSV.
+// mở đúng tiếng Việt có dấu, không cần viết lại logic đọc/ghi CSV. Trả về filename để nơi gọi báo rõ
+// tên file vừa tải cho người dùng (trang web KHÔNG có cách nào tự mở thư mục Tải xuống hay mở thẳng
+// file vừa lưu — trình duyệt cố tình chặn hẳn, không có API nào cho phép — nên chỉ báo rõ TÊN FILE để
+// người dùng tự tìm trong thư mục Tải xuống/Downloads của máy).
 function downloadCSV(rows, filename) {
   const csv = rows.map((r) => r.map(csvEscapeField).join(',')).join('\r\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -281,6 +284,7 @@ function downloadCSV(rows, filename) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return filename;
 }
 
 // Đọc file .xlsx/.csv theo đúng mẫu cột STUDENT_IMPORT_TEMPLATE_HEADERS, dùng lại bộ đọc đã có

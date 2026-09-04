@@ -416,14 +416,20 @@
 
           const newCount = imported.filter((r) => !r.reused).length;
           const reusedCount = imported.filter((r) => r.reused).length;
-          showResult(box, `✓ Đã nạp xong: ${newCount} tài khoản mới, ${reusedCount} học sinh đã có sẵn (giữ nguyên mã cũ).${errors.length ? ` ⚠️ ${errors.length} dòng lỗi.` : ''}${newCount ? ' Đã tự động tải file mã học sinh xuống máy — lưu lại cẩn thận, mật khẩu KHÔNG xem lại được sau khi rời trang này.' : ''}`);
+          showResult(box, `✓ Đã nạp xong: ${newCount} tài khoản mới, ${reusedCount} học sinh đã có sẵn (giữ nguyên mã cũ).${errors.length ? ` ⚠️ ${errors.length} dòng lỗi.` : ''}`);
           renderImportResultsTable(panel, imported, errors);
           // Tự động tải ngay khi vừa nạp xong (có tài khoản MỚI) — mật khẩu chỉ hiện được ĐÚNG 1 LẦN
           // DUY NHẤT lúc này (Firebase Auth không cho xem lại mật khẩu cũ sau đó, kể cả chính app này
           // cũng không lưu lại), nên không thể chỉ trông chờ giáo viên tự nhớ bấm nút tải — quên bấm
           // (VD lỡ chuyển sang mục khác, tải lại trang) coi như mất hẳn, chỉ còn cách "Cấp mã thay thế"
-          // ở mục Danh sách (tạo mã MỚI, không lấy lại được mã cũ).
-          if (newCount > 0) downloadStudentCodesCSV(imported, importLastGroupName);
+          // ở mục Danh sách (tạo mã MỚI, không lấy lại được mã cũ). Báo rõ TÊN FILE vừa tải qua toast —
+          // trang web không có cách nào tự mở thư mục Tải xuống hay mở thẳng file cho giáo viên (trình
+          // duyệt chặn hẳn, không có API nào cho phép), nên chỉ báo tên file để tự tìm trong thư mục
+          // Tải xuống/Downloads của máy rồi gửi cho học sinh.
+          if (newCount > 0) {
+            const filename = downloadStudentCodesCSV(imported, importLastGroupName);
+            showToast(`Đã tải file "${filename}" xuống thư mục Tải xuống (Downloads) của máy — mở thư mục đó để lấy file gửi cho học sinh. Lưu file cẩn thận, mật khẩu không xem lại được sau khi rời trang này.`, false);
+          }
         } catch (e) {
           showResult(box, `⚠️ ${escapeHtml((e.message || '').replace(/\n/g, '<br/>'))}`, true);
         } finally {
@@ -432,7 +438,8 @@
       });
       $('#downloadCodesBtn', panel).addEventListener('click', () => {
         if (!importLastResults) return;
-        downloadStudentCodesCSV(importLastResults, importLastGroupName);
+        const filename = downloadStudentCodesCSV(importLastResults, importLastGroupName);
+        showToast(`Đã tải file "${filename}" xuống thư mục Tải xuống (Downloads) của máy.`, false);
       });
     }
 
