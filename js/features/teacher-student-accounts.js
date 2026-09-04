@@ -69,27 +69,32 @@ async function createProvisionedStudentAuthAccount(loginCode, password, displayN
   return cred.user.uid;
 }
 
-// Tạo tài khoản Auth với số thứ tự ĐẦU TIÊN CÒN TRỐNG, bắt đầu từ startSeq — tự thử số tiếp theo nếu
-// mã bị trùng (Firebase Auth báo lỗi "email-already-in-use"). Cần thiết vì KHÔNG có cách xoá tài khoản
-// Auth của học sinh (không dùng Admin SDK) — khi giáo viên xoá học sinh (deleteStudentEverywhere) chỉ
-// mất bản ghi "students", tài khoản Auth cũ vẫn còn "âm thầm". Nếu giáo viên nạp lại đúng danh sách cũ,
-// số thứ tự tính từ "students" hiện có (đã bớt đi) có thể trùng số đã dùng trước đó -> tạo mới sẽ báo
-// lỗi. Thay vì để lỗi này chặn cả dòng nạp, tự động nhảy sang số tiếp theo cho tới khi tạo được, để
-// giáo viên không cần biết/xử lý chi tiết kỹ thuật này — kết quả là 1 mã học sinh MỚI, đúng như mong đợi.
-async function createProvisionedStudentAccountAutoSeq(teacherCode, startSeq, password, displayName) {
-  let seq = startSeq;
-  const maxAttempts = 1000;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const loginCode = `${teacherCode}.${String(seq).padStart(2, '0')}`;
-    try {
-      const studentUid = await createProvisionedStudentAuthAccount(loginCode, password, displayName);
-      return { studentUid, loginCode, nextSeq: seq + 1 };
-    } catch (e) {
-      if (e && e.code === 'auth/email-already-in-use') { seq++; continue; }
-      throw e;
-    }
-  }
-  throw new Error('Không tìm được mã học sinh còn trống sau nhiều lần thử — thử lại sau.');
+// Đặt trước 1 DÃY số thứ tự liên tiếp [start, start+count-1] cho 1 giáo viên, lưu bền ở
+// teachers/{uid}.nextStudentSeq — dùng "runTransaction" để đọc-tăng-ghi an toàn (2 tab cùng nạp lúc
+// nào cũng ra 2 dãy KHÔNG chồng nhau, không cần thử lại). Bộ đếm này CHỈ TĂNG, không bao giờ tính lại
+// từ "students" hiện có nên KHÔNG BAO GIỜ cấp trùng 1 số đã dùng trước đó, kể cả khi bản ghi
+// "students" cũ đã bị xoá (xem deleteStudentEverywhere) nhưng tài khoản Auth thật vẫn còn "âm thầm"
+// (không có Admin SDK để xoá) — nhờ vậy createProvisionedStudentAuthAccount() LUÔN thành công ngay
+// lần gọi đầu, không cần dò/thử số khác.
+// (Trước đây dò bằng cách bắt lỗi "email-already-in-use" rồi tự thử số tiếp theo — cách này từng gây
+// SỰ CỐ THẬT: nạp lại 1 danh sách dài có nhiều số đã bị "chiếm" tạo ra hàng loạt lượt tạo tài khoản
+// THẤT BẠI liên tiếp trong thời gian ngắn, khiến Firebase tự động chặn HẲN thiết bị vì nghi ngờ hành
+// vi bất thường — "auth/too-many-requests" — chặn luôn CẢ những dòng lẽ ra tạo được bình thường.)
+async function reserveStudentSeqRange(teacherUid, count) {
+  if (!count) return null;
+  const { db } = ensureFirebase();
+  const ref = db.collection('teachers').doc(teacherUid);
+  // Tính mốc khởi tạo (dùng khi CHƯA từng có bộ đếm — giáo viên đã cấp mã từ trước lúc chưa có tính
+  // năng này) TRƯỚC khi vào transaction — Firestore transaction chỉ cho đọc theo doc (tx.get), không
+  // chạy được truy vấn where() bên trong.
+  const fallbackStart = await nextLoginSeqForTeacher(teacherUid);
+  return db.runTransaction(async (tx) => {
+    const doc = await tx.get(ref);
+    const data = doc.exists ? doc.data() : {};
+    const start = typeof data.nextStudentSeq === 'number' ? data.nextStudentSeq : fallbackStart;
+    tx.set(ref, { nextStudentSeq: start + count }, { merge: true });
+    return start;
+  });
 }
 
 async function cleanupSecondaryAuthSession() {
@@ -175,12 +180,15 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
   // phải tải lại toàn bộ danh sách hàng chục lần nếu nạp danh sách dài.
   const existingDocs = await fetchTeacherProvisionedStudents(teacher.uid);
   const byPhone = new Map(existingDocs.map((s) => [s.phone, s]));
-  let nextSeq = computeNextSeqFromDocs(existingDocs);
 
   const newRowsCount = rows.filter((r) => !byPhone.has(r.phone)).length;
   if (newRowsCount > 0 && typeof enforceTeacherStudentLimit === 'function') {
     await enforceTeacherStudentLimit(teacher.uid);
   }
+  // Đặt trước NGUYÊN 1 DÃY số thứ tự cho toàn bộ tài khoản MỚI của lô này (xem reserveStudentSeqRange)
+  // — mỗi số chỉ dùng ĐÚNG 1 LẦN DUY NHẤT trong lịch sử, tạo tài khoản luôn thành công ngay lần đầu,
+  // không cần dò/thử lại (tránh lặp lại sự cố "auth/too-many-requests" đã gặp thực tế).
+  let nextSeq = newRowsCount > 0 ? await reserveStudentSeqRange(teacher.uid, newRowsCount) : null;
 
   const results = [];
   const errors = [];
@@ -215,9 +223,9 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
       }
 
       const password = generateStudentPassword();
-      const created = await createProvisionedStudentAccountAutoSeq(teacherCode, nextSeq, password, row.studentName);
-      const { studentUid, loginCode } = created;
-      nextSeq = created.nextSeq;
+      const loginCode = `${teacherCode}.${String(nextSeq).padStart(2, '0')}`;
+      nextSeq++;
+      const studentUid = await createProvisionedStudentAuthAccount(loginCode, password, row.studentName);
       queueWrite({
         groupCode, teacherUid: teacher.uid, studentUid, joinedAt: new Date().toISOString(),
         studentName: row.studentName, school: row.school, className: row.className,
@@ -323,9 +331,10 @@ async function issueReplacementLoginForStudent(oldStudentDoc) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const teacherCode = deriveTeacherCode(teacher.uid);
-  const startSeq = await nextLoginSeqForTeacher(teacher.uid);
+  const seq = await reserveStudentSeqRange(teacher.uid, 1);
+  const loginCode = `${teacherCode}.${String(seq).padStart(2, '0')}`;
   const password = generateStudentPassword();
-  const { studentUid, loginCode } = await createProvisionedStudentAccountAutoSeq(teacherCode, startSeq, password, oldStudentDoc.studentName);
+  const studentUid = await createProvisionedStudentAuthAccount(loginCode, password, oldStudentDoc.studentName);
   await addStudentToGroup(oldStudentDoc.groupCode, {
     studentUid, studentName: oldStudentDoc.studentName, school: oldStudentDoc.school,
     className: oldStudentDoc.className, address: oldStudentDoc.address, phone: oldStudentDoc.phone,
