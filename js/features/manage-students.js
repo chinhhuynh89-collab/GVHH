@@ -268,7 +268,7 @@
             <td>
               ${zaloDigits ? `<a class="btn" href="https://zalo.me/${escapeHtml(zaloDigits)}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
               ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">🔑 Cấp mã thay thế</button>` : ''}
-              <button class="btn delete-student-btn" type="button" data-uid="${escapeHtml(s.studentUid)}" data-name="${escapeHtml(s.studentName || '')}" style="margin-top:4px;color:#dc2626;">🗑️ Xoá học sinh</button>
+              <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" style="margin-top:4px;color:#dc2626;">🗑️ Xoá học sinh</button>
               <div class="result-box" id="replace-login-result-${escapeHtml(s.studentUid)}"></div>
             </td>
           </tr>
@@ -308,12 +308,12 @@
 
       $$('.delete-student-btn', assignedBody).forEach((btn) => {
         btn.addEventListener('click', async () => {
-          const uid = btn.dataset.uid;
+          const docIds = btn.dataset.docIds ? btn.dataset.docIds.split(',') : [];
           const name = btn.dataset.name;
           if (!confirm(`Xoá HẲN học sinh "${name}" khỏi mọi nhóm? Không thể hoàn tác — tiến độ học/gói đã mua của tài khoản này vẫn còn (không mất) nhưng sẽ không còn hiện trong bất kỳ nhóm nào của bạn nữa.`)) return;
           btn.disabled = true;
           try {
-            await deleteStudentEverywhere(uid);
+            await deleteStudentEverywhere(docIds);
             // Chỉ xoá ĐÚNG dòng vừa bấm khỏi bảng — trước đây vẽ lại TOÀN BỘ danh sách
             // (renderRosterPanel(panel)) sau mỗi lần xoá, làm mất vị trí đang cuộn tới (nhảy về đầu
             // trang) và không có xác nhận rõ ràng đã xoá xong, khiến giáo viên tưởng bấm không có tác

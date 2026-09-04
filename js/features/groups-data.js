@@ -124,17 +124,21 @@ async function deleteStudent(studentId) {
   await db.collection('students').doc(studentId).delete();
 }
 
-// Xoá HẲN 1 học sinh khỏi TẤT CẢ nhóm của giáo viên hiện tại (mọi bản ghi "students" cùng
-// studentUid) — hành động XOÁ HỌC SINH duy nhất trong app, chỉ dùng ở trang "Quản lý học sinh"
-// (xem manage-students.js). Xoá 1 NHÓM (deleteGroup ở trên) KHÔNG còn kéo theo xoá học sinh nữa.
-async function deleteStudentEverywhere(studentUid) {
+// Xoá HẲN 1 học sinh khỏi TẤT CẢ nhóm — nhận thẳng DANH SÁCH ID các bản ghi "students" cần xoá
+// (docIds, đã gộp sẵn lúc tải danh sách — xem mergeStudentsAcrossGroups() bên dưới) thay vì tự dò
+// lại qua studentUid. Trước đây dò theo .where('studentUid','==',...): 1 số bản ghi "students" CŨ
+// (tạo từ trước khi bắt học sinh đăng nhập Google, dùng deviceId ngẫu nhiên) thiếu hẳn field
+// studentUid — dò kiểu đó KHÔNG tìm thấy gì (snap rỗng), batch.commit() trên batch RỖNG vẫn coi là
+// "thành công" (không báo lỗi) mà KHÔNG xoá được gì cả — lỗi thực tế đã gặp: bấm xoá báo đã xoá
+// nhưng tải lại trang học sinh vẫn còn nguyên. Xoá thẳng theo ID chắc chắn đúng bản ghi đang hiển
+// thị, không phụ thuộc field nào khác có thiếu hay không.
+async function deleteStudentEverywhere(docIds) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  if (!docIds || !docIds.length) throw new Error('Không tìm thấy bản ghi học sinh để xoá.');
   const { db } = ensureFirebase();
-  const snap = await db.collection('students')
-    .where('teacherUid', '==', teacher.uid).where('studentUid', '==', studentUid).get();
   const batch = db.batch();
-  snap.docs.forEach((d) => batch.delete(d.ref));
+  docIds.forEach((id) => batch.delete(db.collection('students').doc(id)));
   await batch.commit();
 }
 
