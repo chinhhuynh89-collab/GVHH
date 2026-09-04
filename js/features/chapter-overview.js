@@ -56,8 +56,16 @@
 
     if (!previewing) {
       try {
-        const teacher = await waitForAuthReady();
-        if (teacher) {
+        // Dùng resolveEffectiveTeacherUid() + getRole() (giống hệt resolveContentOwner() ở auth.js)
+        // thay vì chỉ kiểm tra "có tài khoản Google nào đang đăng nhập hay không" như trước — cách cũ
+        // coi BẤT KỲ ai đang đăng nhập Firebase (kể cả 1 tài khoản học sinh thật, hoặc thiết bị đang
+        // chọn vai trò "học sinh" nhưng chưa qua đúng luồng "xem thử") cũng là giáo viên, có thể hiện
+        // nhầm "Giáo án" của tài khoản khác. resolveEffectiveTeacherUid() tự đối chiếu với cache nhóm
+        // đã xác thực (getVerifiedMembership) và role !== 'student' loại đúng cả trường hợp đang chọn
+        // vai trò học sinh dù vẫn còn phiên đăng nhập Google.
+        const role = typeof getRole === 'function' ? getRole() : null;
+        const effectiveTeacherUid = typeof resolveEffectiveTeacherUid === 'function' ? await resolveEffectiveTeacherUid() : null;
+        if (effectiveTeacherUid && role !== 'student') {
           viewerMode = 'teacher';
           try { ownPrograms = await listProgramsForCurrentTeacher(); } catch (e) { ownPrograms = []; }
           try { chapterActivity = await getTeacherChapterActivity(); } catch (e) { chapterActivity = {}; }

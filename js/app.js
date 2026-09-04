@@ -37,6 +37,18 @@
   });
 })();
 
+// Trình duyệt (đặc biệt Chrome trên điện thoại) có thể phục hồi trang từ "bfcache" (back/forward
+// cache) khi bấm nút back/forward hoặc vuốt lùi — toàn bộ DOM + trạng thái JS được ĐÓNG BĂNG rồi trả
+// lại Y NGUYÊN, KHÔNG chạy lại bất kỳ đoạn script nào, kể cả các bước kiểm tra đăng nhập/vai trò lúc
+// tải trang. Nếu trang này từng được tải lúc CÒN đăng nhập/CÒN vai trò khác, rồi ở tab/phiên khác đã
+// đăng xuất/đổi vai trò, vuốt lùi quay lại trang sẽ thấy Y HỆT giao diện/nội dung CŨ (VD vẫn thấy
+// đúng chương trình học của tài khoản đã đăng xuất) — lỗi thực tế đã gặp. Buộc tải lại thật mỗi khi
+// phát hiện trang vừa được phục hồi kiểu này, để mọi kiểm tra đăng nhập/vai trò chạy lại đúng với
+// trạng thái mới nhất thay vì hiện lại ảnh chụp cũ.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) window.location.reload();
+});
+
 function showUpdateAvailableBanner() {
   if (document.getElementById('updateAvailableBanner')) return;
   const el = document.createElement('div');
