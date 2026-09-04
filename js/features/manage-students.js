@@ -314,7 +314,13 @@
           btn.disabled = true;
           try {
             await deleteStudentEverywhere(uid);
-            await renderRosterPanel(panel);
+            // Chỉ xoá ĐÚNG dòng vừa bấm khỏi bảng — trước đây vẽ lại TOÀN BỘ danh sách
+            // (renderRosterPanel(panel)) sau mỗi lần xoá, làm mất vị trí đang cuộn tới (nhảy về đầu
+            // trang) và không có xác nhận rõ ràng đã xoá xong, khiến giáo viên tưởng bấm không có tác
+            // dụng khi đang xoá nhiều học sinh liên tiếp trong danh sách dài.
+            const row = btn.closest('tr');
+            if (row) row.remove();
+            showToast(`Đã xoá "${name}".`, false);
           } catch (e) {
             showToast('Không xoá được: ' + e.message);
             btn.disabled = false;

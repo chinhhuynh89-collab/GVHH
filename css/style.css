@@ -970,22 +970,6 @@ sub { font-size: 0.72em; }
 
 /* Bảng danh sách học sinh (Nhóm học sinh) */
 .roster-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: var(--radius-sm); }
-/* Màn máy tính đủ rộng: cho khung bảng "phá" ra khỏi khung <main> (vốn giới hạn max-width:980px để
-   dễ đọc chữ trên các trang khác) để dùng được gần hết chiều ngang màn hình thay vì kéo ngang mới
-   xem hết — dùng đúng kỹ thuật "full-bleed" (left:50% + margin âm nửa chiều rộng mong muốn) để CĂN
-   GIỮA LẠI theo màn hình thay vì theo khung cha đang bị giới hạn. Chỉ áp dụng riêng bảng danh sách,
-   không đụng tới bố cục các phần khác của trang. */
-@media (min-width: 900px) {
-  .roster-table-wrap {
-    width: 99vw;
-    max-width: 99vw;
-    position: relative;
-    left: 50%;
-    right: 50%;
-    margin-left: -49.5vw;
-    margin-right: -49.5vw;
-  }
-}
 
 /* Lưới nút hành động (Nhóm học sinh...) — chia cột đều (2 cột trên điện thoại, 3 cột màn rộng
    hơn) thay vì 1 hàng ngang dễ vỡ bố cục trên điện thoại. */
