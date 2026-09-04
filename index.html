@@ -25,6 +25,7 @@
        Bấm biểu tượng CHỈ mở menu xổ xuống, KHÔNG tự thực hiện đăng nhập/đăng xuất ngay — phải bấm
        tiếp đúng nút bên trong menu mới thực hiện, tránh bấm nhầm biểu tượng làm mất tài khoản đang
        xem giữa chừng. -->
+  <span id="topAuthUserName" style="display:none;font-size:12.5px;font-weight:600;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;"></span>
   <div id="topAuthWrap" style="display:none;position:relative;flex-shrink:0;">
     <button id="topAuthBtn" class="back-btn" type="button"></button>
     <div id="topAuthMenu" class="card" style="display:none;position:absolute;top:46px;right:0;z-index:30;min-width:220px;padding:10px;text-align:left;"></div>
@@ -203,6 +204,10 @@
       <div class="field">
         <label for="newStudentPasswordInput">Mật khẩu mới</label>
         <input type="password" id="newStudentPasswordInput" />
+      </div>
+      <div class="field">
+        <label for="newStudentPasswordConfirmInput">Nhập lại mật khẩu mới</label>
+        <input type="password" id="newStudentPasswordConfirmInput" />
       </div>
       <button class="btn primary block" id="changeStudentPasswordBtn" type="button">Đổi mật khẩu</button>
       <div class="result-box" id="changeStudentPasswordResult"></div>
@@ -495,9 +500,18 @@
     if (menu.style.display !== 'none' && !menu.contains(e.target) && e.target !== btn) menu.style.display = 'none';
   });
 
+  const userNameEl = document.getElementById('topAuthUserName');
   if (user) {
     btn.textContent = '🚪';
     btn.title = `Đăng xuất (${user.displayName || user.email || ''})`;
+    // Hiện TÊN ngay cạnh biểu tượng — trước đây chỉ có trong thuộc tính "title" (chỉ thấy khi rê
+    // chuột vào, trên điện thoại gần như không ai biết), giờ hiện thẳng ra để biết ngay đang đăng
+    // nhập đúng tài khoản nào mà không cần bấm vào menu. Không dùng user.email làm dự phòng vì tài
+    // khoản mã học sinh có email nội bộ tự sinh (VD "abc123.07@hocsinh.hoahoc.app"), hiện ra sẽ rối.
+    if (userNameEl) {
+      userNameEl.textContent = user.displayName || '';
+      userNameEl.style.display = user.displayName ? 'inline-block' : 'none';
+    }
     menu.innerHTML = `
       <div class="hint" style="margin-bottom:8px;">Đang đăng nhập: <strong>${escapeHtml(user.displayName || user.email || '')}</strong></div>
       <button class="btn primary block" id="topAuthActionBtn" type="button">🚪 Đăng xuất</button>
@@ -515,6 +529,7 @@
     // thêm nút này lúc đó dễ gây rối/trùng lặp luồng.
     btn.textContent = '🔑';
     btn.title = 'Đăng nhập';
+    if (userNameEl) userNameEl.style.display = 'none';
     // Vai trò học sinh: cho thêm lựa chọn "Mã học sinh" (tài khoản do giáo viên cấp — xem
     // teacher-student-accounts.js), vì không phải học sinh nào cũng tự có tài khoản Google. Giáo
     // viên luôn chỉ có Google (chưa có luồng cấp tài khoản cho giáo viên).
@@ -604,15 +619,19 @@
   document.getElementById('changeStudentPasswordBtn').addEventListener('click', async () => {
     const oldPassword = document.getElementById('oldStudentPasswordInput').value;
     const newPassword = document.getElementById('newStudentPasswordInput').value;
+    const newPasswordConfirm = document.getElementById('newStudentPasswordConfirmInput').value;
     const box = document.getElementById('changeStudentPasswordResult');
-    if (!oldPassword || !newPassword) { showResult(box, 'Nhập đủ mật khẩu hiện tại và mật khẩu mới.', true); return; }
+    if (!oldPassword || !newPassword || !newPasswordConfirm) { showResult(box, 'Nhập đủ mật khẩu hiện tại, mật khẩu mới và nhập lại mật khẩu mới.', true); return; }
     if (newPassword.length < 6) { showResult(box, 'Mật khẩu mới cần ít nhất 6 ký tự.', true); return; }
+    if (newPassword !== newPasswordConfirm) { showResult(box, 'Mật khẩu mới nhập lại không khớp — gõ lại cho đúng.', true); return; }
     showResult(box, '⏳ Đang đổi mật khẩu...');
     try {
       await changeOwnStudentPassword(oldPassword, newPassword);
-      document.getElementById('oldStudentPasswordInput').value = '';
-      document.getElementById('newStudentPasswordInput').value = '';
-      showResult(box, '✓ Đã đổi mật khẩu — lần đăng nhập sau nhớ dùng mật khẩu mới.');
+      // Đóng hẳn mục đổi mật khẩu lại sau khi đổi xong — đã đổi xong thì không cần hiện form này nữa,
+      // đỡ chiếm chỗ trang chủ; báo bằng thông báo nổi (showToast) vì card sắp ẩn ngay sau đó, dùng
+      // result-box bên trong card (sắp biến mất cùng lúc) sẽ không kịp cho học sinh thấy.
+      showToast('Đã cập nhật mật khẩu mới — lần đăng nhập sau nhớ dùng mật khẩu mới.', false);
+      card.style.display = 'none';
     } catch (e) {
       const friendly = e.code === 'auth/wrong-password' ? 'Mật khẩu hiện tại không đúng.' : e.message;
       showResult(box, `⚠️ ${escapeHtml(friendly)}`, true);

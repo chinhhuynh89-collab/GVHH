@@ -41,8 +41,27 @@ function clearMembership() {
 // khiến trang tiếp tục hiện tiến độ/chương trình học CŨ đọc từ cache cục bộ dù đã "đặt lại" xong.
 async function getVerifiedMembership() {
   const m = getMembership();
-  if (!m || !m.studentUid) return m;
   const user = (typeof waitForAuthReady === 'function') ? await waitForAuthReady() : null;
+  if (!m || !m.studentUid) {
+    // Chưa có cache trên thiết bị này — thường gặp khi học sinh vừa đăng nhập thẳng ở trang chủ (mã
+    // học sinh do giáo viên cấp, hoặc Google) mà CHƯA từng tự mở "Vào nhóm học tập" 1 lần nào (trang
+    // đó mới là nơi trước đây tự điền cache này). Giáo viên thường đã xếp sẵn học sinh vào nhóm ngay
+    // lúc nạp danh sách nên học sinh CÓ SẴN nhóm trên Firestore dù thiết bị chưa biết — nếu không tự
+    // dò ở đây, trang chủ sẽ không nhận diện được là học sinh của giáo viên nào (không hiện đúng
+    // thương hiệu "Học cùng {tên giáo viên}", tên nhóm...) cho tới khi tự mở "Vào nhóm" 1 lần, rất dễ
+    // gây hiểu nhầm là lỗi. Tự dò và điền cache luôn nếu đang đăng nhập 1 tài khoản đã có sẵn nhóm.
+    if (user) {
+      try {
+        const groups = await listMyGroups(user.uid);
+        if (groups.length) {
+          const auto = Object.assign({}, groups[0], { studentUid: user.uid });
+          setMembership(auto);
+          return auto;
+        }
+      } catch (e) { /* lỗi mạng tạm thời -> coi như chưa có nhóm, không chặn trang */ }
+    }
+    return m;
+  }
   if (!user || user.uid !== m.studentUid) {
     clearMembership();
     return null;
