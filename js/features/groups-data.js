@@ -222,7 +222,13 @@ function mergeStudentsAcrossGroups(docs, groupNameByCode) {
       byKey.set(key, Object.assign({}, s, { groups: [], docIds: [], latestJoinedAt: s.joinedAt }));
     }
     const merged = byKey.get(key);
-    merged.groups.push({
+    // groupCode rỗng = học sinh nạp lên nhưng chưa xếp vào nhóm nào (xem bulkImportProvisionedStudents,
+    // teacher-student-accounts.js) — khác với "nhóm đã xoá" (groupCode có giá trị nhưng không còn khớp
+    // nhóm nào đang tồn tại), cần đánh dấu riêng (unassigned: true) để nơi hiển thị ghi đúng "Chưa xếp
+    // nhóm" thay vì nhầm thành "(Nhóm đã xoá)".
+    merged.groups.push(!s.groupCode ? {
+      groupCode: '', groupName: null, joinedAt: s.joinedAt, unassigned: true
+    } : {
       groupCode: s.groupCode,
       groupName: groupNameByCode.has(s.groupCode) ? groupNameByCode.get(s.groupCode) : null,
       joinedAt: s.joinedAt

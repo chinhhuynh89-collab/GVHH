@@ -10,6 +10,13 @@
 //    thể xuất hiện với nhiều nhóm nếu học cùng lúc nhiều nhóm).
 
 (function () {
+  // Bỏ dấu tiếng Việt + thường hoá để tìm kiếm không phân biệt dấu/hoa-thường (gõ "an" vẫn ra "Ẩn", "Ân"...).
+  function normalizeSearchText(str) {
+    return (str || '').toString().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/đ/g, 'd');
+  }
+
   requireTeacherAuth(async (user) => {
     let groups = [];
     try { groups = await listGroupsForCurrentTeacher(); } catch (e) { /* xử lý khi render */ }
@@ -212,11 +219,14 @@
       const rows = students.map((s, i) => {
         // Nhóm đã bị xoá (xem deleteGroup() — xoá nhóm không còn xoá học sinh nữa) có groupName =
         // null — ghi rõ "(Nhóm đã xoá)" thay vì để trống khó hiểu, học sinh đó vẫn còn nguyên để xếp
-        // vào nhóm khác.
-        const groupsText = s.groups.map((g) => escapeHtml(g.groupName || '(Nhóm đã xoá)')).join(', ');
+        // vào nhóm khác. Học sinh nạp lên chưa xếp nhóm (unassigned) ghi rõ "Chưa xếp nhóm".
+        const groupsText = s.groups.map((g) => escapeHtml(g.unassigned ? 'Chưa xếp nhóm' : (g.groupName || '(Nhóm đã xoá)'))).join(', ');
         const zaloDigits = (s.phone || '').replace(/[^0-9]/g, '');
+        // Chuỗi tìm kiếm gộp sẵn (tên, mã HS, mã đăng nhập, SĐT) — bỏ dấu + thường hoá 1 lần lúc render
+        // thay vì tính lại mỗi lần gõ phím, lọc theo dataset ngay trên DOM cho mượt (giống Excel).
+        const searchText = normalizeSearchText([s.studentName, codes[i], s.loginCode, s.phone].filter(Boolean).join(' '));
         return `
-          <tr>
+          <tr data-search="${escapeHtml(searchText)}">
             <td>${i + 1}</td>
             <td>${escapeHtml(codes[i] || '—')}</td>
             <td>${escapeHtml(s.studentName || '')}</td>
@@ -238,16 +248,35 @@
       }).join('');
 
       assignedBody.innerHTML = `
+        <div class="field" style="margin-bottom:10px;">
+          <label for="studentSearchInput">🔍 Tìm học sinh (tên, mã, SĐT)</label>
+          <input type="text" id="studentSearchInput" placeholder="Gõ để lọc nhanh — VD: tên, mã học sinh, số điện thoại..." autocomplete="off" />
+        </div>
+        <p class="hint" id="studentSearchCount"></p>
         <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang). "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
               <tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th><th></th></tr>
             </thead>
-            <tbody>${rows}</tbody>
+            <tbody id="studentRosterBody">${rows}</tbody>
           </table>
         </div>
       `;
+
+      const searchInput = $('#studentSearchInput', assignedBody);
+      const searchCount = $('#studentSearchCount', assignedBody);
+      const rosterTrs = $$('#studentRosterBody tr', assignedBody);
+      searchInput.addEventListener('input', () => {
+        const q = normalizeSearchText(searchInput.value.trim());
+        let shown = 0;
+        rosterTrs.forEach((tr) => {
+          const match = !q || (tr.dataset.search || '').includes(q);
+          tr.style.display = match ? '' : 'none';
+          if (match) shown++;
+        });
+        searchCount.textContent = q ? `Tìm thấy ${shown}/${rosterTrs.length} học sinh.` : '';
+      });
 
       $$('.delete-student-btn', assignedBody).forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -293,6 +322,7 @@
 
     // ---------- 📋 Nạp danh sách (gọn — chỉ dựng giao diện lúc bấm mở lần đầu) ----------
     // Xem js/features/teacher-student-accounts.js cho toàn bộ logic tạo tài khoản/mã/dò trùng SĐT.
+    const IMPORT_UNASSIGNED_VALUE = '__UNASSIGNED__';
     let importSelectedGroupCode = null;
     let importSelectedFile = null;
     let importLastResults = null;
@@ -343,12 +373,13 @@
         showResult(box, '⏳ Đang đọc file...');
         try {
           const rows = await parseStudentImportFile(importSelectedFile);
-          const { results: imported, errors } = await bulkImportProvisionedStudents(importSelectedGroupCode, rows, (i, total, name) => {
+          const groupCodeToUse = importSelectedGroupCode === IMPORT_UNASSIGNED_VALUE ? '' : importSelectedGroupCode;
+          const { results: imported, errors } = await bulkImportProvisionedStudents(groupCodeToUse, rows, (i, total, name) => {
             showResult(box, `⏳ Đang nạp ${i}/${total}: ${escapeHtml(name || '')}...`);
           });
           importLastResults = imported;
           const group = groups.find((g) => g.groupCode === importSelectedGroupCode);
-          importLastGroupName = (group && group.groupName) || 'nhom';
+          importLastGroupName = group ? group.groupName : 'chua-xep-nhom';
 
           const newCount = imported.filter((r) => !r.reused).length;
           const reusedCount = imported.filter((r) => r.reused).length;
@@ -370,12 +401,14 @@
       const box = $('#groupPickerBody', panel);
       const optionsHtml = groups.map((g) => `<option value="${escapeHtml(g.groupCode)}">${escapeHtml(g.groupName)}</option>`).join('');
       box.innerHTML = `
-        ${groups.length ? `
-          <div class="field">
-            <label for="importGroupSelect">Nạp vào nhóm</label>
-            <select id="importGroupSelect">${optionsHtml}</select>
-          </div>
-        ` : '<p class="hint">Bạn chưa có nhóm nào — tạo nhóm mới bên dưới trước.</p>'}
+        <div class="field">
+          <label for="importGroupSelect">Nạp vào nhóm</label>
+          <select id="importGroupSelect">
+            <option value="${IMPORT_UNASSIGNED_VALUE}">— Chưa xếp nhóm (xếp sau) —</option>
+            ${optionsHtml}
+          </select>
+        </div>
+        <p class="hint" style="margin-top:-4px;">Không nhất thiết phải chọn nhóm ngay — chọn "Chưa xếp nhóm" thì vẫn tạo tài khoản bình thường, sau đó vào "Nhóm học sinh" chọn học sinh có sẵn để xếp vào nhóm khi nào bạn muốn.</p>
         <button class="btn block" id="importNewGroupToggleBtn" type="button" style="margin-top:8px;">➕ Tạo nhóm mới</button>
         <div id="importNewGroupForm" style="display:none;margin-top:10px;">
           <div class="field">
