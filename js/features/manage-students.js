@@ -370,8 +370,7 @@
           <ol class="hint" style="padding-left:18px;line-height:1.8;margin:0 0 10px;">
             <li>Bấm "Tải file mẫu" bên dưới, điền dữ liệu thật theo đúng cột (xoá 2 dòng ví dụ đi).</li>
             <li>Chọn nhóm cần nạp vào (hoặc tạo nhóm mới) — chương trình học vẫn chọn sau ở trang "Nhóm học sinh" như bình thường.</li>
-            <li>Tải file đã điền lên, bấm "Nạp danh sách".</li>
-            <li>Tải file mã học sinh về, gửi cho từng em (mỗi em 1 dòng: mã + mật khẩu).</li>
+            <li>Tải file đã điền lên, bấm "Nạp danh sách" — xong sẽ TỰ ĐỘNG tải về máy 1 file mã học sinh (mỗi em 1 dòng: mã + mật khẩu), gửi file đó cho từng em. Lưu file này cẩn thận — mật khẩu chỉ hiện được đúng lúc này, không xem lại được sau đó (kể cả chính app), quên lưu chỉ còn cách cấp mã thay thế.</li>
           </ol>
           <button class="btn block" id="downloadTemplateBtn" type="button">📥 Tải file mẫu</button>
 
@@ -417,8 +416,14 @@
 
           const newCount = imported.filter((r) => !r.reused).length;
           const reusedCount = imported.filter((r) => r.reused).length;
-          showResult(box, `✓ Đã nạp xong: ${newCount} tài khoản mới, ${reusedCount} học sinh đã có sẵn (giữ nguyên mã cũ).${errors.length ? ` ⚠️ ${errors.length} dòng lỗi.` : ''}`);
+          showResult(box, `✓ Đã nạp xong: ${newCount} tài khoản mới, ${reusedCount} học sinh đã có sẵn (giữ nguyên mã cũ).${errors.length ? ` ⚠️ ${errors.length} dòng lỗi.` : ''}${newCount ? ' Đã tự động tải file mã học sinh xuống máy — lưu lại cẩn thận, mật khẩu KHÔNG xem lại được sau khi rời trang này.' : ''}`);
           renderImportResultsTable(panel, imported, errors);
+          // Tự động tải ngay khi vừa nạp xong (có tài khoản MỚI) — mật khẩu chỉ hiện được ĐÚNG 1 LẦN
+          // DUY NHẤT lúc này (Firebase Auth không cho xem lại mật khẩu cũ sau đó, kể cả chính app này
+          // cũng không lưu lại), nên không thể chỉ trông chờ giáo viên tự nhớ bấm nút tải — quên bấm
+          // (VD lỡ chuyển sang mục khác, tải lại trang) coi như mất hẳn, chỉ còn cách "Cấp mã thay thế"
+          // ở mục Danh sách (tạo mã MỚI, không lấy lại được mã cũ).
+          if (newCount > 0) downloadStudentCodesCSV(imported, importLastGroupName);
         } catch (e) {
           showResult(box, `⚠️ ${escapeHtml((e.message || '').replace(/\n/g, '<br/>'))}`, true);
         } finally {
