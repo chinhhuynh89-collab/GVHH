@@ -181,6 +181,151 @@
       });
     }
 
+    // ---------- 📋 Nạp danh sách học sinh (gọn — chỉ mở khi bấm nút) ----------
+    // Xem js/features/teacher-student-accounts.js cho toàn bộ logic tạo tài khoản/mã/dò trùng SĐT.
+    // Chỉ dựng giao diện lúc bấm mở LẦN ĐẦU (không tải/dựng sẵn nếu giáo viên không dùng tới).
+    let importInited = false;
+    let importSelectedGroupCode = null;
+    let importSelectedFile = null;
+    let importLastResults = null;
+    let importLastGroupName = '';
+
+    function renderImportGroupPicker() {
+      const box = $('#groupPickerBody');
+      const optionsHtml = groups.map((g) => `<option value="${escapeHtml(g.groupCode)}">${escapeHtml(g.groupName)}</option>`).join('');
+      box.innerHTML = `
+        ${groups.length ? `
+          <div class="field">
+            <label for="importGroupSelect">Nạp vào nhóm</label>
+            <select id="importGroupSelect">${optionsHtml}</select>
+          </div>
+        ` : '<p class="hint">Bạn chưa có nhóm nào — tạo nhóm mới bên dưới trước.</p>'}
+        <button class="btn block" id="importNewGroupToggleBtn" type="button" style="margin-top:8px;">➕ Tạo nhóm mới</button>
+        <div id="importNewGroupForm" style="display:none;margin-top:10px;">
+          <div class="field">
+            <label for="importNewGroupName">Tên nhóm</label>
+            <input type="text" id="importNewGroupName" placeholder="VD: 6A1 - Trường THCS ABC" />
+          </div>
+          <div class="field">
+            <label for="importNewGroupGrade">Khối lớp</label>
+            <select id="importNewGroupGrade">
+              ${[6, 7, 8, 9, 10, 11, 12].map((g) => `<option value="${g}">Lớp ${g}</option>`).join('')}
+            </select>
+          </div>
+          <button class="btn primary block" id="importNewGroupCreateBtn" type="button">Tạo nhóm</button>
+          <div class="result-box" id="importNewGroupResult"></div>
+        </div>
+      `;
+
+      const select = $('#importGroupSelect');
+      importSelectedGroupCode = select ? select.value : null;
+      if (select) select.addEventListener('change', () => { importSelectedGroupCode = select.value; updateImportSubmitState(); });
+
+      $('#importNewGroupToggleBtn').addEventListener('click', () => {
+        const form = $('#importNewGroupForm');
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      });
+      $('#importNewGroupCreateBtn').addEventListener('click', async () => {
+        const name = $('#importNewGroupName').value.trim();
+        const grade = $('#importNewGroupGrade').value;
+        const box2 = $('#importNewGroupResult');
+        if (!name) { showResult(box2, 'Nhập tên nhóm.', true); return; }
+        showResult(box2, '⏳ Đang tạo...');
+        try {
+          const group = await createGroupForCurrentTeacher(name, grade, [], '');
+          groups.push(group);
+          showResult(box2, `✓ Đã tạo nhóm "${escapeHtml(group.groupName)}".`);
+          $('#importNewGroupName').value = '';
+          $('#importNewGroupForm').style.display = 'none';
+          renderImportGroupPicker();
+          importSelectedGroupCode = group.groupCode;
+          const sel = $('#importGroupSelect');
+          if (sel) sel.value = group.groupCode;
+          updateImportSubmitState();
+        } catch (e) {
+          showResult(box2, `⚠️ ${escapeHtml(e.message)}`, true);
+        }
+      });
+
+      updateImportSubmitState();
+    }
+
+    function updateImportSubmitState() {
+      $('#importSubmitBtn').disabled = !importSelectedGroupCode || !importSelectedFile;
+    }
+
+    function renderImportResultsTable(results, errors) {
+      const card = $('#importResultsCard');
+      const body = $('#importResultsBody');
+      card.style.display = 'block';
+      body.innerHTML = `
+        <div class="roster-table-wrap">
+          <table class="roster-table">
+            <thead><tr><th>Họ và tên</th><th>Mã học sinh</th><th>Mật khẩu</th></tr></thead>
+            <tbody>
+              ${results.map((r) => `
+                <tr>
+                  <td>${escapeHtml(r.studentName)}</td>
+                  <td>${escapeHtml(r.loginCode)}</td>
+                  <td>${r.reused ? '<span class="hint">Đã cấp trước đó</span>' : `<strong style="color:var(--brand);">${escapeHtml(r.password)}</strong>`}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        ${errors.length ? `<div class="result-box show error" style="margin-top:10px;">${errors.map((e) => escapeHtml(e.message)).join('<br/>')}</div>` : ''}
+      `;
+    }
+
+    function initImportSection() {
+      if (importInited) return;
+      importInited = true;
+      renderImportGroupPicker();
+
+      $('#downloadTemplateBtn').addEventListener('click', () => downloadStudentImportTemplateCSV());
+      $('#importFileInput').addEventListener('change', (e) => {
+        importSelectedFile = e.target.files[0] || null;
+        updateImportSubmitState();
+      });
+      $('#importSubmitBtn').addEventListener('click', async () => {
+        const box = $('#importResult');
+        if (!importSelectedGroupCode || !importSelectedFile) return;
+        const submitBtn = $('#importSubmitBtn');
+        submitBtn.disabled = true;
+        showResult(box, '⏳ Đang đọc file...');
+        try {
+          const rows = await parseStudentImportFile(importSelectedFile);
+          const { results: imported, errors } = await bulkImportProvisionedStudents(importSelectedGroupCode, rows, (i, total, name) => {
+            showResult(box, `⏳ Đang nạp ${i}/${total}: ${escapeHtml(name || '')}...`);
+          });
+          importLastResults = imported;
+          const group = groups.find((g) => g.groupCode === importSelectedGroupCode);
+          importLastGroupName = (group && group.groupName) || 'nhom';
+
+          const newCount = imported.filter((r) => !r.reused).length;
+          const reusedCount = imported.filter((r) => r.reused).length;
+          showResult(box, `✓ Đã nạp xong: ${newCount} tài khoản mới, ${reusedCount} học sinh đã có sẵn (giữ nguyên mã cũ).${errors.length ? ` ⚠️ ${errors.length} dòng lỗi.` : ''}`);
+          renderImportResultsTable(imported, errors);
+          await renderAssigned();
+        } catch (e) {
+          showResult(box, `⚠️ ${escapeHtml((e.message || '').replace(/\n/g, '<br/>'))}`, true);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+      $('#downloadCodesBtn').addEventListener('click', () => {
+        if (!importLastResults) return;
+        downloadStudentCodesCSV(importLastResults, importLastGroupName);
+      });
+    }
+
+    $('#importStudentsToggleBtn').addEventListener('click', () => {
+      const panel = $('#importStudentsPanel');
+      const opening = panel.style.display === 'none';
+      panel.style.display = opening ? 'block' : 'none';
+      if (opening) initImportSection();
+    });
+
     $('#pendingCreateGroupToggleBtn').addEventListener('click', () => {
       const form = $('#pendingCreateGroupForm');
       form.style.display = form.style.display === 'none' ? 'block' : 'none';

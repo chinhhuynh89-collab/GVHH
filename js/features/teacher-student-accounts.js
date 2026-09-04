@@ -91,13 +91,26 @@ async function changeOwnStudentPassword(oldPassword, newPassword) {
 // để đếm) — chấp nhận rủi ro rất nhỏ lệch số nếu 2 tab cùng nạp danh sách cùng lúc (không ảnh hưởng
 // tính đúng đắn, chỉ có thể nhảy cóc số thứ tự).
 async function nextLoginSeqForTeacher(teacherUid) {
+  return computeNextSeqFromDocs(await fetchTeacherProvisionedStudents(teacherUid));
+}
+
+// Toàn bộ bản ghi "students" hiện có của 1 giáo viên (mọi nhóm) — CHỈ lọc theo đúng 1 field
+// (teacherUid) rồi tự lọc/tính tiếp ở phía client, KHÔNG dùng where() nhiều field kết hợp bất đẳng
+// thức (VD .where('loginCode','>','')) — Firestore đòi hỏi phải tạo "composite index" thủ công qua
+// Firebase Console cho kiểu truy vấn đó (lỗi "The query requires an index" gặp phải thực tế), phiền
+// và dễ quên cấu hình. Dùng lại đúng 1 lượt tải cho cả việc tính số thứ tự TIẾP THEO (xem
+// nextLoginSeqForTeacher) LẪN dò trùng theo SĐT (xem bulkImportProvisionedStudents) — đỡ phải tải
+// lại nhiều lần khi nạp danh sách dài.
+async function fetchTeacherProvisionedStudents(teacherUid) {
   const { db } = ensureFirebase();
   const snap = await db.collection('students').where('teacherUid', '==', teacherUid).get();
+  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter((s) => !!s.loginCode);
+}
+
+function computeNextSeqFromDocs(docs) {
   let maxSeq = 0;
-  snap.docs.forEach((d) => {
-    const code = d.data().loginCode;
-    if (!code) return;
-    const m = code.match(/\.(\d+)$/);
+  docs.forEach((s) => {
+    const m = (s.loginCode || '').match(/\.(\d+)$/);
     if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
   });
   return maxSeq + 1;
@@ -107,10 +120,8 @@ async function nextLoginSeqForTeacher(teacherUid) {
 // tránh tạo trùng tài khoản khi giáo viên nạp lại cùng 1 danh sách (VD sửa vài dòng rồi nạp lại).
 async function findProvisionedStudentByPhone(teacherUid, phone) {
   if (!phone) return null;
-  const { db } = ensureFirebase();
-  const snap = await db.collection('students')
-    .where('teacherUid', '==', teacherUid).where('phone', '==', phone).where('loginCode', '>', '').limit(1).get();
-  return snap.empty ? null : Object.assign({ id: snap.docs[0].id }, snap.docs[0].data());
+  const docs = await fetchTeacherProvisionedStudents(teacherUid);
+  return docs.find((s) => s.phone === phone) || null;
 }
 
 // ---------- Nạp danh sách hàng loạt ----------
@@ -120,7 +131,12 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const teacherCode = deriveTeacherCode(teacher.uid);
-  let nextSeq = await nextLoginSeqForTeacher(teacher.uid);
+
+  // Tải 1 LẦN DUY NHẤT cho cả batch — vừa tránh lỗi composite index (xem chú thích trên), vừa đỡ
+  // phải tải lại toàn bộ danh sách hàng chục lần nếu nạp danh sách dài.
+  const existingDocs = await fetchTeacherProvisionedStudents(teacher.uid);
+  const byPhone = new Map(existingDocs.map((s) => [s.phone, s]));
+  let nextSeq = computeNextSeqFromDocs(existingDocs);
 
   const results = [];
   const errors = [];
@@ -129,7 +145,7 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
     const row = rows[i];
     if (typeof onProgress === 'function') onProgress(i + 1, rows.length, row.studentName);
     try {
-      const existing = await findProvisionedStudentByPhone(teacher.uid, row.phone);
+      const existing = byPhone.get(row.phone);
       if (existing) {
         // Đã có tài khoản (nạp lại) — chỉ gán thêm vào nhóm ĐANG chọn nếu chưa có, KHÔNG tạo tài
         // khoản mới, KHÔNG đụng mật khẩu.
@@ -151,6 +167,7 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
         address: row.address, phone: row.phone, email: '', loginCode
       });
       results.push({ studentName: row.studentName, loginCode, password, reused: false });
+      byPhone.set(row.phone, { studentUid, loginCode, phone: row.phone }); // phòng file có SĐT trùng lặp ngay trong cùng 1 lần nạp
     } catch (e) {
       errors.push({ row: i + 2, message: `${row.studentName || '(dòng ' + (i + 2) + ')'}: ${e.message}` });
     }

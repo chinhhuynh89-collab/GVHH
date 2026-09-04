@@ -18,6 +18,36 @@
 </header>
 
 <main>
+  <div class="card">
+    <button class="btn primary block" id="importStudentsToggleBtn" type="button">📋 Nạp danh sách học sinh có sẵn (cấp tài khoản hàng loạt)</button>
+    <div id="importStudentsPanel" style="display:none;margin-top:14px;">
+      <h2 style="margin-top:0;"><span class="icon">📋</span>Nạp danh sách học sinh</h2>
+      <p class="hint" style="margin-top:-4px;">Dùng khi bạn đã có sẵn danh sách lớp (Excel/CSV) và muốn tạo tài khoản cho cả lớp cùng lúc — mỗi học sinh có 1 <strong>mã học sinh + mật khẩu</strong> riêng để đăng nhập, không cần tự đăng ký bằng Google.</p>
+      <ol class="hint" style="padding-left:18px;line-height:1.8;margin:0 0 10px;">
+        <li>Bấm "Tải file mẫu" bên dưới, điền dữ liệu thật theo đúng cột (xoá 2 dòng ví dụ đi).</li>
+        <li>Chọn nhóm cần nạp vào (hoặc tạo nhóm mới) — chương trình học vẫn chọn sau ở trang "Nhóm học sinh" như bình thường.</li>
+        <li>Tải file đã điền lên, bấm "Nạp danh sách".</li>
+        <li>Tải file mã học sinh về, gửi cho từng em (mỗi em 1 dòng: mã + mật khẩu).</li>
+      </ol>
+      <button class="btn block" id="downloadTemplateBtn" type="button">📥 Tải file mẫu</button>
+
+      <div class="section-label">Nhóm cần nạp vào</div>
+      <div id="groupPickerBody"><p class="hint">⏳ Đang tải danh sách nhóm...</p></div>
+
+      <div class="section-label">Tải file danh sách lên</div>
+      <p class="hint" style="margin-top:-4px;">Chấp nhận file .xlsx hoặc .csv theo đúng mẫu ở trên.</p>
+      <input type="file" id="importFileInput" accept=".xlsx,.csv" />
+      <button class="btn primary block" id="importSubmitBtn" type="button" style="margin-top:10px;" disabled>Nạp danh sách</button>
+      <div class="result-box" id="importResult"></div>
+
+      <div id="importResultsCard" style="display:none;margin-top:14px;">
+        <div class="section-label">Kết quả</div>
+        <div id="importResultsBody"></div>
+        <button class="btn primary block" id="downloadCodesBtn" type="button" style="margin-top:10px;">📥 Tải file mã học sinh</button>
+      </div>
+    </div>
+  </div>
+
   <div class="card" id="pendingRegistrationsCard" style="display:none;">
     <h2><span class="icon">🆕</span>Học sinh chờ duyệt</h2>
     <p class="hint" style="margin-top:-4px;">Học sinh xin vào 1 nhóm cụ thể (bằng mã nhóm) chỉ cần bạn duyệt/từ chối; học sinh đăng ký bằng mã giáo viên (chưa rõ nhóm) thì bạn chọn 1 nhóm để xếp vào.</p>
@@ -62,6 +92,8 @@
 <script src="../js/features/auth.js"></script>
 <script src="../js/features/monetization.js"></script>
 <script src="../js/features/groups-data.js"></script>
+<script src="../js/features/doc-import.js"></script>
+<script src="../js/features/quiz-excel.js"></script>
 <script src="../js/features/teacher-student-accounts.js"></script>
 <script src="../js/features/manage-students.js"></script>
 </body>
