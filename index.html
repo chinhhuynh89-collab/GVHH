@@ -331,34 +331,16 @@
   //    này) vì người CHIA SẺ có thể gửi nhầm loại link (VD định gửi link mời học sinh nhưng lỡ gửi
   //    nhầm link giới thiệu cho giáo viên khác) — không hỏi lại thì người nhận bị gán nhầm vai trò.
   // 2) Lần đầu mở app, không qua link nào, chưa từng chọn trước đó — hỏi vai trò từ đầu.
-  // Cả 2 trường hợp: bấm chọn xong đăng nhập Google LUÔN (xác nhận đúng vai trò đó, sinh mã GV.../
-  // HS... cố định ngay — xem enforceExclusiveRole trong auth.js) thay vì chỉ đổi giao diện suông, để
-  // lỡ tài khoản đã khoá vai trò khác thì phát hiện được ngay từ bước này.
+  // CHỈ đổi giao diện theo đúng vai trò vừa chọn — KHÔNG đăng nhập Google ngay ở bước này nữa (trước
+  // đây có, nhưng bắt đăng nhập ngay lúc chỉ đang chọn xem giao diện dễ gây "treo" nếu popup đăng
+  // nhập bị chặn/lỗi mạng, và không cần thiết — người dùng có thể chỉ đang xem thử app, chưa cần đăng
+  // nhập). Việc đăng nhập thật (Google hoặc mã học sinh) chuyển hẳn sang nút "Đăng nhập" góc phải
+  // trang chủ (xem script topAuthBtn bên dưới) — bấm vào lúc nào mới cần thì lúc đó mới đăng nhập.
   const roleChooser = $('#roleChooserCard');
-
-  // Trên nhiều điện thoại/PWA, signInWithPopup() (xem chooseRole bên dưới) bị chặn hoặc không hoạt
-  // động ổn định — signInWithGoogle() (auth.js) tự CHUYỂN HƯỚNG CẢ TRANG sang trang đăng nhập Google
-  // (signInWithRedirect) khi gặp trường hợp đó thay vì mở cửa sổ popup. Chuyển hướng nghĩa là trang
-  // này TẢI LẠI TỪ ĐẦU sau khi quay về từ Google — hàm chooseRole() đang chạy dở bị BỎ NGANG (không
-  // kịp gọi setRole()/ẩn màn hỏi), nên nếu không xử lý lại ở đây, người dùng quay về sẽ THẤY LẠI y hệt
-  // màn "Bạn là ai?" dù đã đăng nhập xong — trông như bấm vào là treo, không thấy tiến triển gì (lỗi
-  // thực tế người dùng gặp phải). Lưu lại vai trò ĐANG CHỌN vào localStorage trước khi chuyển hướng
-  // (xem chooseRole), đọc lại đúng vai trò đó ở đây để hoàn tất phần bị bỏ dở.
-  const pendingRoleChoice = localStorage.getItem('hoahoc_pending_role_choice');
-  if (pendingRoleChoice && isFirebaseConfigured()) {
-    try {
-      const user = await checkRedirectResult(pendingRoleChoice === 'student');
-      if (user) setRole(pendingRoleChoice);
-    } catch (e) { /* getLastRedirectError() sẽ có sẵn để hiện lại nếu màn hỏi phải mở lại bên dưới */ }
-    localStorage.removeItem('hoahoc_pending_role_choice');
-  }
-
   const linkSuggestedRole = window.__linkSuggestedRole || null;
   if (linkSuggestedRole || !getRole()) {
     renderRoleChooserBody(linkSuggestedRole);
     roleChooser.style.display = 'block';
-    const lastErr = typeof getLastRedirectError === 'function' ? getLastRedirectError() : null;
-    if (lastErr) showResult($('#roleChooserResult'), `⚠️ Đăng nhập thất bại: ${escapeHtml(lastErr.message)}`, true);
   } else {
     renderRoleSections();
   }
@@ -390,26 +372,13 @@
     $('#chooseRoleOtherBtn').addEventListener('click', () => chooseRole(otherRole));
   }
 
-  async function chooseRole(role) {
-    const box = $('#roleChooserResult');
-    showResult(box, '⏳ Đang chuyển sang trang đăng nhập Google...');
-    try {
-      if (isFirebaseConfigured()) {
-        // Lưu lại TRƯỚC khi gọi — nếu rơi vào trường hợp chuyển hướng cả trang (xem chú thích ở
-        // script phía trên), đọc lại đúng giá trị này để hoàn tất phần bị bỏ dở sau khi quay về.
-        localStorage.setItem('hoahoc_pending_role_choice', role);
-        await signInWithGoogle(role === 'student');
-        localStorage.removeItem('hoahoc_pending_role_choice');
-      }
-      setRole(role);
-      roleChooser.style.display = 'none';
-      renderRoleSections();
-    } catch (e) {
-      // Lỗi thật (huỷ popup, role-conflict...) chứ không phải đang chuyển hướng — không còn gì để
-      // xử lý tiếp ở lần tải trang sau, xoá cờ đi để tránh gọi checkRedirectResult() thừa lần sau.
-      localStorage.removeItem('hoahoc_pending_role_choice');
-      showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
-    }
+  // Chỉ đổi giao diện — KHÔNG đăng nhập gì ở đây (xem chú thích phía trên). Đăng nhập thật để lúc
+  // nào cần (nút "Đăng nhập" góc phải) mới hỏi. Tải lại trang (giống mọi chỗ đổi vai trò khác trong
+  // app này) để nút "Đăng nhập" góc phải — vốn đã tự ẩn đi lúc đầu vì CHƯA có vai trò nào — tự dựng
+  // lại đúng theo vai trò vừa chọn, không cần viết thêm hàm refresh riêng cho đúng 1 trường hợp này.
+  function chooseRole(role) {
+    setRole(role);
+    window.location.reload();
   }
 
   // KHÔNG đăng xuất Google khi vào chế độ xem thử — resolveContentOwner() (auth.js) được thiết kế để
@@ -492,6 +461,17 @@
   const menu = document.getElementById('topAuthMenu');
   if (!wrap || !btn || !menu || !isFirebaseConfigured()) return;
 
+  // Trên nhiều điện thoại/PWA, signInWithPopup() (nút "Đăng nhập bằng Google" bên dưới) bị chặn/
+  // không ổn định nên auth.js tự CHUYỂN HƯỚNG CẢ TRANG sang Google (signInWithRedirect) thay vì mở
+  // popup — trang này TẢI LẠI TỪ ĐẦU khi quay về, nên cần xử lý kết quả chuyển hướng (nếu có) ngay ở
+  // đây trước khi quyết định hiện nút "Đăng nhập" hay "Đăng xuất". Thiếu bước này sẽ trông như bấm
+  // vào bị treo — quay về từ Google nhưng vẫn thấy y hệt nút "Đăng nhập" dù đã đăng nhập xong.
+  const pendingGoogleLoginRole = localStorage.getItem('hoahoc_pending_google_login');
+  if (pendingGoogleLoginRole) {
+    try { await checkRedirectResult(pendingGoogleLoginRole === 'student'); } catch (e) { /* vẫn tiếp tục, nút Đăng nhập sẽ tự hiện lại nếu chưa xong */ }
+    localStorage.removeItem('hoahoc_pending_google_login');
+  }
+
   const user = await waitForAuthReady();
   const role = getRole();
   if (!user && !role) return; // xem chú thích ở HTML: lần đầu mở app đã có màn "Bạn là ai?" lo rồi
@@ -553,9 +533,14 @@
       actionBtn.disabled = true;
       actionBtn.textContent = '⏳ Đang chuyển sang trang đăng nhập...';
       try {
+        // Lưu lại TRƯỚC khi gọi — nếu rơi vào trường hợp chuyển hướng cả trang (xem chú thích ở đầu
+        // script này), đọc lại đúng vai trò này lúc trang tải lại để hoàn tất phần bị bỏ dở.
+        localStorage.setItem('hoahoc_pending_google_login', role);
         await signInWithGoogle(role === 'student');
+        localStorage.removeItem('hoahoc_pending_google_login');
         window.location.reload();
       } catch (e) {
+        localStorage.removeItem('hoahoc_pending_google_login');
         actionBtn.disabled = false;
         actionBtn.textContent = '🔐 Đăng nhập bằng Google';
         alert(`Đăng nhập không thành công: ${e.message}`);
