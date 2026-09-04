@@ -406,6 +406,13 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .btn.block { width: 100%; }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Trên điện thoại, nút "block" (rộng hết cỡ) giúp dễ bấm bằng ngón tay — nhưng trên máy tính, cùng 1
+   nút kéo dài hết cả khung (có khi rộng cả nghìn px) chỉ để chứa vài chữ ngắn ("Vào nhóm học tập")
+   trông rất kỳ, không gọn gàng. Từ 700px trở lên, bỏ chiều rộng ép buộc — nút tự co lại vừa đúng chữ
+   (display: inline-flex ở .btn đã tự làm việc này), giữ hành vi cũ cho điện thoại. */
+@media (min-width: 700px) {
+  .btn.block { width: auto; }
+}
 
 .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
 
