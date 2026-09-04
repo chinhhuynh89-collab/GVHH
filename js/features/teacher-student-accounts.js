@@ -52,19 +52,25 @@ function ensureSecondaryFirebaseApp() {
 }
 
 // Tạo 1 tài khoản Email/Password mới trên app phụ, trả về uid. Luôn đăng xuất khỏi app phụ ngay sau
-// khi tạo xong (dù thành công hay lỗi) — không để sót phiên nào trên đó giữa các lượt tạo liên tiếp.
+// khi tạo xong. KHÔNG đăng xuất app phụ ngay sau mỗi lần tạo (trước đây có, gây chậm rõ rệt khi nạp
+// danh sách dài — mỗi lần tạo thêm 1 lượt round-trip mạng không cần thiết): lần createUserWith...
+// TIẾP THEO tự thay thế phiên đang có trên app phụ, không cần đăng xuất trước. Gọi
+// cleanupSecondaryAuthSession() 1 LẦN DUY NHẤT sau khi xong CẢ LOẠT (xem bulkImportProvisionedStudents/
+// issueReplacementLoginForStudent) để dọn sạch, không để sót phiên nào.
 async function createProvisionedStudentAuthAccount(loginCode, password, displayName) {
   const secondaryAuth = ensureSecondaryFirebaseApp().auth();
   const email = studentLoginCodeToAuthEmail(loginCode);
-  try {
-    const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
-    if (displayName) {
-      try { await cred.user.updateProfile({ displayName }); } catch (e) { /* không chặn, chỉ là tên hiển thị */ }
-    }
-    return cred.user.uid;
-  } finally {
-    try { await secondaryAuth.signOut(); } catch (e) { /* ignore */ }
+  const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+  if (displayName) {
+    // KHÔNG chờ (không await) — chỉ là tên hiển thị, không quan trọng bằng tốc độ tạo tài khoản,
+    // không cần chặn các bước sau lại chỉ để chờ ghi xong tên.
+    cred.user.updateProfile({ displayName }).catch(() => {});
   }
+  return cred.user.uid;
+}
+
+async function cleanupSecondaryAuthSession() {
+  try { await ensureSecondaryFirebaseApp().auth().signOut(); } catch (e) { /* ignore */ }
 }
 
 // Đăng nhập bằng mã học sinh + mật khẩu — chạy trên APP CHÍNH (chính học sinh đang thao tác thật).
@@ -127,10 +133,20 @@ async function findProvisionedStudentByPhone(teacherUid, phone) {
 // ---------- Nạp danh sách hàng loạt ----------
 // rows: [{ studentName, school, className, address, phone }, ...] (đã lọc dòng trống/lỗi trước đó).
 // Trả về { results: [{ studentName, loginCode, password|null, reused }], errors: [{ row, message }] }.
+//
+// Tối ưu tốc độ (nạp danh sách dài từng RẤT CHẬM trước khi sửa) — mỗi dòng trước đây tốn:
+// (1) enforceTeacherStudentLimit() gọi lại addStudentToGroup() — đọc lại TOÀN BỘ cấu hình + gói +
+//     TẤT CẢ nhóm (kèm đếm học sinh từng nhóm) MỖI DÒNG, dù kết quả gần như không đổi giữa các dòng;
+// (2) 1 lượt ghi Firestore .add() RIÊNG cho từng dòng (round-trip mạng riêng);
+// (3) đăng xuất app phụ sau MỖI tài khoản vừa tạo (round-trip mạng không cần thiết).
+// Giờ: kiểm tra giới hạn học sinh 1 LẦN cho cả lô, gộp mọi lượt ghi "students" vào 1 batch duy nhất
+// (Firestore giới hạn 500 thao tác/batch nên tự chia nhỏ nếu danh sách rất dài), và chỉ đăng xuất
+// app phụ 1 lần sau khi xong cả lô.
 async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const teacherCode = deriveTeacherCode(teacher.uid);
+  const { db } = ensureFirebase();
 
   // Tải 1 LẦN DUY NHẤT cho cả batch — vừa tránh lỗi composite index (xem chú thích trên), vừa đỡ
   // phải tải lại toàn bộ danh sách hàng chục lần nếu nạp danh sách dài.
@@ -138,8 +154,25 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
   const byPhone = new Map(existingDocs.map((s) => [s.phone, s]));
   let nextSeq = computeNextSeqFromDocs(existingDocs);
 
+  const newRowsCount = rows.filter((r) => !byPhone.has(r.phone)).length;
+  if (newRowsCount > 0 && typeof enforceTeacherStudentLimit === 'function') {
+    await enforceTeacherStudentLimit(teacher.uid);
+  }
+
   const results = [];
   const errors = [];
+  let batch = db.batch();
+  let opsInBatch = 0;
+  const commits = [];
+  function queueWrite(data) {
+    batch.set(db.collection('students').doc(), data);
+    opsInBatch++;
+    if (opsInBatch >= 450) {
+      commits.push(batch.commit());
+      batch = db.batch();
+      opsInBatch = 0;
+    }
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -147,12 +180,12 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
     try {
       const existing = byPhone.get(row.phone);
       if (existing) {
-        // Đã có tài khoản (nạp lại) — chỉ gán thêm vào nhóm ĐANG chọn nếu chưa có, KHÔNG tạo tài
-        // khoản mới, KHÔNG đụng mật khẩu.
-        await addStudentToGroup(groupCode, {
-          studentUid: existing.studentUid, studentName: row.studentName, school: row.school,
-          className: row.className, address: row.address, phone: row.phone, email: '',
-          loginCode: existing.loginCode
+        // Đã có tài khoản (nạp lại) — chỉ gán thêm vào nhóm ĐANG chọn, KHÔNG tạo tài khoản mới,
+        // KHÔNG đụng mật khẩu.
+        queueWrite({
+          groupCode, teacherUid: teacher.uid, studentUid: existing.studentUid, joinedAt: new Date().toISOString(),
+          studentName: row.studentName, school: row.school, className: row.className,
+          address: row.address, phone: row.phone, email: '', loginCode: existing.loginCode
         });
         results.push({ studentName: row.studentName, loginCode: existing.loginCode, password: null, reused: true });
         continue;
@@ -162,8 +195,9 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
       nextSeq++;
       const password = generateStudentPassword();
       const studentUid = await createProvisionedStudentAuthAccount(loginCode, password, row.studentName);
-      await addStudentToGroup(groupCode, {
-        studentUid, studentName: row.studentName, school: row.school, className: row.className,
+      queueWrite({
+        groupCode, teacherUid: teacher.uid, studentUid, joinedAt: new Date().toISOString(),
+        studentName: row.studentName, school: row.school, className: row.className,
         address: row.address, phone: row.phone, email: '', loginCode
       });
       results.push({ studentName: row.studentName, loginCode, password, reused: false });
@@ -172,6 +206,10 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
       errors.push({ row: i + 2, message: `${row.studentName || '(dòng ' + (i + 2) + ')'}: ${e.message}` });
     }
   }
+
+  if (opsInBatch > 0) commits.push(batch.commit());
+  await Promise.all(commits);
+  await cleanupSecondaryAuthSession();
 
   return { results, errors };
 }
@@ -271,5 +309,6 @@ async function issueReplacementLoginForStudent(oldStudentDoc) {
     className: oldStudentDoc.className, address: oldStudentDoc.address, phone: oldStudentDoc.phone,
     email: '', loginCode
   });
+  await cleanupSecondaryAuthSession();
   return { loginCode, password };
 }

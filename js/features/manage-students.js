@@ -1,112 +1,199 @@
-// Trang "Quản lý học sinh":
-// 1) "Học sinh chờ duyệt" — gồm 2 loại: (a) xin vào 1 nhóm CỤ THỂ bằng mã nhóm (có groupCode sẵn) —
-//    giáo viên chỉ cần Duyệt/Từ chối; (b) đăng ký bằng MÃ GIÁO VIÊN, chưa rõ nhóm nào — giáo viên
-//    chọn 1 nhóm có sẵn để xếp vào, hoặc xoá nếu đăng ký nhầm/spam.
-// 2) "Học sinh đã có trong nhóm" — gộp TẤT CẢ học sinh đã ở trong nhóm nào đó thành 1 danh sách
-//    (1 học sinh có thể xuất hiện với nhiều nhóm nếu học cùng lúc nhiều nhóm).
+// Trang "Quản lý học sinh" — bố cục dạng lưới nút gọn (giống trang Quản trị): bấm nút nào chỉ mở
+// đúng khung nội dung của mục đó, nút khác tự đóng lại. 3 mục:
+// 1) "📋 Nạp danh sách" — nạp cả lớp từ file Excel/CSV, tự cấp tài khoản mã học sinh + mật khẩu
+//    hàng loạt (xem js/features/teacher-student-accounts.js).
+// 2) "🆕 Chờ duyệt" — gồm 2 loại: (a) xin vào 1 nhóm CỤ THỂ bằng mã nhóm (có groupCode sẵn) — chỉ
+//    cần Duyệt/Từ chối; (b) đăng ký bằng MÃ GIÁO VIÊN, chưa rõ nhóm nào — chọn 1 nhóm có sẵn để xếp
+//    vào, hoặc xoá nếu đăng ký nhầm/spam. Hiện sẵn số lượng ở huy hiệu trên nút dù chưa mở, để biết
+//    ngay có việc cần xử lý.
+// 3) "🧑‍🎓 Danh sách" — gộp TẤT CẢ học sinh đã ở trong nhóm nào đó thành 1 danh sách (1 học sinh có
+//    thể xuất hiện với nhiều nhóm nếu học cùng lúc nhiều nhóm).
 
 (function () {
   requireTeacherAuth(async (user) => {
-    const pendingCard = $('#pendingRegistrationsCard');
-    const pendingBody = $('#pendingRegistrationsBody');
-    const assignedBody = $('#manageStudentsBody');
-
     let groups = [];
     try { groups = await listGroupsForCurrentTeacher(); } catch (e) { /* xử lý khi render */ }
 
-    async function renderPending() {
+    // Đếm nhanh số học sinh chờ duyệt ngay lúc tải trang để hiện huy hiệu trên nút — không cần bấm
+    // mở mới biết có việc cần xử lý.
+    try {
+      const pending = await getPendingRegistrationsForCurrentTeacher();
+      if (pending.length) {
+        const badge = $('#pendingCountBadge');
+        badge.textContent = pending.length > 99 ? '99+' : String(pending.length);
+        badge.style.display = 'flex';
+      }
+    } catch (e) { /* ignore */ }
+
+    // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
+    let openSub = null;
+    $$('.manage-sub-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const key = btn.dataset.sub;
+        const panel = $('#manageSubPanel');
+        if (openSub === key) {
+          panel.innerHTML = '';
+          btn.classList.remove('has-open');
+          openSub = null;
+          return;
+        }
+        $$('.manage-sub-btn').forEach((b) => b.classList.remove('has-open'));
+        btn.classList.add('has-open');
+        openSub = key;
+        panel.innerHTML = '<div class="card"><p class="hint">⏳ Đang tải...</p></div>';
+        try {
+          if (key === 'import') await renderImportPanel(panel);
+          else if (key === 'pending') await renderPendingPanel(panel);
+          else await renderRosterPanel(panel);
+        } catch (e) {
+          panel.innerHTML = `<div class="card"><p class="hint">⚠️ ${escapeHtml(e.message)}</p></div>`;
+        }
+      });
+    });
+
+    // ---------- 🆕 Chờ duyệt ----------
+    async function renderPendingPanel(panel) {
       let pending = [];
       try {
         pending = await getPendingRegistrationsForCurrentTeacher();
       } catch (e) {
-        pendingCard.style.display = 'block';
-        pendingBody.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+        panel.innerHTML = `<div class="card"><p class="hint">⚠️ ${escapeHtml(e.message)}</p></div>`;
         return;
       }
 
-      if (!pending.length) { pendingCard.style.display = 'none'; return; }
-      pendingCard.style.display = 'block';
+      const badge = $('#pendingCountBadge');
+      if (pending.length) { badge.textContent = pending.length > 99 ? '99+' : String(pending.length); badge.style.display = 'flex'; }
+      else badge.style.display = 'none';
+
+      if (!pending.length) {
+        panel.innerHTML = '<div class="card"><p class="hint">Không có học sinh nào đang chờ duyệt.</p></div>';
+        return;
+      }
 
       const groupOptions = groups.map((g) => `<option value="${escapeHtml(g.groupCode)}">${escapeHtml(g.groupName)} (${escapeHtml(g.groupCode)})</option>`).join('');
 
-      // Có groupCode sẵn = học sinh xin vào 1 nhóm CỤ THỂ bằng mã nhóm (chỉ cần duyệt/từ chối).
-      // Không có groupCode = đăng ký bằng mã giáo viên, chưa rõ nhóm nào (cần chọn nhóm để xếp vào).
-      pendingBody.innerHTML = pending.map((r) => `
-        <div class="card" style="margin-top:10px;background:rgba(220,38,38,0.06);">
-          <div style="font-weight:700;">${escapeHtml(r.studentName || '')}</div>
-          <div class="hint">${escapeHtml(r.school || '')} · Lớp ${escapeHtml(r.className || '')} · ${escapeHtml(r.phone || '')}</div>
-          <div class="hint">${escapeHtml(r.address || '')}</div>
-          ${r.groupCode ? `
-            <div class="hint" style="margin-top:6px;">Xin vào nhóm: <strong>${escapeHtml(r.groupName || r.groupCode)}</strong> (mã ${escapeHtml(r.groupCode)})</div>
-            <div class="btn-row" style="margin-top:8px;">
-              <button class="btn primary approve-btn" data-reg="${r.id}" type="button" style="flex:1;">✅ Duyệt vào nhóm</button>
-              <button class="btn reject-btn" data-reg="${r.id}" type="button">❌ Từ chối</button>
-            </div>
-          ` : groups.length ? `
-            <div class="btn-row" style="margin-top:8px;">
-              <select class="assign-group-select" data-reg="${r.id}" style="flex:1;">${groupOptions}</select>
-              <button class="btn primary assign-btn" data-reg="${r.id}" type="button">Xếp vào nhóm</button>
-            </div>
-            <button class="btn reject-btn" data-reg="${r.id}" type="button" style="margin-top:8px;">Xoá đăng ký này</button>
-          ` : `
-            <p class="hint" style="margin-top:8px;">⚠️ Bạn chưa có nhóm nào — vào "Nhóm học sinh" tạo nhóm trước.</p>
-            <button class="btn reject-btn" data-reg="${r.id}" type="button" style="margin-top:8px;">Xoá đăng ký này</button>
-          `}
-          <div class="result-box" id="reg-result-${r.id}"></div>
-        </div>
-      `).join('');
+      panel.innerHTML = `
+        <div class="card">
+          <h2 style="margin-top:0;"><span class="icon">🆕</span>Học sinh chờ duyệt</h2>
+          <p class="hint" style="margin-top:-4px;">Học sinh xin vào 1 nhóm cụ thể (bằng mã nhóm) chỉ cần bạn duyệt/từ chối; học sinh đăng ký bằng mã giáo viên (chưa rõ nhóm) thì bạn chọn 1 nhóm để xếp vào.</p>
+          <div id="pendingRegistrationsBody">
+            ${pending.map((r) => `
+              <div class="card" style="margin-top:10px;background:rgba(220,38,38,0.06);">
+                <div style="font-weight:700;">${escapeHtml(r.studentName || '')}</div>
+                <div class="hint">${escapeHtml(r.school || '')} · Lớp ${escapeHtml(r.className || '')} · ${escapeHtml(r.phone || '')}</div>
+                <div class="hint">${escapeHtml(r.address || '')}</div>
+                ${r.groupCode ? `
+                  <div class="hint" style="margin-top:6px;">Xin vào nhóm: <strong>${escapeHtml(r.groupName || r.groupCode)}</strong> (mã ${escapeHtml(r.groupCode)})</div>
+                  <div class="btn-row" style="margin-top:8px;">
+                    <button class="btn primary approve-btn" data-reg="${r.id}" type="button" style="flex:1;">✅ Duyệt vào nhóm</button>
+                    <button class="btn reject-btn" data-reg="${r.id}" type="button">❌ Từ chối</button>
+                  </div>
+                ` : groups.length ? `
+                  <div class="btn-row" style="margin-top:8px;">
+                    <select class="assign-group-select" data-reg="${r.id}" style="flex:1;">${groupOptions}</select>
+                    <button class="btn primary assign-btn" data-reg="${r.id}" type="button">Xếp vào nhóm</button>
+                  </div>
+                  <button class="btn reject-btn" data-reg="${r.id}" type="button" style="margin-top:8px;">Xoá đăng ký này</button>
+                ` : `
+                  <p class="hint" style="margin-top:8px;">⚠️ Bạn chưa có nhóm nào — vào "Nhóm học sinh" tạo nhóm trước.</p>
+                  <button class="btn reject-btn" data-reg="${r.id}" type="button" style="margin-top:8px;">Xoá đăng ký này</button>
+                `}
+                <div class="result-box" id="reg-result-${r.id}"></div>
+              </div>
+            `).join('')}
+          </div>
 
-      $$('.assign-btn').forEach((btn) => {
+          <button class="btn block" id="pendingCreateGroupToggleBtn" type="button" style="margin-top:12px;">➕ Chưa có nhóm phù hợp? Tạo nhóm mới</button>
+          <div id="pendingCreateGroupForm" style="display:none;margin-top:10px;">
+            <div class="field">
+              <label for="pendingNewGroupName">Tên nhóm</label>
+              <input type="text" id="pendingNewGroupName" placeholder="VD: 6A1 - Trường THCS ABC" />
+            </div>
+            <div class="field">
+              <label for="pendingNewGroupGrade">Khối lớp</label>
+              <select id="pendingNewGroupGrade">
+                ${[6, 7, 8, 9, 10, 11, 12].map((g) => `<option value="${g}">Lớp ${g}</option>`).join('')}
+              </select>
+            </div>
+            <p class="hint" style="margin-top:-2px;">Nhóm mới sẽ chưa có chương trình học — vào "Nhóm học sinh" để chọn chương sau khi tạo.</p>
+            <button class="btn primary block" id="pendingCreateGroupBtn" type="button">Tạo nhóm</button>
+            <div class="result-box" id="pendingCreateGroupResult"></div>
+          </div>
+        </div>
+      `;
+
+      $$('.assign-btn', panel).forEach((btn) => {
         btn.addEventListener('click', async () => {
           const regId = btn.dataset.reg;
           const reg = pending.find((r) => r.id === regId);
-          const select = document.querySelector(`.assign-group-select[data-reg="${regId}"]`);
-          const box = document.getElementById(`reg-result-${regId}`);
+          const select = panel.querySelector(`.assign-group-select[data-reg="${regId}"]`);
+          const box = panel.querySelector(`#reg-result-${regId}`);
           showResult(box, '⏳ Đang xếp vào nhóm...');
           try {
             await assignRegistrationToGroup(reg, select.value);
             showResult(box, '✓ Đã xếp vào nhóm!');
-            await renderPending();
-            await renderAssigned();
+            await renderPendingPanel(panel);
           } catch (e) {
             showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
           }
         });
       });
-      $$('.approve-btn').forEach((btn) => {
+      $$('.approve-btn', panel).forEach((btn) => {
         btn.addEventListener('click', async () => {
           const regId = btn.dataset.reg;
           const reg = pending.find((r) => r.id === regId);
-          const box = document.getElementById(`reg-result-${regId}`);
+          const box = panel.querySelector(`#reg-result-${regId}`);
           showResult(box, '⏳ Đang duyệt...');
           try {
             await assignRegistrationToGroup(reg, reg.groupCode);
             showResult(box, '✓ Đã duyệt vào nhóm!');
-            await renderPending();
-            await renderAssigned();
+            await renderPendingPanel(panel);
           } catch (e) {
             showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
           }
         });
       });
-      $$('.reject-btn').forEach((btn) => {
+      $$('.reject-btn', panel).forEach((btn) => {
         btn.addEventListener('click', async () => {
           const regId = btn.dataset.reg;
           if (!confirm('Từ chối/xoá yêu cầu này? Học sinh sẽ không được vào nhóm.')) return;
-          const box = document.getElementById(`reg-result-${regId}`);
+          const box = panel.querySelector(`#reg-result-${regId}`);
           showResult(box, '⏳ Đang xử lý...');
           try {
             await rejectRegistration(regId);
-            await renderPending();
+            await renderPendingPanel(panel);
           } catch (e) {
             showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
           }
         });
       });
+
+      $('#pendingCreateGroupToggleBtn', panel).addEventListener('click', () => {
+        const form = $('#pendingCreateGroupForm', panel);
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      });
+      $('#pendingCreateGroupBtn', panel).addEventListener('click', async () => {
+        const name = $('#pendingNewGroupName', panel).value.trim();
+        const grade = Number($('#pendingNewGroupGrade', panel).value);
+        const box = $('#pendingCreateGroupResult', panel);
+        if (!name) { showResult(box, '⚠️ Nhập tên nhóm.', true); return; }
+        showResult(box, '⏳ Đang tạo nhóm...');
+        try {
+          const group = await createGroupForCurrentTeacher(name, grade, []);
+          groups.push(group);
+          showResult(box, `✓ Đã tạo nhóm "${escapeHtml(name)}" — mã ${escapeHtml(group.groupCode)}. Đã có thể xếp học sinh vào nhóm này.`);
+          setTimeout(() => renderPendingPanel(panel), 1400);
+        } catch (e) {
+          showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        }
+      });
     }
 
-    async function renderAssigned() {
-      assignedBody.innerHTML = '<p class="hint">⏳ Đang tải danh sách học sinh...</p>';
+    // ---------- 🧑‍🎓 Danh sách học sinh đã có trong nhóm ----------
+    async function renderRosterPanel(panel) {
+      panel.innerHTML = `<div class="card"><h2 style="margin-top:0;"><span class="icon">🧑‍🎓</span>Học sinh đã có trong nhóm</h2><p class="hint" style="margin-top:-4px;">Gộp tất cả học sinh ở mọi nhóm của bạn thành 1 danh sách — 1 học sinh có thể xuất hiện kèm nhiều nhóm nếu học cùng lúc nhiều nhóm.</p><div id="manageStudentsBody"><p class="hint">⏳ Đang tải danh sách học sinh...</p></div></div>`;
+      const assignedBody = $('#manageStudentsBody', panel);
+
       let students = [];
       try {
         students = await getAllStudentsForCurrentTeacher();
@@ -181,17 +268,83 @@
       });
     }
 
-    // ---------- 📋 Nạp danh sách học sinh (gọn — chỉ mở khi bấm nút) ----------
+    // ---------- 📋 Nạp danh sách (gọn — chỉ dựng giao diện lúc bấm mở lần đầu) ----------
     // Xem js/features/teacher-student-accounts.js cho toàn bộ logic tạo tài khoản/mã/dò trùng SĐT.
-    // Chỉ dựng giao diện lúc bấm mở LẦN ĐẦU (không tải/dựng sẵn nếu giáo viên không dùng tới).
-    let importInited = false;
     let importSelectedGroupCode = null;
     let importSelectedFile = null;
     let importLastResults = null;
     let importLastGroupName = '';
 
-    function renderImportGroupPicker() {
-      const box = $('#groupPickerBody');
+    async function renderImportPanel(panel) {
+      panel.innerHTML = `
+        <div class="card">
+          <h2 style="margin-top:0;"><span class="icon">📋</span>Nạp danh sách học sinh</h2>
+          <p class="hint" style="margin-top:-4px;">Dùng khi bạn đã có sẵn danh sách lớp (Excel/CSV) và muốn tạo tài khoản cho cả lớp cùng lúc — mỗi học sinh có 1 <strong>mã học sinh + mật khẩu</strong> riêng để đăng nhập, không cần tự đăng ký bằng Google.</p>
+          <ol class="hint" style="padding-left:18px;line-height:1.8;margin:0 0 10px;">
+            <li>Bấm "Tải file mẫu" bên dưới, điền dữ liệu thật theo đúng cột (xoá 2 dòng ví dụ đi).</li>
+            <li>Chọn nhóm cần nạp vào (hoặc tạo nhóm mới) — chương trình học vẫn chọn sau ở trang "Nhóm học sinh" như bình thường.</li>
+            <li>Tải file đã điền lên, bấm "Nạp danh sách".</li>
+            <li>Tải file mã học sinh về, gửi cho từng em (mỗi em 1 dòng: mã + mật khẩu).</li>
+          </ol>
+          <button class="btn block" id="downloadTemplateBtn" type="button">📥 Tải file mẫu</button>
+
+          <div class="section-label">Nhóm cần nạp vào</div>
+          <div id="groupPickerBody"><p class="hint">⏳ Đang tải danh sách nhóm...</p></div>
+
+          <div class="section-label">Tải file danh sách lên</div>
+          <p class="hint" style="margin-top:-4px;">Chấp nhận file .xlsx hoặc .csv theo đúng mẫu ở trên.</p>
+          <input type="file" id="importFileInput" accept=".xlsx,.csv" />
+          <button class="btn primary block" id="importSubmitBtn" type="button" style="margin-top:10px;" disabled>Nạp danh sách</button>
+          <div class="result-box" id="importResult"></div>
+
+          <div id="importResultsCard" style="display:none;margin-top:14px;">
+            <div class="section-label">Kết quả</div>
+            <div id="importResultsBody"></div>
+            <button class="btn primary block" id="downloadCodesBtn" type="button" style="margin-top:10px;">📥 Tải file mã học sinh</button>
+          </div>
+        </div>
+      `;
+
+      renderImportGroupPicker(panel);
+
+      $('#downloadTemplateBtn', panel).addEventListener('click', () => downloadStudentImportTemplateCSV());
+      $('#importFileInput', panel).addEventListener('change', (e) => {
+        importSelectedFile = e.target.files[0] || null;
+        updateImportSubmitState(panel);
+      });
+      $('#importSubmitBtn', panel).addEventListener('click', async () => {
+        const box = $('#importResult', panel);
+        if (!importSelectedGroupCode || !importSelectedFile) return;
+        const submitBtn = $('#importSubmitBtn', panel);
+        submitBtn.disabled = true;
+        showResult(box, '⏳ Đang đọc file...');
+        try {
+          const rows = await parseStudentImportFile(importSelectedFile);
+          const { results: imported, errors } = await bulkImportProvisionedStudents(importSelectedGroupCode, rows, (i, total, name) => {
+            showResult(box, `⏳ Đang nạp ${i}/${total}: ${escapeHtml(name || '')}...`);
+          });
+          importLastResults = imported;
+          const group = groups.find((g) => g.groupCode === importSelectedGroupCode);
+          importLastGroupName = (group && group.groupName) || 'nhom';
+
+          const newCount = imported.filter((r) => !r.reused).length;
+          const reusedCount = imported.filter((r) => r.reused).length;
+          showResult(box, `✓ Đã nạp xong: ${newCount} tài khoản mới, ${reusedCount} học sinh đã có sẵn (giữ nguyên mã cũ).${errors.length ? ` ⚠️ ${errors.length} dòng lỗi.` : ''}`);
+          renderImportResultsTable(panel, imported, errors);
+        } catch (e) {
+          showResult(box, `⚠️ ${escapeHtml((e.message || '').replace(/\n/g, '<br/>'))}`, true);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+      $('#downloadCodesBtn', panel).addEventListener('click', () => {
+        if (!importLastResults) return;
+        downloadStudentCodesCSV(importLastResults, importLastGroupName);
+      });
+    }
+
+    function renderImportGroupPicker(panel) {
+      const box = $('#groupPickerBody', panel);
       const optionsHtml = groups.map((g) => `<option value="${escapeHtml(g.groupCode)}">${escapeHtml(g.groupName)}</option>`).join('');
       box.innerHTML = `
         ${groups.length ? `
@@ -217,46 +370,46 @@
         </div>
       `;
 
-      const select = $('#importGroupSelect');
+      const select = $('#importGroupSelect', panel);
       importSelectedGroupCode = select ? select.value : null;
-      if (select) select.addEventListener('change', () => { importSelectedGroupCode = select.value; updateImportSubmitState(); });
+      if (select) select.addEventListener('change', () => { importSelectedGroupCode = select.value; updateImportSubmitState(panel); });
 
-      $('#importNewGroupToggleBtn').addEventListener('click', () => {
-        const form = $('#importNewGroupForm');
+      $('#importNewGroupToggleBtn', panel).addEventListener('click', () => {
+        const form = $('#importNewGroupForm', panel);
         form.style.display = form.style.display === 'none' ? 'block' : 'none';
       });
-      $('#importNewGroupCreateBtn').addEventListener('click', async () => {
-        const name = $('#importNewGroupName').value.trim();
-        const grade = $('#importNewGroupGrade').value;
-        const box2 = $('#importNewGroupResult');
+      $('#importNewGroupCreateBtn', panel).addEventListener('click', async () => {
+        const name = $('#importNewGroupName', panel).value.trim();
+        const grade = $('#importNewGroupGrade', panel).value;
+        const box2 = $('#importNewGroupResult', panel);
         if (!name) { showResult(box2, 'Nhập tên nhóm.', true); return; }
         showResult(box2, '⏳ Đang tạo...');
         try {
           const group = await createGroupForCurrentTeacher(name, grade, [], '');
           groups.push(group);
           showResult(box2, `✓ Đã tạo nhóm "${escapeHtml(group.groupName)}".`);
-          $('#importNewGroupName').value = '';
-          $('#importNewGroupForm').style.display = 'none';
-          renderImportGroupPicker();
+          $('#importNewGroupName', panel).value = '';
+          $('#importNewGroupForm', panel).style.display = 'none';
+          renderImportGroupPicker(panel);
           importSelectedGroupCode = group.groupCode;
-          const sel = $('#importGroupSelect');
+          const sel = $('#importGroupSelect', panel);
           if (sel) sel.value = group.groupCode;
-          updateImportSubmitState();
+          updateImportSubmitState(panel);
         } catch (e) {
           showResult(box2, `⚠️ ${escapeHtml(e.message)}`, true);
         }
       });
 
-      updateImportSubmitState();
+      updateImportSubmitState(panel);
     }
 
-    function updateImportSubmitState() {
-      $('#importSubmitBtn').disabled = !importSelectedGroupCode || !importSelectedFile;
+    function updateImportSubmitState(panel) {
+      $('#importSubmitBtn', panel).disabled = !importSelectedGroupCode || !importSelectedFile;
     }
 
-    function renderImportResultsTable(results, errors) {
-      const card = $('#importResultsCard');
-      const body = $('#importResultsBody');
+    function renderImportResultsTable(panel, results, errors) {
+      const card = $('#importResultsCard', panel);
+      const body = $('#importResultsBody', panel);
       card.style.display = 'block';
       body.innerHTML = `
         <div class="roster-table-wrap">
@@ -276,83 +429,5 @@
         ${errors.length ? `<div class="result-box show error" style="margin-top:10px;">${errors.map((e) => escapeHtml(e.message)).join('<br/>')}</div>` : ''}
       `;
     }
-
-    function initImportSection() {
-      if (importInited) return;
-      importInited = true;
-      renderImportGroupPicker();
-
-      $('#downloadTemplateBtn').addEventListener('click', () => downloadStudentImportTemplateCSV());
-      $('#importFileInput').addEventListener('change', (e) => {
-        importSelectedFile = e.target.files[0] || null;
-        updateImportSubmitState();
-      });
-      $('#importSubmitBtn').addEventListener('click', async () => {
-        const box = $('#importResult');
-        if (!importSelectedGroupCode || !importSelectedFile) return;
-        const submitBtn = $('#importSubmitBtn');
-        submitBtn.disabled = true;
-        showResult(box, '⏳ Đang đọc file...');
-        try {
-          const rows = await parseStudentImportFile(importSelectedFile);
-          const { results: imported, errors } = await bulkImportProvisionedStudents(importSelectedGroupCode, rows, (i, total, name) => {
-            showResult(box, `⏳ Đang nạp ${i}/${total}: ${escapeHtml(name || '')}...`);
-          });
-          importLastResults = imported;
-          const group = groups.find((g) => g.groupCode === importSelectedGroupCode);
-          importLastGroupName = (group && group.groupName) || 'nhom';
-
-          const newCount = imported.filter((r) => !r.reused).length;
-          const reusedCount = imported.filter((r) => r.reused).length;
-          showResult(box, `✓ Đã nạp xong: ${newCount} tài khoản mới, ${reusedCount} học sinh đã có sẵn (giữ nguyên mã cũ).${errors.length ? ` ⚠️ ${errors.length} dòng lỗi.` : ''}`);
-          renderImportResultsTable(imported, errors);
-          await renderAssigned();
-        } catch (e) {
-          showResult(box, `⚠️ ${escapeHtml((e.message || '').replace(/\n/g, '<br/>'))}`, true);
-        } finally {
-          submitBtn.disabled = false;
-        }
-      });
-      $('#downloadCodesBtn').addEventListener('click', () => {
-        if (!importLastResults) return;
-        downloadStudentCodesCSV(importLastResults, importLastGroupName);
-      });
-    }
-
-    $('#importStudentsToggleBtn').addEventListener('click', () => {
-      const panel = $('#importStudentsPanel');
-      const opening = panel.style.display === 'none';
-      panel.style.display = opening ? 'block' : 'none';
-      if (opening) initImportSection();
-    });
-
-    $('#pendingCreateGroupToggleBtn').addEventListener('click', () => {
-      const form = $('#pendingCreateGroupForm');
-      form.style.display = form.style.display === 'none' ? 'block' : 'none';
-    });
-
-    $('#pendingCreateGroupBtn').addEventListener('click', async () => {
-      const name = $('#pendingNewGroupName').value.trim();
-      const grade = Number($('#pendingNewGroupGrade').value);
-      const box = $('#pendingCreateGroupResult');
-      if (!name) { showResult(box, '⚠️ Nhập tên nhóm.', true); return; }
-      showResult(box, '⏳ Đang tạo nhóm...');
-      try {
-        const group = await createGroupForCurrentTeacher(name, grade, []);
-        groups.push(group);
-        showResult(box, `✓ Đã tạo nhóm "${escapeHtml(name)}" — mã ${escapeHtml(group.groupCode)}. Đã có thể xếp học sinh vào nhóm này.`);
-        $('#pendingNewGroupName').value = '';
-        await renderPending();
-        setTimeout(() => {
-          $('#pendingCreateGroupForm').style.display = 'none';
-          hideResult(box);
-        }, 2200);
-      } catch (e) {
-        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
-      }
-    });
-
-    await renderPending();
-    await renderAssigned();
   });
 })();
