@@ -103,12 +103,14 @@ async function addStudentToGroup(groupCode, student) {
 
   await enforceTeacherStudentLimit(teacher.uid);
 
-  await db.collection('students').add({
+  await db.collection('students').add(Object.assign({
     groupCode, teacherUid: teacher.uid, studentUid: student.studentUid, joinedAt: new Date().toISOString(),
     studentName: student.studentName, school: student.school,
     className: student.className, address: student.address, phone: student.phone,
     email: student.email || ''
-  });
+    // loginCode: chỉ có ở tài khoản do giáo viên cấp (mã "MãGV.số" — xem
+    // teacher-student-accounts.js), không có ở học sinh tự đăng ký bằng Google.
+  }, student.loginCode ? { loginCode: student.loginCode } : {}));
 }
 
 // Xoá 1 học sinh khỏi 1 nhóm cụ thể (chỉ xoá bản ghi "students" đó — nếu học sinh này học nhiều

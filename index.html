@@ -183,6 +183,24 @@
       <div class="result-box" id="studentShareResult"></div>
     </div>
 
+    <!-- Chỉ hiện cho tài khoản do giáo viên cấp (mã học sinh + mật khẩu — xem
+         teacher-student-accounts.js), KHÔNG hiện cho tài khoản Google (đổi mật khẩu Google không
+         qua app này được). Nhận diện qua email nội bộ tự sinh, xem script cuối trang. -->
+    <div class="card" id="studentChangePasswordCard" style="display:none;">
+      <h2><span class="icon">🔑</span>Đổi mật khẩu</h2>
+      <p class="hint" style="margin-top:-4px;">Đổi mật khẩu đăng nhập của riêng bạn — không ảnh hưởng tới mã học sinh.</p>
+      <div class="field">
+        <label for="oldStudentPasswordInput">Mật khẩu hiện tại</label>
+        <input type="password" id="oldStudentPasswordInput" />
+      </div>
+      <div class="field">
+        <label for="newStudentPasswordInput">Mật khẩu mới</label>
+        <input type="password" id="newStudentPasswordInput" />
+      </div>
+      <button class="btn primary block" id="changeStudentPasswordBtn" type="button">Đổi mật khẩu</button>
+      <div class="result-box" id="changeStudentPasswordResult"></div>
+    </div>
+
     <div class="section-label">Dành cho học sinh</div>
     <div class="icon-grid">
       <a class="icon-tile is-active" href="pages/hoc-theo-chuong.html">
@@ -281,6 +299,7 @@
 <script src="js/features/firebase-init.js"></script>
 <script src="js/features/auth.js"></script>
 <script src="js/features/monetization.js"></script>
+<script src="js/features/teacher-student-accounts.js"></script>
 <script src="js/features/join-group.js"></script>
 <script src="js/features/groups-data.js"></script>
 <script src="js/features/teacher-exam-monitor.js"></script>
@@ -480,10 +499,28 @@
     // app, chưa chọn vai trò thì màn "Bạn là ai?" (#roleChooserCard) đã lo phần đăng nhập rồi, hiện
     // thêm nút này lúc đó dễ gây rối/trùng lặp luồng.
     btn.textContent = '🔑';
-    btn.title = 'Đăng nhập bằng Google';
-    menu.innerHTML = `<button class="btn primary block" id="topAuthActionBtn" type="button">🔑 Đăng nhập bằng Google</button>`;
-    $('#topAuthActionBtn').addEventListener('click', async () => {
-      const actionBtn = $('#topAuthActionBtn');
+    btn.title = 'Đăng nhập';
+    // Vai trò học sinh: cho thêm lựa chọn "Mã học sinh" (tài khoản do giáo viên cấp — xem
+    // teacher-student-accounts.js), vì không phải học sinh nào cũng tự có tài khoản Google. Giáo
+    // viên luôn chỉ có Google (chưa có luồng cấp tài khoản cho giáo viên).
+    menu.innerHTML = role === 'student' ? `
+      <button class="btn block" id="topAuthGoogleBtn" type="button">🔐 Đăng nhập bằng Google</button>
+      <button class="btn block" id="topAuthCodeToggleBtn" type="button" style="margin-top:8px;">🔑 Đăng nhập bằng mã học sinh</button>
+      <div id="topAuthCodeForm" style="display:none;margin-top:10px;text-align:left;">
+        <div class="field">
+          <label for="topAuthCodeInput">Mã học sinh</label>
+          <input type="text" id="topAuthCodeInput" placeholder="VD: ABC123.07" style="text-transform:uppercase;letter-spacing:0.03em;" />
+        </div>
+        <div class="field">
+          <label for="topAuthPasswordInput">Mật khẩu</label>
+          <input type="password" id="topAuthPasswordInput" />
+        </div>
+        <button class="btn primary block" id="topAuthCodeSignInBtn" type="button">Đăng nhập</button>
+      </div>
+    ` : `<button class="btn primary block" id="topAuthGoogleBtn" type="button">🔑 Đăng nhập bằng Google</button>`;
+
+    $('#topAuthGoogleBtn').addEventListener('click', async () => {
+      const actionBtn = $('#topAuthGoogleBtn');
       actionBtn.disabled = true;
       actionBtn.textContent = '⏳ Đang chuyển sang trang đăng nhập...';
       try {
@@ -491,11 +528,71 @@
         window.location.reload();
       } catch (e) {
         actionBtn.disabled = false;
-        actionBtn.textContent = '🔑 Đăng nhập bằng Google';
+        actionBtn.textContent = '🔐 Đăng nhập bằng Google';
         alert(`Đăng nhập không thành công: ${e.message}`);
       }
     });
+
+    if (role === 'student') {
+      $('#topAuthCodeToggleBtn').addEventListener('click', () => {
+        const form = $('#topAuthCodeForm');
+        const opening = form.style.display === 'none';
+        form.style.display = opening ? 'block' : 'none';
+        if (opening) {
+          const saved = localStorage.getItem('hoahoc_last_student_login_code');
+          if (saved) $('#topAuthCodeInput').value = saved;
+        }
+      });
+      $('#topAuthCodeSignInBtn').addEventListener('click', async () => {
+        const actionBtn = $('#topAuthCodeSignInBtn');
+        const code = normalizeLoginCode($('#topAuthCodeInput').value);
+        const password = $('#topAuthPasswordInput').value;
+        if (!code || !password) { alert('Nhập đủ mã học sinh và mật khẩu.'); return; }
+        actionBtn.disabled = true;
+        actionBtn.textContent = '⏳ Đang đăng nhập...';
+        try {
+          await signInWithStudentCode(code, password);
+          localStorage.setItem('hoahoc_last_student_login_code', code);
+          window.location.reload();
+        } catch (e) {
+          actionBtn.disabled = false;
+          actionBtn.textContent = 'Đăng nhập';
+          const friendly = ['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(e.code)
+            ? 'Sai mã học sinh hoặc mật khẩu.' : e.message;
+          alert(`Đăng nhập không thành công: ${friendly}`);
+        }
+      });
+    }
   }
+})();
+</script>
+<script>
+(async function () {
+  if (!isFirebaseConfigured()) return;
+  const card = document.getElementById('studentChangePasswordCard');
+  if (!card) return;
+  const user = await waitForAuthReady();
+  // Nhận diện tài khoản do giáo viên cấp qua đúng domain email nội bộ tự sinh (xem
+  // teacher-student-accounts.js) — tài khoản Google không có email dạng này nên tự ẩn card.
+  if (!user || !user.email || !user.email.endsWith('@hocsinh.hoahoc.app')) return;
+  card.style.display = 'block';
+  document.getElementById('changeStudentPasswordBtn').addEventListener('click', async () => {
+    const oldPassword = document.getElementById('oldStudentPasswordInput').value;
+    const newPassword = document.getElementById('newStudentPasswordInput').value;
+    const box = document.getElementById('changeStudentPasswordResult');
+    if (!oldPassword || !newPassword) { showResult(box, 'Nhập đủ mật khẩu hiện tại và mật khẩu mới.', true); return; }
+    if (newPassword.length < 6) { showResult(box, 'Mật khẩu mới cần ít nhất 6 ký tự.', true); return; }
+    showResult(box, '⏳ Đang đổi mật khẩu...');
+    try {
+      await changeOwnStudentPassword(oldPassword, newPassword);
+      document.getElementById('oldStudentPasswordInput').value = '';
+      document.getElementById('newStudentPasswordInput').value = '';
+      showResult(box, '✓ Đã đổi mật khẩu — lần đăng nhập sau nhớ dùng mật khẩu mới.');
+    } catch (e) {
+      const friendly = e.code === 'auth/wrong-password' ? 'Mật khẩu hiện tại không đúng.' : e.message;
+      showResult(box, `⚠️ ${escapeHtml(friendly)}`, true);
+    }
+  });
 })();
 </script>
 <script>

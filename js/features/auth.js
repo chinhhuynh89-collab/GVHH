@@ -429,18 +429,42 @@ function requireStudentAuth(onReady) {
 
   const mainChildren = Array.from(document.querySelector('main').children).filter((el) => el !== gate);
 
+  // Bấm "Đăng nhập" CHỈ mở ra 2 lựa chọn (🔐 Google — học sinh tự có tài khoản; 🔑 Mã học sinh —
+  // tài khoản do giáo viên cấp khi nạp cả danh sách lớp, xem teacher-student-accounts.js), KHÔNG tự
+  // chọn thay — 2 nhóm học sinh hoàn toàn khác nhau nên không thể đoán trước ai dùng cách nào.
   function renderSignedOut() {
     mainChildren.forEach((el) => { el.style.display = 'none'; });
     gate.innerHTML = `
       <h2><span class="icon">🔐</span>Đăng nhập</h2>
-      <p class="hint">Cần đăng nhập bằng tài khoản Google để vào nhóm học tập — nhóm, tiến độ học và gói đã mua sẽ gắn với tài khoản này, không mất khi đổi điện thoại/máy tính.</p>
-      <button class="btn primary block" id="studentSignInBtn">Đăng nhập bằng Google</button>
+      <p class="hint">Cần đăng nhập để vào nhóm học tập — nhóm, tiến độ học và gói đã mua sẽ gắn với tài khoản này, không mất khi đổi điện thoại/máy tính.</p>
+      <button class="btn primary block" id="studentAuthChooserBtn" type="button">Đăng nhập</button>
+      <div id="studentAuthChoices" style="display:none;margin-top:10px;">
+        <button class="btn block" id="studentSignInBtn" type="button">🔐 Đăng nhập bằng Google</button>
+        <button class="btn block" id="studentCodeToggleBtn" type="button" style="margin-top:8px;">🔑 Đăng nhập bằng mã học sinh</button>
+        <div id="studentCodeLoginForm" style="display:none;margin-top:10px;text-align:left;">
+          <div class="field">
+            <label for="studentLoginCodeInput">Mã học sinh</label>
+            <input type="text" id="studentLoginCodeInput" placeholder="VD: ABC123.07" style="text-transform:uppercase;letter-spacing:0.03em;" />
+          </div>
+          <div class="field">
+            <label for="studentLoginPasswordInput">Mật khẩu</label>
+            <input type="password" id="studentLoginPasswordInput" />
+          </div>
+          <button class="btn primary block" id="studentCodeSignInBtn" type="button">Đăng nhập</button>
+        </div>
+      </div>
       <div class="result-box" id="studentAuthResult"></div>
     `;
     const lastErr = getLastRedirectError();
     if (lastErr) {
       showResult($('#studentAuthResult'), `⚠️ Đăng nhập thất bại: ${escapeHtml(lastErr.message)}${lastErr.code ? ' (mã lỗi: ' + escapeHtml(lastErr.code) + ')' : ''}`, true);
     }
+
+    $('#studentAuthChooserBtn').addEventListener('click', () => {
+      const choices = $('#studentAuthChoices');
+      choices.style.display = choices.style.display === 'none' ? 'block' : 'none';
+    });
+
     $('#studentSignInBtn').addEventListener('click', async () => {
       const box = $('#studentAuthResult');
       showResult(box, '⏳ Đang chuyển sang trang đăng nhập Google...');
@@ -448,6 +472,35 @@ function requireStudentAuth(onReady) {
         await signInWithGoogle(true);
       } catch (e) {
         showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+      }
+    });
+
+    $('#studentCodeToggleBtn').addEventListener('click', () => {
+      const form = $('#studentCodeLoginForm');
+      const opening = form.style.display === 'none';
+      form.style.display = opening ? 'block' : 'none';
+      // Gợi ý sẵn mã học sinh đã dùng lần trước trên máy này — đỡ phải gõ lại mỗi lần, chỉ cần gõ
+      // mật khẩu (xem teacher-student-accounts.js: KHÔNG lưu mật khẩu, chỉ lưu mã).
+      if (opening) {
+        const saved = localStorage.getItem('hoahoc_last_student_login_code');
+        if (saved) $('#studentLoginCodeInput').value = saved;
+      }
+    });
+
+    $('#studentCodeSignInBtn').addEventListener('click', async () => {
+      const code = normalizeLoginCode($('#studentLoginCodeInput').value);
+      const password = $('#studentLoginPasswordInput').value;
+      const box = $('#studentAuthResult');
+      if (!code || !password) { showResult(box, 'Nhập đủ mã học sinh và mật khẩu.', true); return; }
+      showResult(box, '⏳ Đang đăng nhập...');
+      try {
+        await signInWithStudentCode(code, password);
+        localStorage.setItem('hoahoc_last_student_login_code', code);
+      } catch (e) {
+        const friendly = ['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(e.code)
+          ? 'Sai mã học sinh hoặc mật khẩu.'
+          : e.message;
+        showResult(box, `⚠️ ${escapeHtml(friendly)}`, true);
       }
     });
   }

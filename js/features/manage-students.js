@@ -124,6 +124,7 @@
 
       const rows = students.map((s, i) => {
         const groupsText = s.groups.map((g) => escapeHtml(g.groupName)).join(', ');
+        const zaloDigits = (s.phone || '').replace(/[^0-9]/g, '');
         return `
           <tr>
             <td>${i + 1}</td>
@@ -136,21 +137,48 @@
             <td>${escapeHtml(s.phone || '')}</td>
             <td>${groupsText}</td>
             <td>${escapeHtml((s.latestJoinedAt || '').slice(0, 10))}</td>
+            <td>
+              ${zaloDigits ? `<a class="btn" href="https://zalo.me/${escapeHtml(zaloDigits)}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
+              ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">🔑 Cấp mã thay thế</button>` : ''}
+              <div class="result-box" id="replace-login-result-${escapeHtml(s.studentUid)}"></div>
+            </td>
           </tr>
         `;
       }).join('');
 
       assignedBody.innerHTML = `
-        <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
+        <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang).</p>
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
-              <tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th></tr>
+              <tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th><th></th></tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
       `;
+
+      $$('.replace-login-btn', assignedBody).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const uid = btn.dataset.uid;
+          const s = students.find((x) => x.studentUid === uid);
+          const box = document.getElementById(`replace-login-result-${uid}`);
+          if (!confirm(`Cấp mã học sinh MỚI cho "${s.studentName}"? Mã/mật khẩu CŨ sẽ ngừng hoạt động, tiến độ học và gói đã mua ở tài khoản cũ KHÔNG tự chuyển sang tài khoản mới. Chỉ dùng khi học sinh quên mật khẩu và không còn cách nào khác.`)) return;
+          btn.disabled = true;
+          showResult(box, '⏳ Đang tạo mã mới...');
+          try {
+            const groupCode = s.groups[0] && s.groups[0].groupCode;
+            const { loginCode, password } = await issueReplacementLoginForStudent({
+              studentName: s.studentName, school: s.school, className: s.className,
+              address: s.address, phone: s.phone, groupCode
+            });
+            showResult(box, `✓ Mã mới: <strong>${escapeHtml(loginCode)}</strong> — mật khẩu: <strong style="color:var(--brand);">${escapeHtml(password)}</strong>. Gửi ngay cho học sinh, mã này chỉ hiện được 1 lần.`);
+          } catch (e) {
+            btn.disabled = false;
+            showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+          }
+        });
+      });
     }
 
     $('#pendingCreateGroupToggleBtn').addEventListener('click', () => {

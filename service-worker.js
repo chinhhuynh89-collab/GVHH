@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v124';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v125';
 const ASSETS = [
   './',
   './index.html',
@@ -45,6 +45,8 @@ const ASSETS = [
   './js/features/monetization.js',
   './js/features/admin.js',
   './js/features/upgrade.js',
+  './js/features/teacher-student-accounts.js',
+  './js/features/import-students.js',
   './js/vendor/pdfjs/pdf.min.js',
   './js/vendor/pdfjs/pdf.worker.min.js',
   './js/vendor/firebase/firebase-app-compat.js',
@@ -58,6 +60,7 @@ const ASSETS = [
   './pages/ket-noi-dong-bo.html',
   './pages/ho-so.html',
   './pages/nhom-hoc-sinh.html',
+  './pages/nap-danh-sach-hoc-sinh.html',
   './pages/quan-ly-hoc-sinh.html',
   './pages/quan-tri.html',
   './pages/nang-cap.html',
