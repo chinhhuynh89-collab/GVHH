@@ -512,7 +512,7 @@ function requireStudentAuth(onReady) {
         await signInWithStudentCode(code, password);
         localStorage.setItem('hoahoc_last_student_login_code', code);
       } catch (e) {
-        const friendly = ['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(e.code)
+        const friendly = ['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/invalid-email'].includes(e.code)
           ? 'Sai mã học sinh hoặc mật khẩu.'
           : e.message;
         showResult(box, `⚠️ ${escapeHtml(friendly)}`, true);

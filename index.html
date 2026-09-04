@@ -532,7 +532,11 @@
         </div>
         <button class="btn primary block" id="topAuthCodeSignInBtn" type="button">Đăng nhập</button>
       </div>
-    ` : `<button class="btn primary block" id="topAuthGoogleBtn" type="button">🔑 Đăng nhập bằng Google</button>`;
+      <div class="result-box" id="topAuthResult"></div>
+    ` : `
+      <button class="btn primary block" id="topAuthGoogleBtn" type="button">🔑 Đăng nhập bằng Google</button>
+      <div class="result-box" id="topAuthResult"></div>
+    `;
 
     $('#topAuthGoogleBtn').addEventListener('click', async () => {
       const actionBtn = $('#topAuthGoogleBtn');
@@ -549,7 +553,7 @@
         localStorage.removeItem('hoahoc_pending_google_login');
         actionBtn.disabled = false;
         actionBtn.textContent = '🔐 Đăng nhập bằng Google';
-        alert(`Đăng nhập không thành công: ${e.message}`);
+        showResult($('#topAuthResult'), `⚠️ Đăng nhập không thành công: ${escapeHtml(e.message)}`, true);
       }
     });
 
@@ -567,7 +571,8 @@
         const actionBtn = $('#topAuthCodeSignInBtn');
         const code = normalizeLoginCode($('#topAuthCodeInput').value);
         const password = $('#topAuthPasswordInput').value;
-        if (!code || !password) { alert('Nhập đủ mã học sinh và mật khẩu.'); return; }
+        const box = $('#topAuthResult');
+        if (!code || !password) { showResult(box, '⚠️ Nhập đủ mã học sinh và mật khẩu.', true); return; }
         actionBtn.disabled = true;
         actionBtn.textContent = '⏳ Đang đăng nhập...';
         try {
@@ -577,9 +582,9 @@
         } catch (e) {
           actionBtn.disabled = false;
           actionBtn.textContent = 'Đăng nhập';
-          const friendly = ['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(e.code)
+          const friendly = ['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/invalid-email'].includes(e.code)
             ? 'Sai mã học sinh hoặc mật khẩu.' : e.message;
-          alert(`Đăng nhập không thành công: ${friendly}`);
+          showResult(box, `⚠️ Đăng nhập không thành công: ${escapeHtml(friendly)}`, true);
         }
       });
     }
