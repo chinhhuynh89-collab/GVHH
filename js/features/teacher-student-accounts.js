@@ -69,6 +69,29 @@ async function createProvisionedStudentAuthAccount(loginCode, password, displayN
   return cred.user.uid;
 }
 
+// Tạo tài khoản Auth với số thứ tự ĐẦU TIÊN CÒN TRỐNG, bắt đầu từ startSeq — tự thử số tiếp theo nếu
+// mã bị trùng (Firebase Auth báo lỗi "email-already-in-use"). Cần thiết vì KHÔNG có cách xoá tài khoản
+// Auth của học sinh (không dùng Admin SDK) — khi giáo viên xoá học sinh (deleteStudentEverywhere) chỉ
+// mất bản ghi "students", tài khoản Auth cũ vẫn còn "âm thầm". Nếu giáo viên nạp lại đúng danh sách cũ,
+// số thứ tự tính từ "students" hiện có (đã bớt đi) có thể trùng số đã dùng trước đó -> tạo mới sẽ báo
+// lỗi. Thay vì để lỗi này chặn cả dòng nạp, tự động nhảy sang số tiếp theo cho tới khi tạo được, để
+// giáo viên không cần biết/xử lý chi tiết kỹ thuật này — kết quả là 1 mã học sinh MỚI, đúng như mong đợi.
+async function createProvisionedStudentAccountAutoSeq(teacherCode, startSeq, password, displayName) {
+  let seq = startSeq;
+  const maxAttempts = 1000;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const loginCode = `${teacherCode}.${String(seq).padStart(2, '0')}`;
+    try {
+      const studentUid = await createProvisionedStudentAuthAccount(loginCode, password, displayName);
+      return { studentUid, loginCode, nextSeq: seq + 1 };
+    } catch (e) {
+      if (e && e.code === 'auth/email-already-in-use') { seq++; continue; }
+      throw e;
+    }
+  }
+  throw new Error('Không tìm được mã học sinh còn trống sau nhiều lần thử — thử lại sau.');
+}
+
 async function cleanupSecondaryAuthSession() {
   try { await ensureSecondaryFirebaseApp().auth().signOut(); } catch (e) { /* ignore */ }
 }
@@ -191,10 +214,10 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
         continue;
       }
 
-      const loginCode = `${teacherCode}.${String(nextSeq).padStart(2, '0')}`;
-      nextSeq++;
       const password = generateStudentPassword();
-      const studentUid = await createProvisionedStudentAuthAccount(loginCode, password, row.studentName);
+      const created = await createProvisionedStudentAccountAutoSeq(teacherCode, nextSeq, password, row.studentName);
+      const { studentUid, loginCode } = created;
+      nextSeq = created.nextSeq;
       queueWrite({
         groupCode, teacherUid: teacher.uid, studentUid, joinedAt: new Date().toISOString(),
         studentName: row.studentName, school: row.school, className: row.className,
@@ -300,10 +323,9 @@ async function issueReplacementLoginForStudent(oldStudentDoc) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const teacherCode = deriveTeacherCode(teacher.uid);
-  const nextSeq = await nextLoginSeqForTeacher(teacher.uid);
-  const loginCode = `${teacherCode}.${String(nextSeq).padStart(2, '0')}`;
+  const startSeq = await nextLoginSeqForTeacher(teacher.uid);
   const password = generateStudentPassword();
-  const studentUid = await createProvisionedStudentAuthAccount(loginCode, password, oldStudentDoc.studentName);
+  const { studentUid, loginCode } = await createProvisionedStudentAccountAutoSeq(teacherCode, startSeq, password, oldStudentDoc.studentName);
   await addStudentToGroup(oldStudentDoc.groupCode, {
     studentUid, studentName: oldStudentDoc.studentName, school: oldStudentDoc.school,
     className: oldStudentDoc.className, address: oldStudentDoc.address, phone: oldStudentDoc.phone,

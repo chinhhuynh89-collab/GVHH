@@ -210,7 +210,10 @@
       const codes = await Promise.all(students.map((s) => getAccountCode(s.studentUid)));
 
       const rows = students.map((s, i) => {
-        const groupsText = s.groups.map((g) => escapeHtml(g.groupName)).join(', ');
+        // Nhóm đã bị xoá (xem deleteGroup() — xoá nhóm không còn xoá học sinh nữa) có groupName =
+        // null — ghi rõ "(Nhóm đã xoá)" thay vì để trống khó hiểu, học sinh đó vẫn còn nguyên để xếp
+        // vào nhóm khác.
+        const groupsText = s.groups.map((g) => escapeHtml(g.groupName || '(Nhóm đã xoá)')).join(', ');
         const zaloDigits = (s.phone || '').replace(/[^0-9]/g, '');
         return `
           <tr>
@@ -227,6 +230,7 @@
             <td>
               ${zaloDigits ? `<a class="btn" href="https://zalo.me/${escapeHtml(zaloDigits)}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
               ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">🔑 Cấp mã thay thế</button>` : ''}
+              <button class="btn delete-student-btn" type="button" data-uid="${escapeHtml(s.studentUid)}" data-name="${escapeHtml(s.studentName || '')}" style="margin-top:4px;color:#dc2626;">🗑️ Xoá học sinh</button>
               <div class="result-box" id="replace-login-result-${escapeHtml(s.studentUid)}"></div>
             </td>
           </tr>
@@ -234,7 +238,7 @@
       }).join('');
 
       assignedBody.innerHTML = `
-        <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang).</p>
+        <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang). "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa).</p>
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
@@ -245,6 +249,22 @@
         </div>
       `;
 
+      $$('.delete-student-btn', assignedBody).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const uid = btn.dataset.uid;
+          const name = btn.dataset.name;
+          if (!confirm(`Xoá HẲN học sinh "${name}" khỏi mọi nhóm? Không thể hoàn tác — tiến độ học/gói đã mua của tài khoản này vẫn còn (không mất) nhưng sẽ không còn hiện trong bất kỳ nhóm nào của bạn nữa.`)) return;
+          btn.disabled = true;
+          try {
+            await deleteStudentEverywhere(uid);
+            await renderRosterPanel(panel);
+          } catch (e) {
+            alert('Không xoá được: ' + e.message);
+            btn.disabled = false;
+          }
+        });
+      });
+
       $$('.replace-login-btn', assignedBody).forEach((btn) => {
         btn.addEventListener('click', async () => {
           const uid = btn.dataset.uid;
@@ -254,7 +274,10 @@
           btn.disabled = true;
           showResult(box, '⏳ Đang tạo mã mới...');
           try {
-            const groupCode = s.groups[0] && s.groups[0].groupCode;
+            // Ưu tiên 1 nhóm CÒN TỒN TẠI (groupName khác null) — không lấy nhầm nhóm đã bị xoá làm
+            // nơi xếp tài khoản mới vào, sẽ tạo ra 1 bản ghi "mồ côi" khác ngay khi vừa cấp xong.
+            const stillExisting = s.groups.find((g) => g.groupName !== null);
+            const groupCode = stillExisting ? stillExisting.groupCode : (s.groups[0] && s.groups[0].groupCode);
             const { loginCode, password } = await issueReplacementLoginForStudent({
               studentName: s.studentName, school: s.school, className: s.className,
               address: s.address, phone: s.phone, groupCode

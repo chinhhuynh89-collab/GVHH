@@ -45,16 +45,18 @@ async function updateGroupZaloLink(groupId, zaloGroupLink) {
   await db.collection('groups').doc(groupId).update({ zaloGroupLink: zaloGroupLink || '' });
 }
 
-// Xoá hẳn 1 nhóm — kèm dọn luôn các bản ghi "students" thuộc nhóm đó (nếu xoá được, dùng allSettled
-// vì bản ghi học sinh CŨ chưa có teacherUid sẽ không xoá được, bỏ qua chứ không chặn xoá nhóm). Đề
-// kiểm tra/kết quả cũ của nhóm KHÔNG bị xoá (không hiện ở đâu nữa vì nhóm đã mất, chấp nhận còn sót
-// lại — dọn hết đòi hỏi nhiều lượt đọc/ghi hơn, ngoài phạm vi cần thiết).
+// Xoá hẳn 1 nhóm — CHỈ xoá bản ghi "groups", KHÔNG đụng tới học sinh (trước đây có xoá kèm toàn bộ
+// "students" của nhóm — SAI: xoá nhầm nhóm là mất luôn danh sách học sinh không cứu được, học sinh
+// vẫn còn tài khoản/tiến độ nhưng "biến mất" khỏi trang Quản lý học sinh). Học sinh của nhóm đã xoá
+// vẫn hiện đầy đủ ở "Quản lý học sinh" (xem getAllStudentsForCurrentTeacher() — không còn duyệt qua
+// từng nhóm nữa, đọc thẳng theo teacherUid) để giáo viên xếp lại vào nhóm khác nếu muốn — xoá HẲN 1
+// học sinh giờ CHỈ làm được ở đúng trang đó (nút "🗑️ Xoá học sinh"), không còn là tác dụng phụ của
+// việc xoá nhóm nữa. Đề kiểm tra/kết quả cũ của nhóm vẫn không bị xoá như trước (ngoài phạm vi cần
+// thiết ở đây).
 async function deleteGroup(groupId, groupCode) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
-  const studentsSnap = await db.collection('students').where('groupCode', '==', groupCode).get();
-  await Promise.allSettled(studentsSnap.docs.map((d) => d.ref.delete()));
   await db.collection('groups').doc(groupId).delete();
 }
 
@@ -120,6 +122,20 @@ async function deleteStudent(studentId) {
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
   await db.collection('students').doc(studentId).delete();
+}
+
+// Xoá HẲN 1 học sinh khỏi TẤT CẢ nhóm của giáo viên hiện tại (mọi bản ghi "students" cùng
+// studentUid) — hành động XOÁ HỌC SINH duy nhất trong app, chỉ dùng ở trang "Quản lý học sinh"
+// (xem manage-students.js). Xoá 1 NHÓM (deleteGroup ở trên) KHÔNG còn kéo theo xoá học sinh nữa.
+async function deleteStudentEverywhere(studentUid) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  const snap = await db.collection('students')
+    .where('teacherUid', '==', teacher.uid).where('studentUid', '==', studentUid).get();
+  const batch = db.batch();
+  snap.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit();
 }
 
 // Sửa chương trình học (chapterIds) của 1 nhóm đã tồn tại — dùng khi giáo viên muốn thêm/bớt
@@ -189,36 +205,53 @@ async function getGroupLearningResults(group) {
   return results;
 }
 
-// Gộp học sinh của nhiều nhóm thành 1 danh sách theo TÀI KHOẢN (studentUid, xem
-// js/features/auth.js: requireStudentAuth) — vì 1 học sinh có thể học cùng lúc nhiều nhóm, mỗi nhóm
-// là 1 bản ghi "students" riêng trên CÙNG 1 tài khoản. KHÔNG gộp theo SĐT như trước: 2 học sinh khác
-// nhau (VD anh chị em) hoàn toàn có thể dùng chung 1 số điện thoại (của bố/mẹ) — gộp theo SĐT sẽ làm
-// mất hẳn 1 học sinh khỏi danh sách (chỉ còn thấy 1 trong 2). studentUid gắn với tài khoản Google
-// thật của từng em nên đáng tin hơn nhiều so với SĐT có thể dùng chung trong gia đình.
-// groupsWithStudents = [{ group, students }, ...].
-function mergeStudentsAcrossGroups(groupsWithStudents) {
+// Gộp học sinh thành 1 danh sách theo TÀI KHOẢN (studentUid, xem js/features/auth.js:
+// requireStudentAuth) — vì 1 học sinh có thể học cùng lúc nhiều nhóm, mỗi nhóm là 1 bản ghi
+// "students" riêng trên CÙNG 1 tài khoản. KHÔNG gộp theo SĐT như trước: 2 học sinh khác nhau (VD anh
+// chị em) hoàn toàn có thể dùng chung 1 số điện thoại (của bố/mẹ) — gộp theo SĐT sẽ làm mất hẳn 1
+// học sinh khỏi danh sách (chỉ còn thấy 1 trong 2). studentUid gắn với tài khoản Google thật của
+// từng em nên đáng tin hơn nhiều so với SĐT có thể dùng chung trong gia đình.
+// docs = mảng bản ghi "students" thô (đã gồm field "docId"); groupNameByCode = Map(groupCode ->
+// groupName CỦA NHÓM CÒN TỒN TẠI) — nhóm đã bị xoá sẽ không có trong Map này, groupName trả về null
+// để nơi hiển thị tự biết ghi "(Nhóm đã xoá)" thay vì để trống khó hiểu.
+function mergeStudentsAcrossGroups(docs, groupNameByCode) {
   const byKey = new Map();
-  groupsWithStudents.forEach(({ group, students }) => {
-    students.forEach((s) => {
-      const key = (s.studentUid || '').trim() || s.id;
-      if (!byKey.has(key)) {
-        byKey.set(key, Object.assign({}, s, { groups: [], latestJoinedAt: s.joinedAt }));
-      }
-      const merged = byKey.get(key);
-      merged.groups.push({ groupCode: group.groupCode, groupName: group.groupName, joinedAt: s.joinedAt });
-      if ((s.joinedAt || '') > (merged.latestJoinedAt || '')) merged.latestJoinedAt = s.joinedAt;
+  docs.forEach((s) => {
+    const key = (s.studentUid || '').trim() || s.docId;
+    if (!byKey.has(key)) {
+      byKey.set(key, Object.assign({}, s, { groups: [], docIds: [], latestJoinedAt: s.joinedAt }));
+    }
+    const merged = byKey.get(key);
+    merged.groups.push({
+      groupCode: s.groupCode,
+      groupName: groupNameByCode.has(s.groupCode) ? groupNameByCode.get(s.groupCode) : null,
+      joinedAt: s.joinedAt
     });
+    merged.docIds.push(s.docId);
+    if ((s.joinedAt || '') > (merged.latestJoinedAt || '')) merged.latestJoinedAt = s.joinedAt;
   });
   return Array.from(byKey.values()).sort((a, b) => (b.latestJoinedAt || '').localeCompare(a.latestJoinedAt || ''));
 }
 
-// Toàn bộ học sinh đã đăng ký ở TẤT CẢ nhóm của giáo viên hiện tại — tải 1 lần (dùng cho trang
-// "Quản lý học sinh"). Sắp xếp theo lần đăng ký gần nhất giảm dần (mới nhất lên đầu).
+// Toàn bộ học sinh của giáo viên hiện tại — tải 1 lần (dùng cho trang "Quản lý học sinh"). Đọc
+// TRỰC TIẾP theo teacherUid (1 field duy nhất, không cần composite index — xem chú thích tương tự ở
+// teacher-student-accounts.js) thay vì duyệt qua từng nhóm rồi truy vấn riêng: vừa nhanh hơn (1 lượt
+// đọc thay vì N+1), vừa không bỏ sót học sinh có nhóm ĐÃ BỊ XOÁ (xoá nhóm không còn xoá học sinh nữa
+// — xem deleteGroup()) — trước đây duyệt qua danh sách nhóm HIỆN CÓ nên nhóm đã xoá coi như mất
+// luôn học sinh của nhóm đó khỏi trang này, dù dữ liệu học sinh vẫn còn nguyên trong Firestore.
+// Sắp xếp theo lần đăng ký gần nhất giảm dần (mới nhất lên đầu).
 async function getAllStudentsForCurrentTeacher() {
-  const groups = await listGroupsForCurrentTeacher();
-  if (!groups.length) return [];
-  const perGroup = await Promise.all(groups.map((g) => getStudentsForGroup(g.groupCode)));
-  return mergeStudentsAcrossGroups(groups.map((group, i) => ({ group, students: perGroup[i] })));
+  const teacher = getCurrentTeacher();
+  if (!teacher) return [];
+  const { db } = ensureFirebase();
+  const [studentsSnap, groupsSnap] = await Promise.all([
+    db.collection('students').where('teacherUid', '==', teacher.uid).get(),
+    db.collection('groups').where('teacherUid', '==', teacher.uid).get()
+  ]);
+  if (!studentsSnap.size) return [];
+  const groupNameByCode = new Map(groupsSnap.docs.map((d) => [d.data().groupCode, d.data().groupName]));
+  const docs = studentsSnap.docs.map((d) => Object.assign({ docId: d.id }, d.data()));
+  return mergeStudentsAcrossGroups(docs, groupNameByCode);
 }
 
 // ---------- Học sinh đăng ký bằng MÃ GIÁO VIÊN, chờ xếp vào 1 nhóm cụ thể ----------
