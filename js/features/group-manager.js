@@ -252,7 +252,7 @@
           group.freeMode = next;
         } catch (e) {
           el.classList.toggle('on', !next); // lỗi thì trả lại trạng thái cũ
-          alert('Không lưu được: ' + e.message);
+          showToast('Không lưu được: ' + e.message);
         }
       });
     });
@@ -274,7 +274,7 @@
           if (group) group.zaloGroupLink = zaloGroupLink;
           renderGroupPanel(groupId); // chỉ vẽ lại khung của đúng nhóm này, không đóng khung đang mở
         } catch (e) {
-          alert('Không lưu được: ' + e.message);
+          showToast('Không lưu được: ' + e.message);
         }
       });
     });
@@ -304,7 +304,7 @@
           closeGroupPanel();
           await renderGroupList();
         } catch (e) {
-          alert('Không xoá được: ' + e.message);
+          showToast('Không xoá được: ' + e.message);
           btn.disabled = false;
           btn.textContent = '🗑️ Xoá nhóm';
         }
@@ -368,7 +368,7 @@
             const g = groupsCache.find((gr) => gr.groupCode === groupCode);
             if (g) g.studentCount = Math.max(0, (g.studentCount || 1) - 1);
           } catch (e) {
-            alert('Không thực hiện được: ' + e.message);
+            showToast('Không thực hiện được: ' + e.message);
             btn.disabled = false;
           }
         });

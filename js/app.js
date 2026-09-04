@@ -63,6 +63,26 @@ function hideResult(box) {
   box.classList.remove('error');
 }
 
+// Thông báo nổi ngắn gọn, THAY CHO alert() của trình duyệt — alert() chặn cả trang, hiện kèm tên miền
+// ("...github.io cho biết") trông không chuyên nghiệp, nhất là trên điện thoại. Dùng ở mọi nơi chỉ cần
+// báo 1 lỗi/kết quả ngắn (VD "Không xoá được: ...") mà KHÔNG có sẵn 1 khung .result-box gần đó (VD nút
+// trong từng dòng của 1 danh sách) — nơi nào đã có sẵn khung result-box riêng thì vẫn nên dùng
+// showResult() ở trên, gắn liền đúng vị trí thao tác, dễ theo dõi hơn là 1 thông báo nổi chung chung.
+function showToast(message, isError = true) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast' + (isError ? ' error' : '');
+  toast.textContent = (isError ? '⚠️ ' : '✓ ') + message;
+  toast.addEventListener('click', () => toast.remove());
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 5000);
+}
+
 // Định dạng số: bỏ số 0 thừa, giới hạn số chữ số thập phân
 function formatNumber(n, maxDecimals = 6) {
   if (!isFinite(n)) return '—';

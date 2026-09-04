@@ -316,7 +316,7 @@
             await deleteStudentEverywhere(uid);
             await renderRosterPanel(panel);
           } catch (e) {
-            alert('Không xoá được: ' + e.message);
+            showToast('Không xoá được: ' + e.message);
             btn.disabled = false;
           }
         });

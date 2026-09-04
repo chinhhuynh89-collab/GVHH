@@ -278,7 +278,7 @@
             await deleteProgramChapter(a.dataset.id);
             renderCurrentTab();
           } catch (err) {
-            alert('Không xoá được: ' + err.message);
+            showToast('Không xoá được: ' + err.message);
           }
         });
       });
@@ -340,7 +340,7 @@
       await addProgramChapter(currentTabData.program.id, { title: title.trim(), description: description.trim() });
       await renderCurrentTab();
     } catch (e) {
-      alert('Không thêm được: ' + e.message);
+      showToast('Không thêm được: ' + e.message);
     }
   });
 

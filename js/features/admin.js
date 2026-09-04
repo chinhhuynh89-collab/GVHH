@@ -46,7 +46,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
     $('#monetizationEnabledToggle').addEventListener('click', async () => {
       try {
         await cfgReady;
-      } catch (e) { alert('Chưa tải được cấu hình: ' + e.message); return; }
+      } catch (e) { showToast('Chưa tải được cấu hình: ' + e.message); return; }
       const next = !cfg.enabled;
       $('#monetizationEnabledToggle').classList.toggle('on', next); // phản hồi ngay
       try {
@@ -54,7 +54,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         cfg.enabled = next;
       } catch (e) {
         $('#monetizationEnabledToggle').classList.toggle('on', cfg.enabled); // lỗi thì trả lại
-        alert('Không lưu được: ' + e.message);
+        showToast('Không lưu được: ' + e.message);
       }
     });
 
@@ -353,7 +353,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
               btn.textContent = next ? '🔓 Mở lại mã' : '🔒 Khoá mã';
               btn.disabled = false;
             } catch (e) {
-              alert('Không lưu được: ' + e.message);
+              showToast('Không lưu được: ' + e.message);
               btn.disabled = false;
             }
           });
@@ -394,7 +394,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
             cfg.lockedFeatures = lockedFeatures;
           } catch (e) {
             el.classList.toggle('on', !next);
-            alert('Không lưu được: ' + e.message);
+            showToast('Không lưu được: ' + e.message);
           }
         });
       });
@@ -880,7 +880,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
               await db.collection('commissions').doc(btn.dataset.id).update({ status: 'paid', paidAt: new Date().toISOString() });
               await renderCommissions();
             } catch (e) {
-              alert('Không lưu được: ' + e.message);
+              showToast('Không lưu được: ' + e.message);
               btn.disabled = false;
               btn.textContent = 'Đánh dấu đã trả';
             }
@@ -1160,7 +1160,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         $('#resetFullWipeBtn').addEventListener('click', async () => {
           const typed = prompt(`⚠️ XOÁ VĨNH VIỄN toàn bộ ${allRefs.length} bản ghi của tài khoản này (vai trò, hồ sơ, nhóm, học sinh, tiến độ học, bài nộp, giao dịch, hoa hồng...).\n\nKHÔNG THỂ HOÀN TÁC. Gõ đúng uid dưới đây để xác nhận:\n\n${uid}`);
           if (typed === null) return;
-          if (typed.trim() !== uid) { alert('Không khớp uid — đã huỷ, chưa xoá gì cả.'); return; }
+          if (typed.trim() !== uid) { showToast('Không khớp uid — đã huỷ, chưa xoá gì cả.'); return; }
           const resBox = $('#resetAccountActionResult');
           showResult(resBox, `⏳ Đang xoá ${allRefs.length} bản ghi...`);
           try {

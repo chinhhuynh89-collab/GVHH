@@ -110,7 +110,7 @@
         chapterMeta.description = description;
         renderHeader();
       } catch (e) {
-        alert('Không lưu được: ' + e.message);
+        showToast('Không lưu được: ' + e.message);
       }
     });
   }
@@ -176,7 +176,7 @@
           }
           renderAllLessons();
         } catch (err) {
-          alert('Không thực hiện được: ' + err.message);
+          showToast('Không thực hiện được: ' + err.message);
         }
       });
     });
@@ -189,7 +189,7 @@
           if (chapterMeta.lessonOverrides) delete chapterMeta.lessonOverrides[key];
           renderAllLessons();
         } catch (err) {
-          alert('Không khôi phục được: ' + err.message);
+          showToast('Không khôi phục được: ' + err.message);
         }
       });
     });
@@ -232,7 +232,7 @@
         box.style.display = 'none';
         renderAllLessons();
       } catch (e) {
-        alert('Không lưu được: ' + e.message);
+        showToast('Không lưu được: ' + e.message);
       }
     });
   }
@@ -382,7 +382,7 @@
           renderFlashManager();
           renderFlash();
         } catch (err) {
-          alert('Không thực hiện được: ' + err.message);
+          showToast('Không thực hiện được: ' + err.message);
         }
       });
     });
@@ -396,7 +396,7 @@
           renderFlashManager();
           renderFlash();
         } catch (err) {
-          alert('Không khôi phục được: ' + err.message);
+          showToast('Không khôi phục được: ' + err.message);
         }
       });
     });
@@ -447,7 +447,7 @@
         renderFlashManager();
         renderFlash();
       } catch (e) {
-        alert('Không lưu được: ' + e.message);
+        showToast('Không lưu được: ' + e.message);
       }
     });
   }
@@ -733,7 +733,7 @@
           renderQuizManager();
           renderQuiz();
         } catch (err) {
-          alert('Không thực hiện được: ' + err.message);
+          showToast('Không thực hiện được: ' + err.message);
         }
       });
     });
@@ -748,7 +748,7 @@
           renderQuizManager();
           renderQuiz();
         } catch (err) {
-          alert('Không khôi phục được: ' + err.message);
+          showToast('Không khôi phục được: ' + err.message);
         }
       });
     });
@@ -799,7 +799,7 @@
         renderQuizManager();
         renderQuiz();
       } catch (e) {
-        alert('Không lưu được: ' + e.message);
+        showToast('Không lưu được: ' + e.message);
       }
     });
 
