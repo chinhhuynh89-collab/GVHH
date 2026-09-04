@@ -142,12 +142,42 @@
     viewerMode = (groupGrades.length || groupPrograms.length) ? 'group' : 'guest';
   }
 
+  // Trang này phục vụ CẢ giáo viên lẫn học sinh (không dùng chung requireTeacherAuth/requireStudentAuth
+  // vì 2 hàm đó chỉ phục vụ ĐÚNG 1 vai trò) nên khi chưa đủ điều kiện xem (viewerMode='guest'), phải tự
+  // đoán đúng thông báo theo vai trò ĐANG CHỌN (role.js) — trước đây LUÔN hiện 1 thông báo chung kiểu
+  // học sinh ("Vào nhóm học tập"), không có nút đăng nhập nào cả. Giáo viên chưa đăng nhập Google vào
+  // trang này chỉ thấy thông báo đó, KHÔNG có cách đăng nhập ngay tại đây (khác hẳn các trang giáo viên
+  // khác đều có sẵn nút "Đăng nhập bằng Google") — nhìn như trang không đòi đăng nhập gì cả.
   function renderGate() {
     $('#overviewWrap').style.display = 'none';
     const gate = $('#gateCard');
     gate.style.display = 'block';
     if (viewerMode === 'no-firebase') {
       gate.innerHTML = `<p class="hint">⚠️ Tính năng này chưa được giáo viên bật (chưa kết nối Firebase).</p>`;
+      return;
+    }
+    const role = typeof getRole === 'function' ? getRole() : null;
+    if (role === 'teacher') {
+      gate.innerHTML = `
+        <h2><span class="icon">🔐</span>Đăng nhập giáo viên</h2>
+        <p class="hint">Cần đăng nhập bằng tài khoản Google để soạn giáo án/xem chương trình học của bạn.</p>
+        <button class="btn primary block" id="gateTeacherSignInBtn" type="button">🔑 Đăng nhập bằng Google</button>
+        <div class="result-box" id="gateTeacherSignInResult"></div>
+      `;
+      $('#gateTeacherSignInBtn').addEventListener('click', async () => {
+        const btn = $('#gateTeacherSignInBtn');
+        const box = $('#gateTeacherSignInResult');
+        btn.disabled = true;
+        btn.textContent = '⏳ Đang chuyển sang trang đăng nhập...';
+        try {
+          await signInWithGoogle(false);
+          window.location.reload();
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = '🔑 Đăng nhập bằng Google';
+          showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        }
+      });
       return;
     }
     gate.innerHTML = `
