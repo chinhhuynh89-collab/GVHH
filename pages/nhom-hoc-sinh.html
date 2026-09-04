@@ -56,10 +56,15 @@
 
   <div class="section-label">Danh sách nhóm</div>
   <div class="action-grid" id="groupMenuGrid"></div>
-  <div id="groupSectionPanel" style="display:none;margin-top:12px;"></div>
 
   <p class="footer-note">Gửi mã nhóm cho học sinh để các em tham gia (trang "Vào nhóm học tập" từ màn hình chính).</p>
 </main>
+
+<!-- Chi tiết 1 nhóm mở dạng cửa sổ nổi (giống chi tiết nguyên tố ở Bảng tuần hoàn) — bấm chọn nhóm là
+     hiện ngay, không cần cuộn tìm; bấm ✕ hoặc bấm ra ngoài để đóng lại. -->
+<div class="el-modal-backdrop" id="groupModalBackdrop">
+  <div class="el-modal" id="groupSectionPanel"></div>
+</div>
 
 <script src="../js/app.js"></script>
 <script src="../js/data/chapters-6.js"></script>

@@ -12,6 +12,12 @@
   let knownStudents = []; // học sinh đã có sẵn trong danh sách (mọi nhóm) — để chọn thêm thẳng vào nhóm mới
   let openGroupId = null; // nhóm đang mở khung chi tiết (kiểu lưới nút + 1 khung nội dung, giống trang Quản trị)
 
+  // Bấm ra ngoài (vùng nền tối) cũng đóng cửa sổ chi tiết nhóm — giống cách đóng chi tiết nguyên tố ở
+  // Bảng tuần hoàn, không cần chạm đúng nút ✕.
+  $('#groupModalBackdrop').addEventListener('click', (e) => {
+    if (e.target === $('#groupModalBackdrop')) closeGroupPanel();
+  });
+
   requireTeacherAuth(async () => {
     renderQuickGradeOptions();
     await loadOwnProgramsWithChapters();
@@ -155,21 +161,21 @@
 
   function closeGroupPanel() {
     openGroupId = null;
-    const panel = $('#groupSectionPanel');
-    panel.style.display = 'none';
-    panel.innerHTML = '';
+    $('#groupModalBackdrop').classList.remove('show');
+    $('#groupSectionPanel').innerHTML = '';
     $$('.group-menu-btn').forEach((b) => b.classList.remove('has-open'));
   }
 
   function openGroupPanel(groupId) {
     openGroupId = groupId;
     $$('.group-menu-btn').forEach((b) => b.classList.toggle('has-open', b.dataset.groupId === groupId));
-    $('#groupSectionPanel').style.display = 'block';
+    $('#groupModalBackdrop').classList.add('show');
     renderGroupPanel(groupId);
   }
 
   function groupCardHtml(g) {
     return `
+      <button class="close-btn" id="groupPanelCloseBtn" type="button" aria-label="Đóng">✕</button>
       <div class="chapter-card">
         <div class="cc-icon">👥</div>
         <div class="cc-body">
@@ -207,6 +213,7 @@
     const g = groupsCache.find((gr) => gr.id === groupId);
     if (!g) { closeGroupPanel(); return; }
     $('#groupSectionPanel').innerHTML = groupCardHtml(g);
+    $('#groupPanelCloseBtn').addEventListener('click', closeGroupPanel);
     wireRosterToggles();
     wireResultsToggles();
     wireChaptersEditToggles();
