@@ -335,10 +335,30 @@
   // HS... cố định ngay — xem enforceExclusiveRole trong auth.js) thay vì chỉ đổi giao diện suông, để
   // lỡ tài khoản đã khoá vai trò khác thì phát hiện được ngay từ bước này.
   const roleChooser = $('#roleChooserCard');
+
+  // Trên nhiều điện thoại/PWA, signInWithPopup() (xem chooseRole bên dưới) bị chặn hoặc không hoạt
+  // động ổn định — signInWithGoogle() (auth.js) tự CHUYỂN HƯỚNG CẢ TRANG sang trang đăng nhập Google
+  // (signInWithRedirect) khi gặp trường hợp đó thay vì mở cửa sổ popup. Chuyển hướng nghĩa là trang
+  // này TẢI LẠI TỪ ĐẦU sau khi quay về từ Google — hàm chooseRole() đang chạy dở bị BỎ NGANG (không
+  // kịp gọi setRole()/ẩn màn hỏi), nên nếu không xử lý lại ở đây, người dùng quay về sẽ THẤY LẠI y hệt
+  // màn "Bạn là ai?" dù đã đăng nhập xong — trông như bấm vào là treo, không thấy tiến triển gì (lỗi
+  // thực tế người dùng gặp phải). Lưu lại vai trò ĐANG CHỌN vào localStorage trước khi chuyển hướng
+  // (xem chooseRole), đọc lại đúng vai trò đó ở đây để hoàn tất phần bị bỏ dở.
+  const pendingRoleChoice = localStorage.getItem('hoahoc_pending_role_choice');
+  if (pendingRoleChoice && isFirebaseConfigured()) {
+    try {
+      const user = await checkRedirectResult(pendingRoleChoice === 'student');
+      if (user) setRole(pendingRoleChoice);
+    } catch (e) { /* getLastRedirectError() sẽ có sẵn để hiện lại nếu màn hỏi phải mở lại bên dưới */ }
+    localStorage.removeItem('hoahoc_pending_role_choice');
+  }
+
   const linkSuggestedRole = window.__linkSuggestedRole || null;
   if (linkSuggestedRole || !getRole()) {
     renderRoleChooserBody(linkSuggestedRole);
     roleChooser.style.display = 'block';
+    const lastErr = typeof getLastRedirectError === 'function' ? getLastRedirectError() : null;
+    if (lastErr) showResult($('#roleChooserResult'), `⚠️ Đăng nhập thất bại: ${escapeHtml(lastErr.message)}`, true);
   } else {
     renderRoleSections();
   }
@@ -374,11 +394,20 @@
     const box = $('#roleChooserResult');
     showResult(box, '⏳ Đang chuyển sang trang đăng nhập Google...');
     try {
-      if (isFirebaseConfigured()) await signInWithGoogle(role === 'student');
+      if (isFirebaseConfigured()) {
+        // Lưu lại TRƯỚC khi gọi — nếu rơi vào trường hợp chuyển hướng cả trang (xem chú thích ở
+        // script phía trên), đọc lại đúng giá trị này để hoàn tất phần bị bỏ dở sau khi quay về.
+        localStorage.setItem('hoahoc_pending_role_choice', role);
+        await signInWithGoogle(role === 'student');
+        localStorage.removeItem('hoahoc_pending_role_choice');
+      }
       setRole(role);
       roleChooser.style.display = 'none';
       renderRoleSections();
     } catch (e) {
+      // Lỗi thật (huỷ popup, role-conflict...) chứ không phải đang chuyển hướng — không còn gì để
+      // xử lý tiếp ở lần tải trang sau, xoá cờ đi để tránh gọi checkRedirectResult() thừa lần sau.
+      localStorage.removeItem('hoahoc_pending_role_choice');
       showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
     }
   }
