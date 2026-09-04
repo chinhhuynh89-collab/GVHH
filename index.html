@@ -500,7 +500,7 @@
       const actionBtn = $('#topAuthActionBtn');
       actionBtn.disabled = true;
       actionBtn.textContent = '⏳ Đang đăng xuất...';
-      try { await signOutTeacher(); } catch (e) { /* vẫn tải lại dù lỗi, trang sẽ tự hiện đúng trạng thái */ }
+      try { await signOutAndResetRole(); } catch (e) { /* vẫn tải lại dù lỗi, trang sẽ tự hiện đúng trạng thái */ }
       window.location.reload();
     });
   } else {

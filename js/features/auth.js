@@ -147,6 +147,21 @@ function signOutTeacher() {
   return auth.signOut();
 }
 
+// Đăng xuất do NGƯỜI DÙNG CHỦ ĐỘNG bấm nút "Đăng xuất" (khác signOutTeacher() gọi ÂM THẦM khi phát
+// hiện xung đột vai trò tài khoản ở enforceExclusiveRole — trường hợp đó không phải người dùng đang
+// chủ động đăng xuất nên KHÔNG đụng tới lựa chọn dưới đây). XOÁ LUÔN vai trò đã ghi nhớ trên máy này
+// (role.js: hoahoc_role) — trước đây đăng xuất xong vai trò vẫn giữ nguyên, trang chủ tiếp tục hiện
+// đúng giao diện CŨ (VD vẫn giao diện giáo viên dù đã đăng xuất), không có cách quay lại màn "Bạn là
+// ai?" để đổi sang đăng nhập vai trò KHÁC (VD học sinh) trên CÙNG 1 máy. Dùng ở CẢ 3 nút "Đăng xuất"
+// trong app (trang chủ, khung đăng nhập giáo viên, khung đăng nhập học sinh) để sửa triệt để.
+async function signOutAndResetRole() {
+  try {
+    await signOutTeacher();
+  } finally {
+    try { localStorage.removeItem('hoahoc_role'); } catch (e) { /* ignore */ }
+  }
+}
+
 function onAuthChange(callback) {
   const { auth } = ensureFirebase();
   return auth.onAuthStateChanged(callback);
@@ -362,7 +377,7 @@ function requireTeacherAuth(onReady) {
         <button class="btn" id="teacherSignOutBtn" style="flex:1;">Đăng xuất</button>
       </div>
     `;
-    $('#teacherSignOutBtn').addEventListener('click', () => signOutTeacher());
+    $('#teacherSignOutBtn').addEventListener('click', () => signOutAndResetRole());
   }
 
   (async () => {
@@ -516,7 +531,7 @@ function requireStudentAuth(onReady) {
         <button class="btn" id="studentSignOutBtn">Đăng xuất</button>
       </div>
     `;
-    $('#studentSignOutBtn').addEventListener('click', () => signOutTeacher());
+    $('#studentSignOutBtn').addEventListener('click', () => signOutAndResetRole());
   }
 
   (async () => {
