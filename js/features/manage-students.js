@@ -515,7 +515,10 @@
           <div id="importResultsCard" style="display:none;margin-top:14px;">
             <div class="section-label">Kết quả</div>
             <div id="importResultsBody"></div>
-            <button class="btn primary block" id="downloadCodesBtn" type="button" style="margin-top:10px;">📥 Tải file mã học sinh</button>
+            <div class="btn-row" style="margin-top:10px;">
+              <button class="btn primary block" id="downloadCodesBtn" type="button">📥 Tải file mã học sinh</button>
+              <button class="btn block" id="importDoneBtn" type="button">✅ Xong</button>
+            </div>
           </div>
         </div>
       `;
@@ -570,6 +573,13 @@
         if (!importLastResults) return;
         const filename = downloadStudentCodesCSV(importLastResults, importLastGroupName);
         showToast(`Đã tải file "${filename}" xuống thư mục Tải xuống (Downloads) của máy.`, false);
+      });
+      // Bấm "Xong" = đóng hẳn khung "Nạp danh sách học sinh" lại — bấm lại đúng nút toggle đang mở
+      // (thay vì tự xoá panel.innerHTML) để state đóng/mở (openSub, class has-open) luôn khớp nhau,
+      // tránh phải bấm 2 lần mới mở lại được panel sau khi đã "Xong" 1 lần.
+      $('#importDoneBtn', panel).addEventListener('click', () => {
+        const openBtn = document.querySelector('.manage-sub-btn.has-open');
+        if (openBtn) openBtn.click();
       });
     }
 
