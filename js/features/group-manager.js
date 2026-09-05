@@ -200,6 +200,7 @@
 
         <div class="group-detail-section-label">Quản lý nhóm</div>
         <div class="action-grid">
+          <button class="btn add-student-toggle" data-group="${escapeHtml(g.groupCode)}">➕ Thêm học sinh</button>
           <button class="btn roster-toggle" data-group="${escapeHtml(g.groupCode)}">👥 Danh sách học sinh</button>
           <button class="btn results-toggle" data-group="${escapeHtml(g.groupCode)}">📊 Kết quả học tập</button>
           <button class="btn chapters-toggle" data-group="${escapeHtml(g.groupCode)}">📘 Sửa chương trình học</button>
@@ -211,6 +212,7 @@
             : `<button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="">💬 + Thêm link Zalo nhóm</button>`}
         </div>
 
+        <div class="add-student-box" id="add-student-${escapeHtml(g.groupCode)}" style="display:none;"></div>
         <div class="roster-box" id="roster-${escapeHtml(g.groupCode)}" style="display:none;"></div>
         <div class="results-box" id="results-${escapeHtml(g.groupCode)}" style="display:none;"></div>
         <div class="chapters-edit-box" id="chapters-edit-${escapeHtml(g.groupCode)}" style="display:none;"></div>
@@ -227,6 +229,7 @@
     if (!g) { closeGroupPanel(); return; }
     $('#groupSectionPanel').innerHTML = groupCardHtml(g);
     $('#groupPanelCloseBtn').addEventListener('click', closeGroupPanel);
+    wireAddStudentToggles();
     wireRosterToggles();
     wireResultsToggles();
     wireChaptersEditToggles();
@@ -235,11 +238,12 @@
     wireDeleteGroupButtons();
   }
 
-  // Kiểu accordion: mỗi nhóm chỉ mở 1 trong 3 mục (danh sách học sinh / kết quả học tập / sửa
-  // chương trình học) cùng lúc — bấm mở mục nào thì mục đang mở của nhóm đó tự đóng lại, đỡ rối
-  // mắt trên màn hình nhỏ.
+  // Kiểu accordion: mỗi nhóm chỉ mở 1 trong 4 mục (thêm học sinh / danh sách học sinh / kết quả học
+  // tập / sửa chương trình học) cùng lúc — bấm mở mục nào thì mục đang mở của nhóm đó tự đóng lại,
+  // đỡ rối mắt trên màn hình nhỏ.
   function closeOtherPanels(groupCode, exceptBoxId) {
     [
+      { boxId: 'add-student-' + groupCode, selector: `.add-student-toggle[data-group="${groupCode}"]`, label: '➕ Thêm học sinh' },
       { boxId: 'roster-' + groupCode, selector: `.roster-toggle[data-group="${groupCode}"]`, label: '👥 Danh sách học sinh' },
       { boxId: 'results-' + groupCode, selector: `.results-toggle[data-group="${groupCode}"]`, label: '📊 Kết quả học tập' },
       { boxId: 'chapters-edit-' + groupCode, selector: `.chapters-toggle[data-group="${groupCode}"]`, label: '📘 Sửa chương trình học' }
@@ -392,6 +396,75 @@
     } catch (e) {
       box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
     }
+  }
+
+  // "Thêm học sinh" vào 1 nhóm ĐÃ CÓ SẴN — tick chọn từ danh sách học sinh đã có trong tay (kể cả
+  // đang "Chưa xếp nhóm" hoặc đang học nhóm khác), khác với "chọn học sinh có sẵn" lúc TẠO nhóm mới
+  // (chỉ áp dụng lúc tạo, không dùng lại được cho nhóm đã tồn tại).
+  async function loadAndRenderAddStudentBox(box, group) {
+    box.innerHTML = '<p class="hint">⏳ Đang tải danh sách học sinh...</p>';
+    await loadKnownStudents(); // tải lại cho mới nhất — phòng khi vừa nạp/đăng ký thêm học sinh
+    const eligible = knownStudents.filter((s) => !(s.groups || []).some((gr) => gr.groupCode === group.groupCode));
+    box.dataset.loaded = '1';
+    if (!eligible.length) {
+      box.innerHTML = '<p class="hint">Không còn học sinh nào khác để thêm — mọi học sinh trong danh sách của bạn đã ở trong nhóm này.</p>';
+      return;
+    }
+    box.innerHTML = `
+      <p class="hint">Tick chọn học sinh đã có sẵn (đang "Chưa xếp nhóm" hoặc đang học nhóm khác) để thêm thẳng vào nhóm này — không cần học sinh tự nhập mã nhóm.</p>
+      <div class="add-student-checklist" style="max-height:260px;overflow-y:auto;margin:8px 0;">
+        ${eligible.map((s) => `
+          <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" class="add-student-check" value="${escapeHtml(s.studentUid || s.id)}" style="margin-top:3px;" />
+            <span>${escapeHtml(s.studentName || '')} <span class="hint">— ${escapeHtml(s.school || '')} · ${escapeHtml(s.phone || '')}</span></span>
+          </label>
+        `).join('')}
+      </div>
+      <button class="btn primary block add-student-confirm-btn" type="button">Thêm vào nhóm này</button>
+      <div class="result-box" id="add-student-result-${escapeHtml(group.groupCode)}"></div>
+    `;
+    $('.add-student-confirm-btn', box).addEventListener('click', async () => {
+      const selectedUids = $$('.add-student-check', box).filter((c) => c.checked).map((c) => c.value);
+      const resultBox = $('#add-student-result-' + group.groupCode, box);
+      if (!selectedUids.length) { showResult(resultBox, 'Chọn ít nhất 1 học sinh.', true); return; }
+      const btn = $('.add-student-confirm-btn', box);
+      btn.disabled = true;
+      showResult(resultBox, '⏳ Đang thêm...');
+      try {
+        const selectedStudents = eligible.filter((s) => selectedUids.includes(s.studentUid || s.id));
+        const results = await Promise.allSettled(selectedStudents.map(async (s) => {
+          await addStudentToGroup(group.groupCode, s);
+          const unassignedEntry = s.groups && s.groups.find((gr) => gr.unassigned);
+          if (unassignedEntry) await deleteStudent(unassignedEntry.docId);
+        }));
+        const addedCount = results.filter((r) => r.status === 'fulfilled').length;
+        showResult(resultBox, `✓ Đã thêm ${addedCount}/${selectedStudents.length} học sinh vào nhóm.`);
+        group.studentCount = (group.studentCount || 0) + addedCount;
+        // Đợi 1 chút cho giáo viên kịp thấy thông báo trước khi vẽ lại khung nhóm (khung "Thêm học
+        // sinh" sẽ tự đóng lại theo, giống cách "Sửa chương trình học" đang làm).
+        setTimeout(() => renderGroupPanel(group.id), 1200);
+      } catch (e) {
+        showResult(resultBox, `⚠️ ${escapeHtml(e.message)}`, true);
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function wireAddStudentToggles() {
+    $$('.add-student-toggle').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const groupCode = btn.dataset.group;
+        const group = groupsCache.find((g) => g.groupCode === groupCode);
+        const box = $('#add-student-' + groupCode);
+        const open = box.style.display !== 'none';
+        if (open) { box.style.display = 'none'; btn.textContent = '➕ Thêm học sinh'; return; }
+        closeOtherPanels(groupCode, box.id);
+        box.style.display = 'block';
+        btn.textContent = '➕ Ẩn thêm học sinh';
+        if (box.dataset.loaded) return; // đã tải trước đó, không tải lại
+        await loadAndRenderAddStudentBox(box, group);
+      });
+    });
   }
 
   function wireRosterToggles() {
