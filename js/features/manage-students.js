@@ -484,7 +484,7 @@
           <h2 style="margin-top:0;"><span class="icon">📋</span>Nạp danh sách học sinh</h2>
           <p class="hint" style="margin-top:-4px;">Dùng khi bạn đã có sẵn danh sách lớp (Excel/CSV) và muốn tạo tài khoản cho cả lớp cùng lúc — mỗi học sinh có 1 <strong>mã học sinh + mật khẩu</strong> riêng để đăng nhập, không cần tự đăng ký bằng Google.</p>
           <ol class="hint" style="padding-left:18px;line-height:1.8;margin:0 0 10px;">
-            <li>Bấm "Tải file mẫu" bên dưới, điền dữ liệu thật theo đúng cột (xoá 2 dòng ví dụ đi).</li>
+            <li>Bấm "Tải file mẫu" bên dưới, điền dữ liệu thật theo đúng cột (xoá 2 dòng ví dụ đi). <strong>Điền xong nên lưu lại dưới dạng file Excel (.xlsx)</strong> thay vì .csv — nếu lưu .csv, Excel có thể tự đổi sang bảng mã khác làm sai/mất chữ có dấu tiếng Việt khi nạp lên (app vẫn cố tự nhận đúng bảng mã, nhưng .xlsx thì không gặp rủi ro này).</li>
             <li>Chọn nhóm cần nạp vào (hoặc tạo nhóm mới) — chương trình học vẫn chọn sau ở trang "Nhóm học sinh" như bình thường.</li>
             <li>Tải file đã điền lên, bấm "Nạp danh sách" — xong sẽ TỰ ĐỘNG tải về máy 1 file mã học sinh (mỗi em 1 dòng: mã + mật khẩu), gửi file đó cho từng em. Lưu file này cẩn thận — mật khẩu chỉ hiện được đúng lúc này, không xem lại được sau đó (kể cả chính app), quên lưu chỉ còn cách cấp mã thay thế.</li>
           </ol>

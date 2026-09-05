@@ -287,13 +287,41 @@ function downloadCSV(rows, filename) {
   return filename;
 }
 
+// Đọc file .csv ra chữ, TỰ DÒ ĐÚNG BẢNG MÃ thay vì luôn ép UTF-8 như file.text() — Excel khi lưu lại
+// 1 file .csv (VD sau khi giáo viên điền dữ liệu vào file mẫu rồi bấm Lưu) mặc định lưu theo bảng mã
+// ANSI của máy (thường là Windows-1258 tiếng Việt) chứ KHÔNG phải UTF-8, trừ khi tự chọn đúng "CSV
+// UTF-8" lúc lưu — lỗi thực tế đã gặp: chữ có dấu (VD "Bình") đọc ra sai/mất dấu vì bị hiểu nhầm là
+// UTF-8. Thử UTF-8 NGHIÊM NGẶT trước (fatal:true — có byte nào không hợp lệ UTF-8 là ném lỗi ngay);
+// nếu hỏng, rơi về Windows-1258. Lưu ý: nếu file gốc đã bị Excel tự thay các ký tự không lưu được
+// bằng dấu "?" thật (không phải lỗi đọc, mà đã MẤT DỮ LIỆU ngay từ lúc lưu file) thì không cách đọc
+// nào cứu lại được — cần điền lại đúng ký tự đó và lưu lại (khuyên dùng .xlsx thay vì .csv để tránh
+// hẳn rủi ro này, Excel không gặp lỗi bảng mã khi lưu .xlsx).
+async function readCsvFileSmart(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(bytes.subarray(3)); // có BOM -> chắc chắn UTF-8
+  }
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch (e) {
+    try { text = new TextDecoder('windows-1258').decode(bytes); } catch (e2) { text = new TextDecoder('utf-8').decode(bytes); }
+  }
+  // Windows-1258 biểu diễn 1 số chữ có dấu bằng chữ cái gốc + 1 byte dấu KẾT HỢP riêng (VD "ì" = "i"
+  // + dấu huyền kết hợp U+0300, 2 mã điểm Unicode) thay vì 1 ký tự đã ghép sẵn — chuẩn hoá về NFC
+  // (ghép lại thành 1 ký tự, VD "ì" đúng 1 mã điểm U+00EC) để nhất quán với văn bản gõ trực tiếp bằng
+  // UTF-8 (luôn ở dạng đã ghép sẵn), tránh trường hợp cùng 1 chữ nhưng so sánh/tìm kiếm ra không khớp
+  // chỉ vì khác dạng chuẩn hoá Unicode.
+  return text.normalize('NFC');
+}
+
 // Đọc file .xlsx/.csv theo đúng mẫu cột STUDENT_IMPORT_TEMPLATE_HEADERS, dùng lại bộ đọc đã có
 // (readXlsxGrid/parseCSVText — xem quiz-excel.js) — không viết lại logic đọc file.
 async function parseStudentImportFile(file) {
   const lowerName = file.name.toLowerCase();
   let rows;
   if (lowerName.endsWith('.csv')) {
-    rows = parseCSVText(await file.text());
+    rows = parseCSVText(await readCsvFileSmart(file));
   } else if (lowerName.endsWith('.xlsx')) {
     rows = await readXlsxGrid(await file.arrayBuffer());
   } else {
@@ -313,6 +341,14 @@ async function parseStudentImportFile(file) {
     if (!studentName && !school && !className && !address && !phone) return; // dòng trống -> bỏ qua
     if (!studentName || !school || !className || !address || !phone) {
       errors.push(`Dòng ${lineNo}: thiếu 1 trong các cột bắt buộc (Họ tên/Trường/Lớp/Địa chỉ/SĐT)`);
+      return;
+    }
+    // Ký tự thay thế U+FFFD (�) chỉ xuất hiện khi có byte KHÔNG đọc được đúng bảng mã — chặn sớm ở
+    // đây thay vì âm thầm tạo tài khoản với tên/thông tin bị hỏng (không sửa lại được tên sau khi đã
+    // tạo). Không bắt được trường hợp file gốc đã bị Excel thay sẵn bằng dấu "?" thật lúc lưu (mất dữ
+    // liệu trước khi tới đây, không có cách nào phát hiện khác với 1 dấu "?" hợp lệ thật sự).
+    if ([studentName, school, className, address, phone].some((v) => v.includes('�'))) {
+      errors.push(`Dòng ${lineNo}: có ký tự lỗi font (�) — file gốc bị sai bảng mã, cần điền lại đúng thông tin dòng này rồi lưu lại (khuyên dùng file .xlsx thay vì .csv để tránh lỗi font khi lưu).`);
       return;
     }
     parsed.push({ studentName, school, className, address, phone });
