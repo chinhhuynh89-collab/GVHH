@@ -412,6 +412,12 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
    (display: inline-flex ở .btn đã tự làm việc này), giữ hành vi cũ cho điện thoại. */
 @media (min-width: 700px) {
   .btn.block { width: auto; }
+  /* Rất nhiều nơi trong app đặt 2 nút cạnh nhau trong ".btn-row" bằng style="flex:1" INLINE (kiểu
+     "chia đều 2 nút cùng 1 hàng") — hợp lý trên điện thoại (2 nút vừa khít màn hẹp), nhưng trên máy
+     tính hàng có thể rộng cả nghìn px, mỗi nút bị kéo dài cả trăm px chỉ để chứa vài chữ ("Nộp bài",
+     "Đăng xuất"...). style inline có độ ưu tiên cao hơn CSS thường nên phải dùng !important mới ghi
+     đè được — cách duy nhất sửa ĐỒNG LOẠT hàng chục chỗ mà không phải sửa từng file JS/HTML riêng lẻ. */
+  .btn-row > .btn, .btn-row > a.btn { flex: 0 1 auto !important; }
 }
 
 .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
