@@ -723,6 +723,18 @@
       hideResult(box);
     }
     formCard.style.display = 'block';
+    // Đã có hồ sơ từ lần đăng ký/xin vào nhóm TRƯỚC (tài khoản này) — tự điền sẵn, khỏi gõ lại từ
+    // đầu, vẫn sửa được nếu sai/đã đổi thông tin.
+    try {
+      const profile = typeof getStudentProfile === 'function' ? await getStudentProfile(user.uid) : null;
+      if (profile) {
+        document.getElementById('regName').value = profile.studentName || '';
+        document.getElementById('regSchool').value = profile.school || '';
+        document.getElementById('regClassName').value = profile.className || '';
+        document.getElementById('regAddress').value = profile.address || '';
+        document.getElementById('regPhone').value = profile.phone || '';
+      }
+    } catch (e) { /* chưa có hồ sơ hoặc lỗi mạng tạm thời -> để trống như bình thường */ }
   });
 
   // Mở qua link chia sẻ "?tc=MÃ" (xem đầu index.html) — khoá sẵn mã giáo viên, học sinh không cần
@@ -770,6 +782,9 @@
         showResult(box, '⏳ Đang đăng ký...');
       }
       const info = { studentName, school, className, address, phone, email: user.email || '' };
+      // Lưu lại hồ sơ để lần đăng ký/xin vào nhóm KHÁC sau này khỏi phải gõ lại — lỗi mạng ở bước
+      // này không nên chặn cả việc đăng ký nên bỏ qua nếu hỏng.
+      if (typeof saveStudentProfile === 'function') saveStudentProfile(user.uid, info).catch(() => {});
       const data = await registerWithTeacherCode(teacherCode, info, user.uid);
       showResult(box, `✓ Đã gửi đăng ký tới ${escapeHtml(data.teacherName || 'giáo viên')}! Thầy/cô sẽ xếp bạn vào nhóm học tập phù hợp.`);
       $('#regName').value = ''; $('#regSchool').value = ''; $('#regClassName').value = '';

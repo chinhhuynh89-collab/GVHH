@@ -79,6 +79,24 @@ async function getVerifiedMembership() {
   return m;
 }
 
+// ---------- Hồ sơ học sinh (tên/trường/lớp/địa chỉ/SĐT) ----------
+// Lưu 1 LẦN DUY NHẤT theo tài khoản, dùng lại cho MỌI lần đăng ký học cùng thầy (cô)/xin vào nhóm
+// sau này — khỏi phải gõ lại từ đầu mỗi lần xin vào 1 nhóm mới. Riêng tư (chỉ chính học sinh đó đọc/
+// sửa được — xem firestore.rules). Vẫn SỬA được nếu thông tin cũ sai/đã đổi (trường mới, SĐT mới...).
+async function getStudentProfile(uid) {
+  const { db } = ensureFirebase();
+  const snap = await db.collection('studentProfiles').doc(uid).get();
+  return snap.exists ? snap.data() : null;
+}
+
+async function saveStudentProfile(uid, info) {
+  const { db } = ensureFirebase();
+  await db.collection('studentProfiles').doc(uid).set({
+    studentName: info.studentName, school: info.school, className: info.className,
+    address: info.address, phone: info.phone, updatedAt: new Date().toISOString()
+  }, { merge: true });
+}
+
 // Toàn bộ nhóm tài khoản này ĐÃ được duyệt vào — xem chú thích đầu file (multi-group).
 async function listMyGroups(studentUid) {
   const { db } = ensureFirebase();
@@ -249,6 +267,26 @@ async function renderJoinPage(studentUid, studentEmail) {
     resultBox.insertAdjacentElement('afterend', btn);
   }
 
+  // Đã có hồ sơ từ lần đăng ký/xin vào nhóm TRƯỚC — tự điền sẵn + gọn form lại chỉ còn tóm tắt + mã
+  // nhóm, khỏi gõ lại từ đầu mỗi lần xin vào 1 nhóm mới. Vẫn sửa được (bấm "✏️ Sửa thông tin").
+  try {
+    const profile = await getStudentProfile(studentUid);
+    if (profile) {
+      $('#joinName').value = profile.studentName || '';
+      $('#joinSchool').value = profile.school || '';
+      $('#joinClassName').value = profile.className || '';
+      $('#joinAddress').value = profile.address || '';
+      $('#joinPhone').value = profile.phone || '';
+      $('#joinProfileText').textContent = `${profile.studentName || ''} — ${profile.school || ''}, lớp ${profile.className || ''}`;
+      $('#joinProfileSummary').style.display = 'block';
+      $('#joinPersonalFields').style.display = 'none';
+      $('#joinProfileEditBtn').addEventListener('click', () => {
+        $('#joinPersonalFields').style.display = 'block';
+        $('#joinProfileSummary').style.display = 'none';
+      });
+    }
+  } catch (e) { /* chưa có hồ sơ hoặc lỗi mạng tạm thời -> cứ hiện đủ form như bình thường */ }
+
   $('#joinGroupBtn').addEventListener('click', async () => {
     const studentName = $('#joinName').value.trim();
     const school = $('#joinSchool').value.trim();
@@ -264,6 +302,9 @@ async function renderJoinPage(studentUid, studentEmail) {
     showResult(resultBox, '⏳ Đang gửi yêu cầu...');
     try {
       const info = { studentName, school, className, address, phone, email: studentEmail };
+      // Lưu lại hồ sơ (kể cả khi vừa sửa lại thông tin cũ) để lần xin vào nhóm KHÁC sau này khỏi
+      // phải gõ lại — lỗi mạng ở bước này không nên chặn cả yêu cầu vào nhóm nên bỏ qua nếu hỏng.
+      saveStudentProfile(studentUid, info).catch(() => {});
       const data = await requestJoinGroupByCode(groupCode, info, studentUid);
       if (data.status === 'approved') {
         setMembership(Object.assign(

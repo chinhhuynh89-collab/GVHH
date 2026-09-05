@@ -22,26 +22,34 @@
 
   <div class="card">
     <h2><span class="icon">🎓</span>Xin vào nhóm mới bằng mã nhóm giáo viên cung cấp</h2>
-    <p class="hint" style="margin-top:-4px;">Điền đầy đủ thông tin bên dưới — yêu cầu của bạn sẽ được gửi tới giáo viên, cần giáo viên duyệt thì bạn mới chính thức vào nhóm được. Bạn có thể ở nhiều nhóm của nhiều thầy/cô cùng lúc.</p>
-    <div class="field">
-      <label for="joinName">Họ và tên *</label>
-      <input type="text" id="joinName" placeholder="VD: Nguyễn Văn A" />
+    <p class="hint" style="margin-top:-4px;">Yêu cầu của bạn sẽ được gửi tới giáo viên, cần giáo viên duyệt thì bạn mới chính thức vào nhóm được. Bạn có thể ở nhiều nhóm của nhiều thầy/cô cùng lúc.</p>
+    <!-- Đã có hồ sơ từ lần đăng ký/xin vào nhóm trước — chỉ tóm tắt lại + nút sửa, không bắt gõ lại
+         từ đầu. Chưa có hồ sơ nào (lần đầu) -> ẩn, hiện thẳng đủ 5 ô bên dưới như trước. -->
+    <div class="card" id="joinProfileSummary" style="display:none;background:var(--surface-2);margin-bottom:12px;">
+      <p class="hint" style="margin:0;">Thông tin của bạn: <strong id="joinProfileText"></strong></p>
+      <button class="btn" id="joinProfileEditBtn" type="button" style="margin-top:8px;">✏️ Sửa thông tin</button>
     </div>
-    <div class="field">
-      <label for="joinSchool">Trường *</label>
-      <input type="text" id="joinSchool" placeholder="VD: THPT Nguyễn Trãi" />
-    </div>
-    <div class="field">
-      <label for="joinClassName">Lớp *</label>
-      <input type="text" id="joinClassName" placeholder="VD: 10A1" />
-    </div>
-    <div class="field">
-      <label for="joinAddress">Địa chỉ *</label>
-      <input type="text" id="joinAddress" placeholder="VD: 12 Nguyễn Huệ, Quy Nhơn" />
-    </div>
-    <div class="field">
-      <label for="joinPhone">Số điện thoại liên lạc *</label>
-      <input type="tel" id="joinPhone" placeholder="VD: 0912345678" />
+    <div id="joinPersonalFields">
+      <div class="field">
+        <label for="joinName">Họ và tên *</label>
+        <input type="text" id="joinName" placeholder="VD: Nguyễn Văn A" />
+      </div>
+      <div class="field">
+        <label for="joinSchool">Trường *</label>
+        <input type="text" id="joinSchool" placeholder="VD: THPT Nguyễn Trãi" />
+      </div>
+      <div class="field">
+        <label for="joinClassName">Lớp *</label>
+        <input type="text" id="joinClassName" placeholder="VD: 10A1" />
+      </div>
+      <div class="field">
+        <label for="joinAddress">Địa chỉ *</label>
+        <input type="text" id="joinAddress" placeholder="VD: 12 Nguyễn Huệ, Quy Nhơn" />
+      </div>
+      <div class="field">
+        <label for="joinPhone">Số điện thoại liên lạc *</label>
+        <input type="tel" id="joinPhone" placeholder="VD: 0912345678" />
+      </div>
     </div>
     <div class="field">
       <label for="joinCode">Mã nhóm *</label>

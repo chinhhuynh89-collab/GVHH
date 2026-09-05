@@ -255,6 +255,16 @@ service cloud.firestore {
       allow delete: if request.auth != null && (request.auth.uid == resource.data.teacherUid || isAdmin());
     }
 
+    // ---------- Hồ sơ học sinh (tên/trường/lớp/địa chỉ/SĐT) ----------
+    // Lưu 1 lần, dùng lại cho MỌI lần đăng ký học cùng thầy (cô)/xin vào nhóm sau này (join-group.js:
+    // getStudentProfile/saveStudentProfile) — khỏi phải gõ lại từ đầu mỗi lần xin vào 1 nhóm mới.
+    // Riêng tư hoàn toàn — CHỈ chính học sinh đó đọc/sửa được (không giáo viên nào đọc trực tiếp từ
+    // đây; thông tin vẫn được SAO CHÉP vào "students"/"studentRegistrations" lúc đăng ký như cũ, giáo
+    // viên xem ở đó như bình thường).
+    match /studentProfiles/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
     // ---------- Phần hồ sơ giáo viên hiện công khai (thương hiệu trang chủ cho học sinh xem) ----------
     // Tách khỏi "teachers" ở trên vì doc đó có email — không được công khai. Doc này CHỈ chứa tên
     // hiển thị/khẩu hiệu/ảnh đại diện, không có gì nhạy cảm.
