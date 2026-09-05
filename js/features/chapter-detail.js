@@ -892,7 +892,9 @@
       const box = $('#quizBulkResult');
       box.innerHTML = `<div class="result-box show">⏳ Đang xử lý "${escapeHtml(file.name)}"...</div>`;
       try {
-        const text = await file.text();
+        const text = file.name.toLowerCase().endsWith('.docx')
+          ? await extractDocxPlainText(await file.arrayBuffer())
+          : await file.text();
         const questions = parseQuizTemplate(text);
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);

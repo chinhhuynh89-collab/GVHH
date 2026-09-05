@@ -225,6 +225,21 @@ function downloadXlsx(rows, filename) {
   return filename;
 }
 
+// Trích xuất TOÀN BỘ văn bản trong file .docx thành các dòng thuần — mỗi đoạn văn Word (kể cả đoạn
+// TRỐNG) thành đúng 1 dòng, nối lại bởi "\n". Dùng để nạp câu hỏi trắc nghiệm từ file Word theo ĐÚNG
+// mẫu .txt đã có sẵn (parseQuizTemplate — các câu cách nhau bởi 1 dòng trống): giữ nguyên đoạn trống
+// mới tách đúng được từng câu, khác với groupDocxParagraphs (dùng nạp bài giảng — bỏ qua đoạn trống,
+// tách theo tiêu đề, không phù hợp cho mẫu câu hỏi).
+async function extractDocxPlainText(arrayBuffer) {
+  const xmlText = await readZipEntryText(arrayBuffer, 'word/document.xml');
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) {
+    throw new Error('Không đọc được nội dung XML bên trong file .docx.');
+  }
+  const paragraphs = Array.from(doc.getElementsByTagName('w:p'));
+  return paragraphs.map((p) => Array.from(p.getElementsByTagName('w:t')).map((t) => t.textContent).join('')).join('\n');
+}
+
 function groupDocxParagraphs(xmlText) {
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) {

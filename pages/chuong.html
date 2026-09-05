@@ -123,7 +123,7 @@
       <div class="action-grid">
         <button class="btn" id="quizMenuEditBtn">📋 Sửa câu hỏi trắc nghiệm</button>
         <button class="btn" id="quizMenuManualBtn">✍️ Tạo câu hỏi thủ công</button>
-        <button class="btn" id="quizMenuTxtBtn">📄 Nạp file txt</button>
+        <button class="btn" id="quizMenuTxtBtn">📄 Nạp file txt/Word</button>
         <button class="btn" id="quizMenuExcelBtn">📊 Nạp file Excel/CSV</button>
         <button class="btn" id="quizTemplateBtn">⬇️ Tải mẫu Excel</button>
       </div>
@@ -176,7 +176,11 @@
     </div>
 
     <div class="card" id="quizTxtCard" style="display:none;">
-      <h2><span class="icon">📄</span>Nạp file câu hỏi (.txt)</h2>
+      <h2><span class="icon">📄</span>Nạp file câu hỏi (.txt hoặc .docx)</h2>
+      <div class="hint">
+        Gõ trực tiếp trong Word (.docx) rồi nạp lên cũng được — chỉ cần gõ ĐÚNG theo mẫu dưới đây,
+        mỗi câu cách nhau bởi 1 đoạn văn để trống (Enter xuống dòng trống, không cần gõ gì).
+      </div>
       <div class="hint">
         <strong>Định dạng mẫu — 3 dạng câu hỏi, mỗi câu cách nhau 1 dòng trống:</strong><br>
         <code style="display:block;background:var(--bg-soft);padding:8px;border-radius:8px;margin-top:6px;white-space:pre-wrap;">Câu hỏi ABCD ở đây?
@@ -193,8 +197,8 @@ Câu hỏi Đúng/Sai ở đây?
 Câu hỏi Nhập đáp án ở đây?
 Đáp án: đáp án đúng | biến thể khác cũng chấp nhận</code>
       </div>
-      <input type="file" id="quizBulkFileInput" accept=".txt" style="display:none;" />
-      <button class="btn primary block" id="quizBulkBtn" style="margin-top:10px;">+ Chọn file .txt</button>
+      <input type="file" id="quizBulkFileInput" accept=".txt,.docx" style="display:none;" />
+      <button class="btn primary block" id="quizBulkBtn" style="margin-top:10px;">+ Chọn file .txt hoặc .docx</button>
       <div id="quizBulkResult"></div>
     </div>
 
