@@ -59,6 +59,26 @@
     <div class="btn-row" style="margin-top:12px;">
       <div id="registerWithTeacherWrap" style="display:none;flex:1;min-width:180px;">
         <button class="btn primary block" id="registerToggleBtn" type="button">📝 Đăng ký học cùng thầy (cô)</button>
+        <!-- Chưa đăng nhập -> hiện 2 lựa chọn (giống hệt menu đăng nhập nhanh góc phải trang chủ)
+             thay vì bấm nút là NHẢY THẲNG sang cửa sổ Google ngay — không phải học sinh nào cũng có
+             tài khoản Google, và học sinh đã có sẵn mã học sinh (do giáo viên khác cấp trước đó) nên
+             đăng nhập lại bằng mã đó thay vì tạo thêm 1 tài khoản Google mới không liên quan. -->
+        <div class="card" id="registerLoginChoice" style="display:none;margin-top:10px;text-align:left;">
+          <p class="hint" style="margin-top:0;">Cần đăng nhập trước khi đăng ký — chọn 1 trong 2 cách:</p>
+          <button class="btn block" id="registerGoogleBtn" type="button">🔐 Đăng nhập bằng Google</button>
+          <button class="btn block" id="registerCodeToggleBtn" type="button" style="margin-top:8px;">🔑 Đăng nhập bằng mã học sinh</button>
+          <div id="registerCodeForm" style="display:none;margin-top:10px;">
+            <div class="field">
+              <label for="registerCodeInput">Mã học sinh</label>
+              <input type="text" id="registerCodeInput" placeholder="VD: ABC123.07" style="text-transform:uppercase;letter-spacing:0.03em;" />
+            </div>
+            <div class="field">
+              <label for="registerPasswordInput">Mật khẩu</label>
+              <input type="password" id="registerPasswordInput" />
+            </div>
+            <button class="btn primary block" id="registerCodeSignInBtn" type="button">Đăng nhập</button>
+          </div>
+        </div>
         <!-- Riêng cho thông báo lúc BẤM nút (cần đăng nhập/đăng nhập lỗi) — KHÔNG dùng chung
              #registerResult vì hộp đó nằm bên trong #registerFormCard đang ẩn (display:none) lúc này,
              viết thông báo vào đó người dùng sẽ không thấy được gì cả. -->
@@ -685,13 +705,37 @@
 (function () {
   const toggleBtn = document.getElementById('registerToggleBtn');
   const formCard = document.getElementById('registerFormCard');
+  const loginChoice = document.getElementById('registerLoginChoice');
   if (!toggleBtn) return;
-  // Bắt đăng nhập Google NGAY khi bấm mở form (không đợi đến lúc bấm "Đăng ký" mới hỏi) — học sinh
-  // phải có tài khoản trước mới được điền thông tin, tránh gõ hết form xong mới bị chặn đăng nhập ở
-  // bước cuối. signInWithGoogle(true) tự áp dụng enforceExclusiveRole() (auth.js): nếu tài khoản đó
-  // đã khoá vai trò giáo viên từ trước thì bị từ chối ngay ở đây, đúng như mọi luồng học sinh khác.
+
+  // Mở form đăng ký sau khi ĐÃ chắc chắn có tài khoản (Google hoặc mã học sinh) — tách riêng để dùng
+  // chung cho cả 2 cách đăng nhập bên dưới, thay vì lặp lại y hệt đoạn mở form + tự điền hồ sơ cũ.
+  async function openRegisterForm(user) {
+    loginChoice.style.display = 'none';
+    hideResult($('#registerToggleResult'));
+    formCard.style.display = 'block';
+    // Đã có hồ sơ từ lần đăng ký/xin vào nhóm TRƯỚC (tài khoản này) — tự điền sẵn, khỏi gõ lại từ
+    // đầu, vẫn sửa được nếu sai/đã đổi thông tin.
+    try {
+      const profile = typeof getStudentProfile === 'function' ? await getStudentProfile(user.uid) : null;
+      if (profile) {
+        document.getElementById('regName').value = profile.studentName || '';
+        document.getElementById('regSchool').value = profile.school || '';
+        document.getElementById('regClassName').value = profile.className || '';
+        document.getElementById('regAddress').value = profile.address || '';
+        document.getElementById('regPhone').value = profile.phone || '';
+      }
+    } catch (e) { /* chưa có hồ sơ hoặc lỗi mạng tạm thời -> để trống như bình thường */ }
+  }
+
+  // Bắt đăng nhập NGAY khi bấm mở form (không đợi đến lúc bấm "Đăng ký" mới hỏi) — học sinh phải có
+  // tài khoản trước mới được điền thông tin, tránh gõ hết form xong mới bị chặn đăng nhập ở bước
+  // cuối. Chưa đăng nhập -> hiện 2 lựa chọn (Google / mã học sinh) thay vì tự ý mở thẳng cửa sổ
+  // Google — không phải học sinh nào cũng có tài khoản Google, và học sinh đã có sẵn mã học sinh (do
+  // giáo viên khác cấp) nên đăng nhập lại bằng mã đó thay vì bị ép tạo thêm tài khoản Google mới.
   toggleBtn.addEventListener('click', async () => {
     if (formCard.style.display === 'block') { formCard.style.display = 'none'; return; }
+    if (loginChoice.style.display === 'block') { loginChoice.style.display = 'none'; return; }
     // QUAN TRỌNG: dùng #registerToggleResult (nằm cạnh nút, luôn hiện được) — KHÔNG dùng
     // #registerResult vì hộp đó nằm bên trong #registerFormCard đang display:none lúc này, thông báo
     // viết vào đó sẽ vô hình, người dùng không biết đang chờ đăng nhập hay đăng nhập lỗi.
@@ -706,36 +750,59 @@
       return;
     }
 
-    let user = await waitForAuthReady();
+    const user = await waitForAuthReady();
     if (!user) {
       if (!isFirebaseConfigured()) { showResult(box, '⚠️ Chưa kết nối Firebase.', true); return; }
-      showResult(box, '🔐 Cần đăng nhập bằng tài khoản Google để đăng ký học cùng thầy (cô) — đang mở cửa sổ đăng nhập...');
-      try {
-        const result = await signInWithGoogle(true);
-        user = result && result.user;
-      } catch (e) {
-        const friendly = (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')
-          ? 'Bạn đã đóng cửa sổ đăng nhập trước khi hoàn tất. Bấm lại nút để thử lại.'
-          : e.message;
-        showResult(box, `⚠️ Đăng nhập không thành công: ${escapeHtml(friendly)}`, true);
-        return;
-      }
-      if (!user) { showResult(box, '⚠️ Đăng nhập chưa hoàn tất, bấm lại nút để thử lại.', true); return; }
-      hideResult(box);
+      loginChoice.style.display = 'block';
+      return;
     }
-    formCard.style.display = 'block';
-    // Đã có hồ sơ từ lần đăng ký/xin vào nhóm TRƯỚC (tài khoản này) — tự điền sẵn, khỏi gõ lại từ
-    // đầu, vẫn sửa được nếu sai/đã đổi thông tin.
+    await openRegisterForm(user);
+  });
+
+  document.getElementById('registerGoogleBtn').addEventListener('click', async () => {
+    const box = $('#registerToggleResult');
+    const btn = $('#registerGoogleBtn');
+    btn.disabled = true;
+    showResult(box, '🔐 Đang mở cửa sổ đăng nhập Google...');
     try {
-      const profile = typeof getStudentProfile === 'function' ? await getStudentProfile(user.uid) : null;
-      if (profile) {
-        document.getElementById('regName').value = profile.studentName || '';
-        document.getElementById('regSchool').value = profile.school || '';
-        document.getElementById('regClassName').value = profile.className || '';
-        document.getElementById('regAddress').value = profile.address || '';
-        document.getElementById('regPhone').value = profile.phone || '';
-      }
-    } catch (e) { /* chưa có hồ sơ hoặc lỗi mạng tạm thời -> để trống như bình thường */ }
+      const result = await signInWithGoogle(true);
+      const user = result && result.user;
+      if (!user) { showResult(box, '⚠️ Đăng nhập chưa hoàn tất, bấm lại nút để thử lại.', true); btn.disabled = false; return; }
+      await openRegisterForm(user);
+    } catch (e) {
+      btn.disabled = false;
+      const friendly = (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')
+        ? 'Bạn đã đóng cửa sổ đăng nhập trước khi hoàn tất. Bấm lại nút để thử lại.'
+        : e.message;
+      showResult(box, `⚠️ Đăng nhập không thành công: ${escapeHtml(friendly)}`, true);
+    }
+  });
+
+  document.getElementById('registerCodeToggleBtn').addEventListener('click', () => {
+    const form = document.getElementById('registerCodeForm');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  });
+
+  document.getElementById('registerCodeSignInBtn').addEventListener('click', async () => {
+    const box = $('#registerToggleResult');
+    const btn = document.getElementById('registerCodeSignInBtn');
+    const code = normalizeLoginCode(document.getElementById('registerCodeInput').value);
+    const password = document.getElementById('registerPasswordInput').value;
+    if (!code || !password) { showResult(box, '⚠️ Nhập đủ mã học sinh và mật khẩu.', true); return; }
+    btn.disabled = true;
+    btn.textContent = '⏳ Đang đăng nhập...';
+    try {
+      const result = await signInWithStudentCode(code, password);
+      const user = result && result.user;
+      if (!user) { showResult(box, '⚠️ Đăng nhập chưa hoàn tất, bấm lại nút để thử lại.', true); btn.disabled = false; btn.textContent = 'Đăng nhập'; return; }
+      await openRegisterForm(user);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Đăng nhập';
+      const friendly = ['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/invalid-email'].includes(e.code)
+        ? 'Sai mã học sinh hoặc mật khẩu.' : e.message;
+      showResult(box, `⚠️ Đăng nhập không thành công: ${escapeHtml(friendly)}`, true);
+    }
   });
 
   // Mở qua link chia sẻ "?tc=MÃ" (xem đầu index.html) — khoá sẵn mã giáo viên, học sinh không cần
