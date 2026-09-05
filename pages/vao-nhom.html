@@ -18,18 +18,26 @@
 </header>
 
 <main id="joinBody">
-  <div class="card" id="currentMembership" style="display:none;"></div>
-
   <div class="card">
     <h2><span class="icon">🎓</span>Xin vào nhóm mới bằng mã nhóm giáo viên cung cấp</h2>
     <p class="hint" style="margin-top:-4px;">Yêu cầu của bạn sẽ được gửi tới giáo viên, cần giáo viên duyệt thì bạn mới chính thức vào nhóm được. Bạn có thể ở nhiều nhóm của nhiều thầy/cô cùng lúc.</p>
-    <!-- Đã có hồ sơ từ lần đăng ký/xin vào nhóm trước — chỉ tóm tắt lại + nút sửa, không bắt gõ lại
-         từ đầu. Chưa có hồ sơ nào (lần đầu) -> ẩn, hiện thẳng đủ 5 ô bên dưới như trước. -->
+
+    <!-- Chưa có thông tin cá nhân nào (chưa từng đăng ký/chưa được giáo viên nào cấp tài khoản) —
+         phải đăng ký trước, KHÔNG cho gõ thẳng thông tin ở đây (tránh 1 tài khoản khai nhiều tên khác
+         nhau để xin vào nhiều nhóm dưới nhiều danh tính giả — xem renderJoinPage). -->
+    <div class="card" id="joinNoProfileNotice" style="display:none;background:var(--surface-2);">
+      <p class="hint" style="margin:0;">Bạn cần đăng ký thông tin cá nhân trước khi xin vào nhóm (chỉ cần làm 1 lần).</p>
+      <a class="btn primary block" href="../index.html" style="margin-top:8px;">Về trang chủ để đăng ký</a>
+    </div>
+
+    <!-- Đã có sẵn thông tin (hồ sơ tự lưu, hoặc tài khoản do giáo viên cấp) — chỉ tóm tắt lại, KHÔNG
+         cho sửa ở đây nữa (trước đây có nút "Sửa thông tin", đã bỏ — xem renderJoinPage). -->
     <div class="card" id="joinProfileSummary" style="display:none;background:var(--surface-2);margin-bottom:12px;">
       <p class="hint" style="margin:0;">Thông tin của bạn: <strong id="joinProfileText"></strong></p>
-      <button class="btn" id="joinProfileEditBtn" type="button" style="margin-top:8px;">✏️ Sửa thông tin</button>
     </div>
-    <div id="joinPersonalFields">
+    <!-- Giữ lại 5 ô này (LUÔN ẩn, không có đường nào tự bật lại) chỉ để renderJoinPage() điền giá trị
+         vào rồi đọc lại y hệt bằng đúng code gửi yêu cầu đã có, không cần viết lại logic đó. -->
+    <div id="joinPersonalFields" style="display:none;">
       <div class="field">
         <label for="joinName">Họ và tên *</label>
         <input type="text" id="joinName" placeholder="VD: Nguyễn Văn A" />
@@ -51,12 +59,15 @@
         <input type="tel" id="joinPhone" placeholder="VD: 0912345678" />
       </div>
     </div>
-    <div class="field">
-      <label for="joinCode">Mã nhóm *</label>
-      <input type="text" id="joinCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
+
+    <div id="joinActionFields" style="display:none;">
+      <div class="field">
+        <label for="joinCode">Mã nhóm *</label>
+        <input type="text" id="joinCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
+      </div>
+      <button class="btn primary block" id="joinGroupBtn">Gửi yêu cầu vào nhóm</button>
+      <div class="result-box" id="joinResult"></div>
     </div>
-    <button class="btn primary block" id="joinGroupBtn">Gửi yêu cầu vào nhóm</button>
-    <div class="result-box" id="joinResult"></div>
   </div>
 
   <p class="footer-note">Sau khi được duyệt vào nhóm, hệ thống sẽ tự thông báo khi giáo viên mở bài kiểm tra cho nhóm của bạn.</p>

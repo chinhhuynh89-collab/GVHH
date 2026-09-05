@@ -188,50 +188,26 @@ function initJoinGroupPage() {
   requireStudentAuth((user) => renderJoinPage(user.uid, user.email || ''));
 }
 
+// Thông tin cá nhân "khoá cứng" dùng để xin vào nhóm MỚI — ưu tiên hồ sơ tự lưu (studentProfiles);
+// nếu chưa có (VD tài khoản do giáo viên cấp, nạp hàng loạt, chưa từng tự đăng ký/xin vào nhóm nào
+// qua app) thì lấy tạm từ bất kỳ nhóm nào ĐÃ có sẵn của chính tài khoản này (giáo viên đã nhập lúc
+// nạp danh sách) — không có nguồn nào cả thì coi như chưa có thông tin gì (xem renderJoinPage).
+async function getLockedStudentIdentity(studentUid) {
+  const profile = await getStudentProfile(studentUid).catch(() => null);
+  if (profile) return profile;
+  try {
+    const groups = await listMyGroups(studentUid);
+    if (groups.length) {
+      const g = groups[0];
+      return { studentName: g.studentName, school: g.school, className: g.className, address: g.address, phone: g.phone };
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
 async function renderJoinPage(studentUid, studentEmail) {
-  const groupsBox = $('#currentMembership');
   let pendingInfo = null; // { groupCode, groupName } — chỉ tồn tại trong phiên đang mở trang, không
                            // cần lưu bền: mở lại trang là listMyGroups() tự thấy đã duyệt hay chưa.
-
-  async function refreshGroupsList() {
-    let groups;
-    try {
-      groups = await listMyGroups(studentUid);
-    } catch (e) {
-      groupsBox.style.display = 'block';
-      groupsBox.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
-      return;
-    }
-    if (!groups.length) {
-      groupsBox.style.display = 'none';
-      return;
-    }
-    const membership = getMembership();
-    groupsBox.style.display = 'block';
-    groupsBox.innerHTML = `
-      <h2><span class="icon">✅</span>Nhóm của bạn</h2>
-      <p class="hint" style="margin-top:-4px;">Bạn có thể ở nhiều nhóm cùng lúc — chọn 1 nhóm để học/làm bài.</p>
-      ${groups.map((g) => {
-        const active = membership && membership.studentId === g.studentId;
-        return `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border);">
-          <span class="hint"><strong>${escapeHtml(g.groupName)}</strong> (mã ${escapeHtml(g.groupCode)}) · Lớp ${escapeHtml(String(g.grade || ''))}${active ? ' <strong style="color:var(--brand);">— đang xem</strong>' : ''}</span>
-          <button class="btn ${active ? '' : 'primary'} select-group-btn" type="button" data-id="${g.studentId}" style="flex-shrink:0;">${active ? 'Đang chọn' : 'Chọn nhóm này'}</button>
-        </div>
-      `;
-      }).join('')}
-      <div class="btn-row" style="margin-top:10px;">
-        <a class="btn primary" href="kiem-tra.html">Xem bài kiểm tra</a>
-      </div>
-    `;
-    $$('.select-group-btn', groupsBox).forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const g = groups.find((x) => x.studentId === btn.dataset.id);
-        setMembership(Object.assign({}, g, { studentUid }));
-        refreshGroupsList();
-      });
-    });
-  }
 
   function renderPendingCheckButton(resultBox) {
     const old = document.getElementById('pendingCheckBtn');
@@ -255,8 +231,7 @@ async function renderJoinPage(studentUid, studentEmail) {
           });
           pendingInfo = null;
           btn.remove();
-          showResult(resultBox, `✓ Đã được duyệt vào nhóm "${escapeHtml(result.groupName)}"!`);
-          await refreshGroupsList();
+          showResult(resultBox, `✓ Đã được duyệt vào nhóm "${escapeHtml(result.groupName)}"! Vào trang chủ để bắt đầu học/làm bài.`);
         } else {
           showResult(resultBox, '⏳ Vẫn đang chờ giáo viên duyệt...');
         }
@@ -267,25 +242,26 @@ async function renderJoinPage(studentUid, studentEmail) {
     resultBox.insertAdjacentElement('afterend', btn);
   }
 
-  // Đã có hồ sơ từ lần đăng ký/xin vào nhóm TRƯỚC — tự điền sẵn + gọn form lại chỉ còn tóm tắt + mã
-  // nhóm, khỏi gõ lại từ đầu mỗi lần xin vào 1 nhóm mới. Vẫn sửa được (bấm "✏️ Sửa thông tin").
-  try {
-    const profile = await getStudentProfile(studentUid);
-    if (profile) {
-      $('#joinName').value = profile.studentName || '';
-      $('#joinSchool').value = profile.school || '';
-      $('#joinClassName').value = profile.className || '';
-      $('#joinAddress').value = profile.address || '';
-      $('#joinPhone').value = profile.phone || '';
-      $('#joinProfileText').textContent = `${profile.studentName || ''} — ${profile.school || ''}, lớp ${profile.className || ''}`;
-      $('#joinProfileSummary').style.display = 'block';
-      $('#joinPersonalFields').style.display = 'none';
-      $('#joinProfileEditBtn').addEventListener('click', () => {
-        $('#joinPersonalFields').style.display = 'block';
-        $('#joinProfileSummary').style.display = 'none';
-      });
-    }
-  } catch (e) { /* chưa có hồ sơ hoặc lỗi mạng tạm thời -> cứ hiện đủ form như bình thường */ }
+  // Điền sẵn thông tin cá nhân (KHOÁ CỨNG, không cho sửa ở đây) từ hồ sơ đã lưu hoặc từ nhóm có sẵn —
+  // xem getLockedStudentIdentity(). Học sinh ĐÃ đăng nhập không còn tự gõ tay thông tin này ở màn
+  // "Xin vào nhóm" nữa (trước đây có thể sửa tự do, kể cả khi đã có hồ sơ) — tránh 1 tài khoản khai
+  // nhiều tên khác nhau để xin vào nhiều nhóm dưới nhiều danh tính giả. Hoàn toàn CHƯA có thông tin
+  // gì (chưa từng đăng ký/chưa từng ở nhóm nào) -> bắt về trang chủ đăng ký trước, ẩn hẳn phần "Mã
+  // nhóm" + nút gửi (không có thông tin thật để gửi kèm).
+  let lockedIdentity = null;
+  try { lockedIdentity = await getLockedStudentIdentity(studentUid); } catch (e) { /* ignore */ }
+  if (lockedIdentity) {
+    $('#joinName').value = lockedIdentity.studentName || '';
+    $('#joinSchool').value = lockedIdentity.school || '';
+    $('#joinClassName').value = lockedIdentity.className || '';
+    $('#joinAddress').value = lockedIdentity.address || '';
+    $('#joinPhone').value = lockedIdentity.phone || '';
+    $('#joinProfileText').textContent = `${lockedIdentity.studentName || ''} — ${lockedIdentity.school || ''}, lớp ${lockedIdentity.className || ''}`;
+    $('#joinProfileSummary').style.display = 'block';
+    $('#joinActionFields').style.display = 'block';
+  } else {
+    $('#joinNoProfileNotice').style.display = 'block';
+  }
 
   $('#joinGroupBtn').addEventListener('click', async () => {
     const studentName = $('#joinName').value.trim();
@@ -312,8 +288,7 @@ async function renderJoinPage(studentUid, studentEmail) {
             grade: data.grade, teacherUid: data.teacherUid, studentUid },
           info
         ));
-        showResult(resultBox, `✓ Đã tham gia nhóm "${escapeHtml(data.groupName)}"!`);
-        await refreshGroupsList();
+        showResult(resultBox, `✓ Đã tham gia nhóm "${escapeHtml(data.groupName)}"! Vào trang chủ để bắt đầu học/làm bài.`);
       } else {
         pendingInfo = { groupCode: data.groupCode, groupName: data.groupName };
         showResult(resultBox, `✓ Đã gửi yêu cầu xin vào nhóm "${escapeHtml(data.groupName)}"! Chờ giáo viên duyệt rồi bấm "Kiểm tra lại" bên dưới.`);
@@ -323,6 +298,4 @@ async function renderJoinPage(studentUid, studentEmail) {
       showResult(resultBox, `⚠️ ${escapeHtml(e.message)}`, true);
     }
   });
-
-  await refreshGroupsList();
 }
