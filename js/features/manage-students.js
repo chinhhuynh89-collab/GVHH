@@ -292,9 +292,9 @@
               ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">🔑 Cấp mã thay thế</button>` : ''}
               ${unassignedGroup && groups.length ? `
                 <button class="btn assign-group-toggle-btn" type="button" data-doc-id="${escapeHtml(unassignedGroup.docId)}" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">📥 Xếp vào nhóm</button>
-                <div class="assign-group-form" style="display:none;margin-top:4px;">
-                  <select class="assign-group-select-inline" style="width:100%;">${groupOptionsHtml}</select>
-                  <button class="btn primary assign-group-confirm-btn" type="button" style="margin-top:4px;">Xếp vào nhóm này</button>
+                <div class="assign-group-form" style="display:none;">
+                  <select class="assign-group-select-inline">${groupOptionsHtml}</select>
+                  <button class="btn primary assign-group-confirm-btn" type="button">Xếp vào nhóm này</button>
                 </div>
               ` : ''}
               <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" style="margin-top:4px;color:#dc2626;">🗑️ Xoá học sinh</button>

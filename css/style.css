@@ -1020,6 +1020,12 @@ sub { font-size: 0.72em; }
    .btn thường (to, dễ bấm) sẽ chiếm quá nhiều chỗ khi xếp chồng nhiều nút trong 1 ô hẹp, trông nặng
    nề so với 1 bảng dữ liệu dày đặc. Thu gọn riêng cho đúng ngữ cảnh này. */
 .roster-table td .btn { padding: 6px 10px; font-size: calc(12.5px * var(--font-scale)); }
+/* Khung "Xếp vào nhóm này" (chọn nhóm + xác nhận) — XẾP DỌC (không phải ngang) để ô chọn nhóm tự co
+   giãn vừa TÊN NHÓM (bỏ width:100% cũ khiến ô kéo dài hết cột, đẩy nút xác nhận ra ngoài màn hình,
+   phải cuộn ngang mới bấm được) và nút xác nhận luôn nằm ngay dưới, gần các nút khác trong cùng ô
+   (VD "🗑️ Xoá học sinh") thay vì trôi dạt sang bên phải ngoài tầm nhìn. */
+.assign-group-form { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 4px; }
+.assign-group-select-inline { width: auto; max-width: 100%; }
 /* Ô tìm kiếm + sắp xếp CỐ ĐỊNH lại khi cuộn trang xuống xem danh sách dài — chỉ phần bảng cuộn qua
    bên dưới, không phải cuộn lên lại từ đầu mới gõ tìm/đổi cách sắp xếp được. top = đúng chiều cao
    header (đang sticky sẵn) để 2 thanh dính liền nhau, không đè lên nhau. */
