@@ -943,11 +943,26 @@
     $('#quizBackToMenuBtn').style.display = 'block';
   }
 
+  // Thống kê nhanh kho câu hỏi của chương (tổng + từng loại) — hiện ngay khi giáo viên bấm vào tab
+  // "Trắc nghiệm", đỡ phải đoán/đếm tay hay qua tận trang "Tạo đề kiểm tra" mới biết.
+  function renderQuizStats() {
+    const bar = $('#quizStatsBar');
+    if (!bar) return;
+    const items = getAllQuizItems();
+    if (!items.length) { bar.textContent = 'Chưa có câu hỏi nào trong chương này.'; return; }
+    const counts = { abcd: 0, truefalse: 0, text: 0 };
+    items.forEach((item) => { counts[getQuestionType(item)]++; });
+    const breakdown = QUIZ_TYPE_OPTIONS.filter((t) => counts[t.value] > 0)
+      .map((t) => `${t.label}: ${counts[t.value]}`).join(', ');
+    bar.textContent = `Kho câu hỏi hiện có: Tổng ${items.length} câu — ${breakdown}.`;
+  }
+
   function showQuizMenu() {
     $('#quizBackToMenuBtn').style.display = 'none';
     QUIZ_SECTION_IDS.forEach((id) => { $('#' + id).style.display = 'none'; });
     $('#quizStudentMenu').style.display = owner.isOwner ? 'none' : 'block';
     $('#quizTeacherMenu').style.display = owner.isOwner ? 'block' : 'none';
+    if (owner.isOwner) renderQuizStats();
   }
 
   function initQuizMenu() {
