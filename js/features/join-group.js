@@ -105,6 +105,36 @@ async function listMyGroups(studentUid) {
     .sort((a, b) => (b.joinedAt || '').localeCompare(a.joinedAt || ''));
 }
 
+// Xưng hô Thầy/Cô theo giới tính đặt ở hồ sơ giáo viên — hồ sơ cũ chưa từng chọn giới tính thì dùng
+// cách gọi chung "thầy/cô" (xem cùng ý tưởng ở branding.js: getHonorific — không nạp cả file đó vào
+// trang này để tránh các đoạn IIFE khác trong đó chạy nhầm trên trang không có đúng phần tử DOM).
+function honorificForGender(gender) {
+  if (gender === 'female') return 'Cô';
+  if (gender === 'male') return 'Thầy';
+  return 'thầy/cô';
+}
+
+// Tra cứu 1 nhóm theo mã — CHỈ ĐỌC, không tạo yêu cầu gì (dùng cho bước "Kiểm tra" trước khi xác nhận
+// xin vào nhóm, để học sinh thấy đúng tên nhóm + tên giáo viên trước khi thật sự gửi yêu cầu, tránh
+// gõ nhầm mã mà không hay biết). Kèm theo tên + xưng hô của giáo viên sở hữu nhóm đó luôn (đọc thêm
+// "teacherProfiles", công khai) để hiện câu xác nhận đầy đủ.
+async function findGroupByCode(groupCode) {
+  const { db } = ensureFirebase();
+  const snap = await db.collection('groups').where('groupCode', '==', groupCode).limit(1).get();
+  if (snap.empty) return null;
+  const group = Object.assign({ groupId: snap.docs[0].id }, snap.docs[0].data());
+  try {
+    const profileSnap = await db.collection('teacherProfiles').doc(group.teacherUid).get();
+    const profile = profileSnap.exists ? profileSnap.data() : {};
+    group.teacherName = profile.displayName || '';
+    group.teacherHonorific = honorificForGender(profile.gender);
+  } catch (e) {
+    group.teacherName = '';
+    group.teacherHonorific = 'thầy/cô';
+  }
+  return group;
+}
+
 // Xin vào nhóm bằng mã nhóm: tìm nhóm theo groupCode, rồi:
 // - Nếu tài khoản này ĐÃ là thành viên chính thức của đúng nhóm đó (đã được duyệt từ trước) -> coi
 //   như vào lại luôn, không bắt xin duyệt lại.
@@ -205,9 +235,41 @@ async function getLockedStudentIdentity(studentUid) {
   return null;
 }
 
+// Liệt kê các nhóm ĐÃ được duyệt vào — CHỈ XEM (không có nút "chọn nhóm đang hoạt động" như bản
+// trước, gây rối và có lỗi hiển thị "undefined" khi thiếu tên nhóm). Gộp tên + xưng hô giáo viên của
+// từng nhóm (đọc "teacherProfiles", công khai) — dùng Map để mỗi giáo viên chỉ đọc 1 lần dù có nhiều
+// nhóm của cùng người đó.
+async function renderMyGroupsList(studentUid) {
+  const card = $('#myGroupsCard');
+  const box = $('#myGroupsList');
+  try {
+    const groups = await listMyGroups(studentUid);
+    if (!groups.length) { card.style.display = 'none'; return; }
+    const { db } = ensureFirebase();
+    const teacherUids = Array.from(new Set(groups.map((g) => g.teacherUid).filter(Boolean)));
+    const profiles = await Promise.all(teacherUids.map((uid) => db.collection('teacherProfiles').doc(uid).get().catch(() => null)));
+    const profileByUid = new Map(teacherUids.map((uid, i) => [uid, (profiles[i] && profiles[i].exists) ? profiles[i].data() : {}]));
+    card.style.display = 'block';
+    box.innerHTML = groups.map((g) => {
+      const profile = profileByUid.get(g.teacherUid) || {};
+      const teacherLabel = profile.displayName ? `${honorificForGender(profile.gender)} ${profile.displayName}` : 'Giáo viên';
+      const joinedDate = g.joinedAt ? new Date(g.joinedAt).toLocaleDateString('vi-VN') : '—';
+      return `
+        <div style="padding:8px 0;border-top:1px solid var(--border);">
+          <span class="hint"><strong>${escapeHtml(teacherLabel)}</strong> — ${escapeHtml(g.groupName || '(chưa rõ tên nhóm)')} (mã ${escapeHtml(g.groupCode)}) · Lớp ${escapeHtml(String(g.grade || '—'))} · Tham gia: ${joinedDate}</span>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    card.style.display = 'block';
+    box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+  }
+}
+
 async function renderJoinPage(studentUid, studentEmail) {
   let pendingInfo = null; // { groupCode, groupName } — chỉ tồn tại trong phiên đang mở trang, không
                            // cần lưu bền: mở lại trang là listMyGroups() tự thấy đã duyệt hay chưa.
+  renderMyGroupsList(studentUid);
 
   function renderPendingCheckButton(resultBox) {
     const old = document.getElementById('pendingCheckBtn');
@@ -232,6 +294,7 @@ async function renderJoinPage(studentUid, studentEmail) {
           pendingInfo = null;
           btn.remove();
           showResult(resultBox, `✓ Đã được duyệt vào nhóm "${escapeHtml(result.groupName)}"! Vào trang chủ để bắt đầu học/làm bài.`);
+          renderMyGroupsList(studentUid);
         } else {
           showResult(resultBox, '⏳ Vẫn đang chờ giáo viên duyệt...');
         }
@@ -263,7 +326,11 @@ async function renderJoinPage(studentUid, studentEmail) {
     $('#joinNoProfileNotice').style.display = 'block';
   }
 
-  $('#joinGroupBtn').addEventListener('click', async () => {
+  // Bước 1: "Kiểm tra" — chỉ TRA CỨU nhóm theo mã (không gửi gì cả), hiện đúng tên nhóm + tên giáo
+  // viên để xác nhận trước khi thật sự gửi yêu cầu — tránh gõ nhầm mã, xin nhầm nhóm/giáo viên khác
+  // mà không hay biết cho tới khi giáo viên đó xem danh sách chờ duyệt mới phát hiện ra.
+  let confirmedGroupCode = null;
+  $('#joinCheckBtn').addEventListener('click', async () => {
     const studentName = $('#joinName').value.trim();
     const school = $('#joinSchool').value.trim();
     const className = $('#joinClassName').value.trim();
@@ -272,9 +339,50 @@ async function renderJoinPage(studentUid, studentEmail) {
     const groupCode = $('#joinCode').value.trim().toUpperCase();
     const resultBox = $('#joinResult');
     if (!studentName || !school || !className || !address || !phone || !groupCode) {
-      showResult(resultBox, 'Điền đầy đủ tất cả các mục (đánh dấu *) trước khi tham gia.', true);
+      showResult(resultBox, 'Điền đầy đủ tất cả các mục (đánh dấu *) và mã nhóm trước khi kiểm tra.', true);
       return;
     }
+    hideResult(resultBox);
+    const btn = $('#joinCheckBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Đang kiểm tra...';
+    try {
+      const group = await findGroupByCode(groupCode);
+      if (!group) {
+        showResult(resultBox, `⚠️ Không tìm thấy nhóm với mã "${escapeHtml(groupCode)}" — kiểm tra lại mã, hoặc hỏi lại giáo viên.`, true);
+        return;
+      }
+      confirmedGroupCode = groupCode;
+      $('#joinConfirmText').innerHTML = `Bạn muốn tham gia nhóm <strong>${escapeHtml(group.groupName)}</strong> của <strong>${escapeHtml(group.teacherHonorific)} ${escapeHtml(group.teacherName || '(chưa rõ tên)')}</strong>?`;
+      $('#joinCodeStep').style.display = 'none';
+      $('#joinConfirmStep').style.display = 'block';
+    } catch (e) {
+      showResult(resultBox, `⚠️ ${escapeHtml(e.message)}`, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🔍 Kiểm tra';
+    }
+  });
+
+  $('#joinConfirmCancelBtn').addEventListener('click', () => {
+    confirmedGroupCode = null;
+    $('#joinConfirmStep').style.display = 'none';
+    $('#joinCodeStep').style.display = 'block';
+    $('#joinCode').value = '';
+    $('#joinCode').focus();
+  });
+
+  // Bước 2: "Xác nhận tham gia" — CHỈ tới đây mới thật sự gửi yêu cầu (studentRegistrations), sau khi
+  // đã thấy đúng tên nhóm/giáo viên ở bước 1.
+  $('#joinConfirmBtn').addEventListener('click', async () => {
+    const studentName = $('#joinName').value.trim();
+    const school = $('#joinSchool').value.trim();
+    const className = $('#joinClassName').value.trim();
+    const address = $('#joinAddress').value.trim();
+    const phone = $('#joinPhone').value.trim();
+    const groupCode = confirmedGroupCode;
+    const resultBox = $('#joinResult');
+    if (!groupCode) return;
     showResult(resultBox, '⏳ Đang gửi yêu cầu...');
     try {
       const info = { studentName, school, className, address, phone, email: studentEmail };
@@ -282,6 +390,9 @@ async function renderJoinPage(studentUid, studentEmail) {
       // phải gõ lại — lỗi mạng ở bước này không nên chặn cả yêu cầu vào nhóm nên bỏ qua nếu hỏng.
       saveStudentProfile(studentUid, info).catch(() => {});
       const data = await requestJoinGroupByCode(groupCode, info, studentUid);
+      $('#joinConfirmStep').style.display = 'none';
+      $('#joinCodeStep').style.display = 'block';
+      $('#joinCode').value = '';
       if (data.status === 'approved') {
         setMembership(Object.assign(
           { studentId: data.studentId, groupCode: data.groupCode, groupName: data.groupName,
@@ -289,6 +400,7 @@ async function renderJoinPage(studentUid, studentEmail) {
           info
         ));
         showResult(resultBox, `✓ Đã tham gia nhóm "${escapeHtml(data.groupName)}"! Vào trang chủ để bắt đầu học/làm bài.`);
+        renderMyGroupsList(studentUid);
       } else {
         pendingInfo = { groupCode: data.groupCode, groupName: data.groupName };
         showResult(resultBox, `✓ Đã gửi yêu cầu xin vào nhóm "${escapeHtml(data.groupName)}"! Chờ giáo viên duyệt rồi bấm "Kiểm tra lại" bên dưới.`);

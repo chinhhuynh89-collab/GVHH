@@ -18,6 +18,13 @@
 </header>
 
 <main id="joinBody">
+  <!-- Danh sách nhóm ĐÃ tham gia (đã được duyệt) — chỉ để XEM, không có nút "chọn nhóm đang hoạt
+       động" (bản trước có nút này, đã bỏ vì gây rối và có lỗi hiển thị "undefined"). -->
+  <div class="card" id="myGroupsCard" style="display:none;margin-bottom:14px;">
+    <h2><span class="icon">✅</span>Nhóm đang tham gia</h2>
+    <div id="myGroupsList"></div>
+  </div>
+
   <div class="card">
     <h2><span class="icon">🎓</span>Xin vào nhóm mới bằng mã nhóm giáo viên cung cấp</h2>
     <p class="hint" style="margin-top:-4px;">Yêu cầu của bạn sẽ được gửi tới giáo viên, cần giáo viên duyệt thì bạn mới chính thức vào nhóm được. Bạn có thể ở nhiều nhóm của nhiều thầy/cô cùng lúc.</p>
@@ -61,11 +68,22 @@
     </div>
 
     <div id="joinActionFields" style="display:none;">
-      <div class="field">
-        <label for="joinCode">Mã nhóm *</label>
-        <input type="text" id="joinCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
+      <div id="joinCodeStep">
+        <div class="field">
+          <label for="joinCode">Mã nhóm *</label>
+          <input type="text" id="joinCode" placeholder="VD: 7K3P9M" style="text-transform:uppercase;letter-spacing:0.05em;" />
+        </div>
+        <button class="btn primary block" id="joinCheckBtn">🔍 Kiểm tra</button>
       </div>
-      <button class="btn primary block" id="joinGroupBtn">Gửi yêu cầu vào nhóm</button>
+      <!-- Xác nhận ĐÚNG nhóm/giáo viên trước khi thật sự gửi yêu cầu — tránh gõ nhầm mã, xin vào
+           nhầm nhóm/giáo viên khác mà không hay biết. -->
+      <div id="joinConfirmStep" style="display:none;background:var(--surface-2);border-radius:var(--radius-sm);padding:12px;margin-top:10px;">
+        <p class="hint" style="margin:0 0 10px;" id="joinConfirmText"></p>
+        <div class="btn-row">
+          <button class="btn primary" id="joinConfirmBtn" style="flex:1;">✅ Xác nhận tham gia</button>
+          <button class="btn" id="joinConfirmCancelBtn" style="flex:1;">✏️ Nhập lại mã khác</button>
+        </div>
+      </div>
       <div class="result-box" id="joinResult"></div>
     </div>
   </div>
