@@ -213,17 +213,31 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
           db.collection('commissions').get(),
           db.collection('paymentSubmissions').get()
         ]);
+        // Trạng thái online/offline của TỪNG giáo viên (heartbeat tự ghi lúc còn mở app — xem app.js +
+        // getPresenceForUids trong groups-data.js). Số giáo viên thường không nhiều nên tải hết luôn
+        // cho cả danh sách, không cần tải riêng từng dòng.
+        const teacherPresence = typeof getPresenceForUids === 'function'
+          ? await getPresenceForUids(profilesSnap.docs.map((d) => d.id)).catch(() => new Map())
+          : new Map();
 
         const emailByUid = new Map(teachersSnap.docs.map((d) => [d.id, d.data().email || '']));
         const subsByUid = new Map(subsSnap.docs.map((d) => [d.id, d.data()]));
         const groupTeacherByCode = new Map(groupsSnap.docs.map((d) => [d.data().groupCode, d.data().teacherUid]));
-        const studentCountByUid = new Map();
+        // Đếm theo SỐ HỌC SINH THẬT (dedup theo studentUid), KHÔNG phải số bản ghi "students" — 1 học
+        // sinh có thể có nhiều bản ghi (học nhiều nhóm của cùng giáo viên, hoặc còn sót bản ghi "Chưa
+        // xếp nhóm" thừa do lỗi cũ) khiến đếm theo số dòng ra SAI, lệch với trang "Quản lý học sinh"
+        // của chính giáo viên (dùng mergeStudentsAcrossGroups() dedup theo studentUid — groups-data.js).
+        const studentUidSetByTeacher = new Map();
         studentsSnap.docs.forEach((d) => {
           const s = d.data();
           const uid = s.teacherUid || groupTeacherByCode.get(s.groupCode);
           if (!uid) return;
-          studentCountByUid.set(uid, (studentCountByUid.get(uid) || 0) + 1);
+          if (!studentUidSetByTeacher.has(uid)) studentUidSetByTeacher.set(uid, new Set());
+          const key = (s.studentUid || '').trim() || d.id;
+          studentUidSetByTeacher.get(uid).add(key);
         });
+        const studentCountByUid = new Map();
+        studentUidSetByTeacher.forEach((set, uid) => studentCountByUid.set(uid, set.size));
         const commissionByUid = new Map();
         commissionsSnap.docs.forEach((d) => {
           const c = d.data();
@@ -258,7 +272,8 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
             tier: sub.tier || 'free', expiresAt: sub.expiresAt || '', referralDisabled: !!sub.referralDisabled,
             studentCount: studentCountByUid.get(d.id) || 0, comm,
             referredCount: referredCountByUid.get(d.id) || 0,
-            recentOrders: recentOrderCountByReferrer.get(d.id) || 0
+            recentOrders: recentOrderCountByReferrer.get(d.id) || 0,
+            online: !!teacherPresence.get(d.id)
           };
         }).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
 
@@ -269,11 +284,12 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
           <div class="roster-table-wrap">
             <table class="roster-table">
               <thead>
-                <tr><th>Mã GV</th><th>Tên</th><th>Email</th><th>Trạng thái gói</th><th>Số học sinh</th><th>Đã giới thiệu</th><th>Hoa hồng đã trả</th><th>Hoa hồng chưa trả</th><th></th><th></th></tr>
+                <tr><th>Trạng thái</th><th>Mã GV</th><th>Tên</th><th>Email</th><th>Trạng thái gói</th><th>Số học sinh</th><th>Đã giới thiệu</th><th>Hoa hồng đã trả</th><th>Hoa hồng chưa trả</th><th></th><th></th></tr>
               </thead>
               <tbody>
                 ${rows.map((r) => `
                   <tr>
+                    <td>${r.online ? '<span class="presence-online">🟢 Online</span>' : '<span class="presence-offline">⚪ Offline</span>'}</td>
                     <td>${escapeHtml(r.teacherCode)}</td>
                     <td>${escapeHtml(r.name)}</td>
                     <td>${escapeHtml(r.email)}</td>
@@ -285,7 +301,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
                     <td><button class="btn roster-expand-btn" type="button" data-uid="${r.uid}">👥 Xem học sinh</button></td>
                     <td><button class="btn referral-lock-btn" type="button" data-uid="${r.uid}" data-disabled="${r.referralDisabled ? '1' : '0'}">${r.referralDisabled ? '🔓 Mở lại mã' : '🔒 Khoá mã'}</button></td>
                   </tr>
-                  <tr id="roster-students-${r.uid}" style="display:none;"><td colspan="10"></td></tr>
+                  <tr id="roster-students-${r.uid}" style="display:none;"><td colspan="11"></td></tr>
                 `).join('')}
               </tbody>
             </table>
@@ -304,25 +320,44 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
             if (row.dataset.loaded) return;
             row.dataset.loaded = '1';
             cell.innerHTML = '<p class="hint">⏳ Đang tải...</p>';
+            // Khớp ĐÚNG logic đã dùng để đếm ở cột "Số học sinh" phía trên: khớp qua groupCode CỦA
+            // NHÓM giáo viên này (teacherGroupCodes) HOẶC teacherUid gắn thẳng (bản ghi "Chưa xếp
+            // nhóm" không có groupCode nào để đối chiếu) — thiếu vế teacherUid từng khiến danh sách mở
+            // rộng ở đây SÓT hẳn các học sinh chưa xếp nhóm, dù cột đếm vẫn tính đủ (2 nơi không khớp).
+            // Sau đó dedup theo studentUid (fallback docId) — 1 học sinh có thể có NHIỀU bản ghi (học
+            // nhiều nhóm của cùng giáo viên, hoặc còn sót bản ghi "Chưa xếp nhóm" thừa) — khớp đúng
+            // cách gộp ở trang "Quản lý học sinh" của giáo viên (mergeStudentsAcrossGroups, groups-data.js).
             const teacherGroupCodes = new Set(groupsSnap.docs.filter((d) => d.data().teacherUid === uid).map((d) => d.data().groupCode));
-            const students = studentsSnap.docs.filter((d) => teacherGroupCodes.has(d.data().groupCode))
-              .map((d) => Object.assign({ id: d.id }, d.data()))
-              .sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi'));
+            const matched = studentsSnap.docs.filter((d) => {
+              const s = d.data();
+              return s.teacherUid === uid || teacherGroupCodes.has(s.groupCode);
+            }).map((d) => Object.assign({ id: d.id }, d.data()));
+            const seenKeys = new Set();
+            const students = matched.filter((s) => {
+              const key = (s.studentUid || '').trim() || s.id;
+              if (seenKeys.has(key)) return false;
+              seenKeys.add(key);
+              return true;
+            }).sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi'));
             if (!students.length) { cell.innerHTML = '<p class="hint">Chưa có học sinh nào.</p>'; return; }
-            const [subs, codes] = await Promise.all([
+            const [subs, codes, presence] = await Promise.all([
               Promise.all(students.map((s) => getStudentSubscription(s.studentUid))),
-              Promise.all(students.map((s) => getAccountCode(s.studentUid)))
+              Promise.all(students.map((s) => getAccountCode(s.studentUid))),
+              typeof getPresenceForUids === 'function'
+                ? getPresenceForUids(students.map((s) => s.studentUid)).catch(() => new Map())
+                : Promise.resolve(new Map())
             ]);
             const displayCodes = students.map((s, i) => s.loginCode || codes[i]);
             cell.innerHTML = `
               <div class="roster-table-wrap">
                 <table class="roster-table">
                   <thead>
-                    <tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Gói</th></tr>
+                    <tr><th>Trạng thái</th><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Gói</th></tr>
                   </thead>
                   <tbody>
                     ${students.map((s, i) => `
                       <tr>
+                        <td>${presence.get(s.studentUid) ? '<span class="presence-online">🟢 Online</span>' : '<span class="presence-offline">⚪ Offline</span>'}</td>
                         <td>${i + 1}</td>
                         <td>${escapeHtml(displayCodes[i] || '—')}</td>
                         <td>${escapeHtml(s.studentName || '—')}</td>

@@ -94,15 +94,15 @@ async function getActiveExamGroupCodesForCurrentTeacher() {
   return codes;
 }
 
-// Trạng thái online/offline của 1 danh sách học sinh (theo studentUid) — dựa vào "heartbeat" học
-// sinh tự ghi định kỳ lúc còn mở app (xem app.js), lưu tại "presence/{uid}" (chỉ 1 field lastSeenAt).
-// App này không dùng Firebase Realtime Database (chỉ Firestore) nên không có kiểu "báo ngay khi đóng
-// tab" — coi là ONLINE nếu mốc ghi gần nhất còn trong khoảng PRESENCE_ONLINE_WINDOW_MS (rộng hơn hẳn
-// chu kỳ ghi ở app.js để không nhấp nháy sai vì mạng chậm/lệch giờ nhẹ); quá mốc đó -> OFFLINE, kể cả
-// khi chưa từng ghi lần nào (chưa đăng nhập/chưa mở app).
+// Trạng thái online/offline của 1 danh sách tài khoản (học sinh HOẶC giáo viên, cùng theo uid) — dựa
+// vào "heartbeat" tự ghi định kỳ lúc còn mở app (xem app.js), lưu tại "presence/{uid}" (chỉ 1 field
+// lastSeenAt). App này không dùng Firebase Realtime Database (chỉ Firestore) nên không có kiểu "báo
+// ngay khi đóng tab" — coi là ONLINE nếu mốc ghi gần nhất còn trong khoảng PRESENCE_ONLINE_WINDOW_MS
+// (rộng hơn hẳn chu kỳ ghi ở app.js để không nhấp nháy sai vì mạng chậm/lệch giờ nhẹ); quá mốc đó ->
+// OFFLINE, kể cả khi chưa từng ghi lần nào (chưa đăng nhập/chưa mở app).
 const PRESENCE_ONLINE_WINDOW_MS = 90 * 1000;
 
-async function getPresenceForStudentUids(uids) {
+async function getPresenceForUids(uids) {
   const { db } = ensureFirebase();
   const now = Date.now();
   const result = new Map();

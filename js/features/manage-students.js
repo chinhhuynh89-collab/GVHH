@@ -403,16 +403,16 @@
         applyPresenceToRows();
       }
 
-      // ---------- Trạng thái online/offline (xem "heartbeat" trong app.js + getPresenceForStudentUids
-      // trong groups-data.js) — chỉ 1 dấu thời gian "lần cuối còn mở app", không có kiểu bắt sự kiện
-      // đóng tab tức thời (app này không dùng Firebase Realtime Database) nên có độ trễ vài chục giây
-      // là bình thường, không phải lỗi. presenceMap giữ lại kết quả lần tải gần nhất để vẽ lại ngay
-      // khi đổi cách sắp xếp (renderTableBody), không cần chờ tải lại mới thấy đúng trạng thái. */
+      // ---------- Trạng thái online/offline (xem "heartbeat" trong app.js + getPresenceForUids trong
+      // groups-data.js) — chỉ 1 dấu thời gian "lần cuối còn mở app", không có kiểu bắt sự kiện đóng
+      // tab tức thời (app này không dùng Firebase Realtime Database) nên có độ trễ vài chục giây là
+      // bình thường, không phải lỗi. presenceMap giữ lại kết quả lần tải gần nhất để vẽ lại ngay khi
+      // đổi cách sắp xếp (renderTableBody), không cần chờ tải lại mới thấy đúng trạng thái. */
       let presenceMap = new Map();
       async function refreshPresence() {
         try {
           const uids = Array.from(new Set(students.map((s) => s.studentUid).filter(Boolean)));
-          presenceMap = await getPresenceForStudentUids(uids);
+          presenceMap = await getPresenceForUids(uids);
         } catch (e) { /* lỗi mạng thoáng qua -> giữ nguyên trạng thái đã biết, thử lại ở lượt sau */ }
         applyPresenceToRows();
       }
