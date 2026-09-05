@@ -64,10 +64,15 @@
 
     // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
     let openSub = null;
+    // Roster panel tự lập lịch làm mới trạng thái online/offline định kỳ (xem renderRosterPanel) —
+    // phải dọn lịch này mỗi khi chuyển sang mục khác/đóng lại, nếu không nó cứ chạy ngầm mãi dù
+    // khung danh sách đã bị thay bằng nội dung khác (rò rỉ interval, tốn đọc Firestore vô ích).
+    let rosterPresenceInterval = null;
     $$('.manage-sub-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const key = btn.dataset.sub;
         const panel = $('#manageSubPanel');
+        clearInterval(rosterPresenceInterval);
         if (openSub === key) {
           panel.innerHTML = '';
           btn.classList.remove('has-open');
@@ -278,6 +283,7 @@
         return `
           <tr data-search="${escapeHtml(searchText)}" data-uid="${escapeHtml(s.studentUid)}">
             <td class="stt-cell">${sttPlaceholder}</td>
+            <td class="presence-cell" data-presence-uid="${escapeHtml(s.studentUid)}">…</td>
             <td>${escapeHtml(code || '—')}</td>
             <td>${escapeHtml(s.studentName || '')}</td>
             <td>${escapeHtml(s.email || '')}</td>
@@ -394,6 +400,27 @@
         const rowsHtml = sortedIndexes().map((i, order) => buildRowHtml(students[i], displayCodes[i], order + 1)).join('');
         $('#studentRosterBody', assignedBody).innerHTML = rowsHtml;
         wireRowButtons();
+        applyPresenceToRows();
+      }
+
+      // ---------- Trạng thái online/offline (xem "heartbeat" trong app.js + getPresenceForStudentUids
+      // trong groups-data.js) — chỉ 1 dấu thời gian "lần cuối còn mở app", không có kiểu bắt sự kiện
+      // đóng tab tức thời (app này không dùng Firebase Realtime Database) nên có độ trễ vài chục giây
+      // là bình thường, không phải lỗi. presenceMap giữ lại kết quả lần tải gần nhất để vẽ lại ngay
+      // khi đổi cách sắp xếp (renderTableBody), không cần chờ tải lại mới thấy đúng trạng thái. */
+      let presenceMap = new Map();
+      async function refreshPresence() {
+        try {
+          const uids = Array.from(new Set(students.map((s) => s.studentUid).filter(Boolean)));
+          presenceMap = await getPresenceForStudentUids(uids);
+        } catch (e) { /* lỗi mạng thoáng qua -> giữ nguyên trạng thái đã biết, thử lại ở lượt sau */ }
+        applyPresenceToRows();
+      }
+      function applyPresenceToRows() {
+        $$('.presence-cell', assignedBody).forEach((cell) => {
+          const online = presenceMap.get(cell.dataset.presenceUid);
+          cell.innerHTML = online ? '<span class="presence-online">🟢 Online</span>' : '<span class="presence-offline">⚪ Offline</span>';
+        });
       }
 
       assignedBody.innerHTML = `
@@ -419,7 +446,7 @@
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
-              <tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th><th></th></tr>
+              <tr><th>STT</th><th>Trạng thái</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th><th></th></tr>
             </thead>
             <tbody id="studentRosterBody"></tbody>
           </table>
@@ -427,6 +454,8 @@
       `;
 
       renderTableBody();
+      refreshPresence();
+      rosterPresenceInterval = setInterval(refreshPresence, 30000);
 
       // Dọn 1 lần — xem cleanupOrphanedUnassignedDuplicates() (groups-data.js) để hiểu chính xác lỗi
       // cũ nó sửa (tính năng "chọn học sinh có sẵn" lúc tạo nhóm mới từng để sót bản ghi "Chưa xếp

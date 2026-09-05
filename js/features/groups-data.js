@@ -75,6 +75,48 @@ async function listGroupsForCurrentTeacher() {
   return groups;
 }
 
+// Mã các nhóm ĐANG có 1 đợt kiểm tra mở (thời điểm hiện tại nằm trong khoảng startTime-endTime của
+// đề) — dùng để gắn nhãn "Đang kiểm tra" nổi bật ở danh sách nhóm, giúp giáo viên biết ngay nhóm nào
+// đang trong giờ làm bài mà không cần mở từng đề ra xem. Tính theo "khung giờ đề đang mở" (giống hệt
+// cách trang chủ học sinh báo "Có bài kiểm tra mới") chứ không theo từng học sinh đã bắt đầu hay
+// chưa — đơn giản, chỉ cần 1 lượt truy vấn cho TẤT CẢ nhóm của giáo viên thay vì dò từng nhóm.
+async function getActiveExamGroupCodesForCurrentTeacher() {
+  const teacher = getCurrentTeacher();
+  if (!teacher) return new Set();
+  const { db } = ensureFirebase();
+  const snap = await db.collection('exams').where('teacherUid', '==', teacher.uid).get();
+  const now = new Date();
+  const codes = new Set();
+  snap.docs.forEach((d) => {
+    const e = d.data();
+    if (new Date(e.startTime) <= now && now <= new Date(e.endTime)) codes.add(e.groupCode);
+  });
+  return codes;
+}
+
+// Trạng thái online/offline của 1 danh sách học sinh (theo studentUid) — dựa vào "heartbeat" học
+// sinh tự ghi định kỳ lúc còn mở app (xem app.js), lưu tại "presence/{uid}" (chỉ 1 field lastSeenAt).
+// App này không dùng Firebase Realtime Database (chỉ Firestore) nên không có kiểu "báo ngay khi đóng
+// tab" — coi là ONLINE nếu mốc ghi gần nhất còn trong khoảng PRESENCE_ONLINE_WINDOW_MS (rộng hơn hẳn
+// chu kỳ ghi ở app.js để không nhấp nháy sai vì mạng chậm/lệch giờ nhẹ); quá mốc đó -> OFFLINE, kể cả
+// khi chưa từng ghi lần nào (chưa đăng nhập/chưa mở app).
+const PRESENCE_ONLINE_WINDOW_MS = 90 * 1000;
+
+async function getPresenceForStudentUids(uids) {
+  const { db } = ensureFirebase();
+  const now = Date.now();
+  const result = new Map();
+  await Promise.all(uids.map(async (uid) => {
+    if (!uid) return;
+    try {
+      const doc = await db.collection('presence').doc(uid).get();
+      const lastSeenAt = doc.exists ? new Date(doc.data().lastSeenAt).getTime() : 0;
+      result.set(uid, (now - lastSeenAt) <= PRESENCE_ONLINE_WINDOW_MS);
+    } catch (e) { result.set(uid, false); }
+  }));
+  return result;
+}
+
 // Danh sách đầy đủ học sinh của 1 nhóm (họ tên, trường, lớp, địa chỉ, SĐT...) — chỉ tải khi giáo
 // viên thực sự bấm xem, không tải kèm lúc liệt kê danh sách nhóm để tránh chậm không cần thiết.
 async function getStudentsForGroup(groupCode) {

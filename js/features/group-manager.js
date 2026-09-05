@@ -11,6 +11,7 @@
   let ownProgramsWithChapters = []; // [{ program, chapters }] — chương trình riêng của giáo viên, để chọn giao cho nhóm
   let knownStudents = []; // học sinh đã có sẵn trong danh sách (mọi nhóm) — để chọn thêm thẳng vào nhóm mới
   let openGroupId = null; // nhóm đang mở khung chi tiết (kiểu lưới nút + 1 khung nội dung, giống trang Quản trị)
+  let activeExamGroupCodes = new Set(); // mã các nhóm đang có đề kiểm tra mở — xem getActiveExamGroupCodesForCurrentTeacher()
 
   // Bấm ra ngoài (vùng nền tối) cũng đóng cửa sổ chi tiết nhóm — giống cách đóng chi tiết nguyên tố ở
   // Bảng tuần hoàn, không cần chạm đúng nút ✕.
@@ -128,6 +129,7 @@
     menu.innerHTML = '<p class="hint">⏳ Đang tải danh sách nhóm...</p>';
     try {
       groupsCache = await listGroupsForCurrentTeacher();
+      activeExamGroupCodes = await getActiveExamGroupCodesForCurrentTeacher();
     } catch (e) {
       menu.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
       return;
@@ -139,6 +141,7 @@
     }
     menu.innerHTML = groupsCache.map((g) => `
       <button class="btn group-menu-btn ${g.id === openGroupId ? 'has-open' : ''}" type="button" data-group-id="${g.id}">
+        ${activeExamGroupCodes.has(g.groupCode) ? '<span class="gmb-live-badge">🔴 Đang kiểm tra</span>' : ''}
         <span class="gmb-name">${escapeHtml(g.groupName)}</span>
         <span class="gmb-code">${escapeHtml(g.groupCode)}</span>
         <span class="gmb-count">👥 ${g.studentCount} học sinh</span>
@@ -183,6 +186,7 @@
             <div class="group-detail-meta">Lớp ${escapeHtml(String(g.grade))} · Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
             <div class="group-detail-title">${escapeHtml(g.groupName)}</div>
           </div>
+          ${activeExamGroupCodes.has(g.groupCode) ? '<span class="gmb-live-badge">🔴 Đang kiểm tra</span>' : ''}
         </div>
 
         <div class="group-detail-stats">

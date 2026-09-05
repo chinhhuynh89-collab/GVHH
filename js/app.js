@@ -49,6 +49,31 @@ window.addEventListener('pageshow', (event) => {
   if (event.persisted) window.location.reload();
 });
 
+// "Heartbeat" cho trạng thái online/offline của học sinh (xem getPresenceForStudentUids trong
+// groups-data.js) — app này chỉ dùng Firestore (không dùng Firebase Realtime Database) nên không có
+// cách nào báo ngay lúc đóng tab/mất mạng; thay vào đó cứ còn mở app (bất kỳ trang nào, app.js nạp ở
+// mọi trang) thì định kỳ ghi lại "lần cuối còn thấy" — đóng tab thì tự nhiên hết ghi tiếp, quá 90
+// giây không ghi thêm thì phía giáo viên tự coi là OFFLINE (xem PRESENCE_ONLINE_WINDOW_MS).
+// Đặt trong window.onload (không chạy ngay khi file này tải) vì app.js nạp ở ĐẦU trang, trước cả
+// firebase-init.js/auth.js/role.js — các hàm waitForAuthReady/getRole/ensureFirebase chưa tồn tại
+// nếu gọi ngay tại đây; chờ tới lúc "load" thì mọi script khác của trang đã chạy xong.
+// CHỈ ghi cho vai trò học sinh (getRole() === 'student') — giáo viên không cần theo dõi chính họ.
+window.addEventListener('load', () => {
+  if (typeof waitForAuthReady !== 'function' || typeof isFirebaseConfigured !== 'function' || !isFirebaseConfigured()) return;
+  (async () => {
+    const user = await waitForAuthReady();
+    if (!user) return;
+    if (typeof getRole === 'function' && getRole() !== 'student') return;
+    let db;
+    try { ({ db } = ensureFirebase()); } catch (e) { return; }
+    const writeHeartbeat = () => {
+      db.collection('presence').doc(user.uid).set({ lastSeenAt: new Date().toISOString() }).catch(() => {});
+    };
+    writeHeartbeat();
+    setInterval(writeHeartbeat, 40000);
+  })();
+});
+
 function showUpdateAvailableBanner() {
   if (document.getElementById('updateAvailableBanner')) return;
   const el = document.createElement('div');

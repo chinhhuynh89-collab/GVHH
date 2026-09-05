@@ -1049,6 +1049,21 @@ sub { font-size: 0.72em; }
 .group-menu-btn .gmb-code { font-size: 12.5px; font-weight: 700; color: var(--brand); letter-spacing: 0.06em; }
 .group-menu-btn .gmb-count { font-size: 12px; font-weight: 500; color: var(--text-dim); }
 .group-menu-btn.has-open .gmb-code { color: var(--brand-2); }
+/* Nhãn "Đang kiểm tra" — nổi bật màu đỏ, hiện ở thẻ nhóm (danh sách) lẫn đầu khung chi tiết nhóm,
+   để giáo viên biết ngay nhóm nào đang trong khung giờ làm bài mà không cần mở từng đề ra xem. */
+.gmb-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: #dc2626;
+  padding: 3px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.group-detail-head .gmb-live-badge { margin-left: auto; flex-shrink: 0; align-self: flex-start; }
 /* width: max-content (không phải 100%) để bảng được PHÉP rộng hơn khung chứa khi nhiều cột —
    nếu ép 100% thì trình duyệt sẽ ép chữ nhỏ/xít lại vừa khung thay vì cho cuộn ngang, đúng lỗi
    "hiển thị rất nhỏ, không kéo ngang được" trên điện thoại. min-width: 100% để bảng ít cột vẫn
@@ -1062,6 +1077,9 @@ sub { font-size: 0.72em; }
    .btn thường (to, dễ bấm) sẽ chiếm quá nhiều chỗ khi xếp chồng nhiều nút trong 1 ô hẹp, trông nặng
    nề so với 1 bảng dữ liệu dày đặc. Thu gọn riêng cho đúng ngữ cảnh này. */
 .roster-table td .btn { padding: 6px 10px; font-size: calc(12.5px * var(--font-scale)); }
+.presence-online, .presence-offline { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.presence-online { color: var(--ok); }
+.presence-offline { color: var(--text-faint); }
 /* Khung "Xếp vào nhóm này" (chọn nhóm + xác nhận) — XẾP DỌC (không phải ngang) để ô chọn nhóm tự co
    giãn vừa TÊN NHÓM (bỏ width:100% cũ khiến ô kéo dài hết cột, đẩy nút xác nhận ra ngoài màn hình,
    phải cuộn ngang mới bấm được) và nút xác nhận luôn nằm ngay dưới, gần các nút khác trong cùng ô
