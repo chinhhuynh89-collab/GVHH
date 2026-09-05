@@ -176,34 +176,47 @@
   function groupCardHtml(g) {
     return `
       <button class="close-btn" id="groupPanelCloseBtn" type="button" aria-label="Đóng">✕</button>
-      <div class="chapter-card">
-        <div class="cc-icon">👥</div>
-        <div class="cc-body">
-          <div class="cc-order">Lớp ${escapeHtml(String(g.grade))} · Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
-          <div class="cc-title">${escapeHtml(g.groupName)}</div>
-          <div class="cc-desc">${g.studentCount} học sinh đã tham gia · ${g.chapterIds.length} chương được giao</div>
-          <div class="free-mode-row" style="margin:8px 0;padding:10px 12px;">
-            <div class="fm-text">
-              <div class="fm-title">Học tự do cho nhóm này</div>
-              <div class="fm-sub">Bật: học sinh mở được mọi chương ngay. Tắt: phải học tuần tự, xong chương trước mới mở chương sau.</div>
-            </div>
-            <div class="switch free-mode-toggle ${g.freeMode ? 'on' : ''}" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}"><div class="knob"></div></div>
+      <div class="group-detail">
+        <div class="group-detail-head">
+          <div class="group-detail-icon">👥</div>
+          <div class="group-detail-head-text">
+            <div class="group-detail-meta">Lớp ${escapeHtml(String(g.grade))} · Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
+            <div class="group-detail-title">${escapeHtml(g.groupName)}</div>
           </div>
-          <div class="action-grid" style="margin-top:8px;">
-            <button class="btn roster-toggle" data-group="${escapeHtml(g.groupCode)}">👥 Danh sách học sinh</button>
-            <button class="btn results-toggle" data-group="${escapeHtml(g.groupCode)}">📊 Kết quả học tập</button>
-            <button class="btn chapters-toggle" data-group="${escapeHtml(g.groupCode)}">📘 Sửa chương trình học</button>
-            <a class="btn" href="tao-de-kiem-tra.html?group=${encodeURIComponent(g.groupCode)}">📝 Tạo đề kiểm tra</a>
-            <a class="btn" href="thong-ke.html?group=${encodeURIComponent(g.groupCode)}">📈 Thống kê từng đợt</a>
-            ${g.zaloGroupLink
-              ? `<a class="btn" href="${escapeHtml(g.zaloGroupLink)}" target="_blank" rel="noopener">💬 Nhắn Zalo nhóm</a>
-                 <button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="${escapeHtml(g.zaloGroupLink)}">✏️ Sửa link Zalo</button>`
-              : `<button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="">💬 + Thêm link Zalo nhóm</button>`}
-            <button class="btn delete-group-btn" type="button" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}" data-name="${escapeHtml(g.groupName)}" style="color:#dc2626;">🗑️ Xoá nhóm</button>
+        </div>
+
+        <div class="group-detail-stats">
+          <div class="gd-stat"><div class="gd-stat-num">${g.studentCount}</div><div class="gd-stat-label">Học sinh đã tham gia</div></div>
+          <div class="gd-stat"><div class="gd-stat-num">${g.chapterIds.length}</div><div class="gd-stat-label">Chương được giao</div></div>
+        </div>
+
+        <div class="free-mode-row">
+          <div class="fm-text">
+            <div class="fm-title">Học tự do cho nhóm này</div>
+            <div class="fm-sub">Bật: học sinh mở được mọi chương ngay. Tắt: phải học tuần tự, xong chương trước mới mở chương sau.</div>
           </div>
-          <div class="roster-box" id="roster-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
-          <div class="results-box" id="results-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
-          <div class="chapters-edit-box" id="chapters-edit-${escapeHtml(g.groupCode)}" style="display:none;margin-top:10px;"></div>
+          <div class="switch free-mode-toggle ${g.freeMode ? 'on' : ''}" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}"><div class="knob"></div></div>
+        </div>
+
+        <div class="group-detail-section-label">Quản lý nhóm</div>
+        <div class="action-grid">
+          <button class="btn roster-toggle" data-group="${escapeHtml(g.groupCode)}">👥 Danh sách học sinh</button>
+          <button class="btn results-toggle" data-group="${escapeHtml(g.groupCode)}">📊 Kết quả học tập</button>
+          <button class="btn chapters-toggle" data-group="${escapeHtml(g.groupCode)}">📘 Sửa chương trình học</button>
+          <a class="btn" href="tao-de-kiem-tra.html?group=${encodeURIComponent(g.groupCode)}">📝 Tạo đề kiểm tra</a>
+          <a class="btn" href="thong-ke.html?group=${encodeURIComponent(g.groupCode)}">📈 Thống kê từng đợt</a>
+          ${g.zaloGroupLink
+            ? `<a class="btn" href="${escapeHtml(g.zaloGroupLink)}" target="_blank" rel="noopener">💬 Nhắn Zalo nhóm</a>
+               <button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="${escapeHtml(g.zaloGroupLink)}">✏️ Sửa link Zalo</button>`
+            : `<button class="btn zalo-edit-btn" type="button" data-group-id="${g.id}" data-current="">💬 + Thêm link Zalo nhóm</button>`}
+        </div>
+
+        <div class="roster-box" id="roster-${escapeHtml(g.groupCode)}" style="display:none;"></div>
+        <div class="results-box" id="results-${escapeHtml(g.groupCode)}" style="display:none;"></div>
+        <div class="chapters-edit-box" id="chapters-edit-${escapeHtml(g.groupCode)}" style="display:none;"></div>
+
+        <div class="group-detail-danger">
+          <button class="btn delete-group-btn" type="button" data-group-id="${g.id}" data-group="${escapeHtml(g.groupCode)}" data-name="${escapeHtml(g.groupName)}">🗑️ Xoá nhóm này</button>
         </div>
       </div>
     `;
