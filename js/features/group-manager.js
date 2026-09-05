@@ -319,6 +319,9 @@
       box.dataset.loaded = '1';
       if (!students.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào tham gia.</p>'; return; }
       const codes = await Promise.all(students.map((s) => getAccountCode(s.studentUid)));
+      // Ưu tiên "loginCode" (mã do giáo viên cấp, VD ABC123.07) hơn mã "HS..." chung chung — dễ nhận
+      // ra hơn, học sinh dùng đúng mã này để đăng nhập nên hiện đúng mã đó luôn nhất quán.
+      const displayCodes = students.map((s, i) => s.loginCode || codes[i]);
       box.innerHTML = `
         <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. Nút "Bỏ khỏi nhóm" chỉ gỡ học sinh ra khỏi NHÓM NÀY (tài khoản vẫn còn, có thể xếp lại nhóm khác) — muốn xoá HẲN tài khoản học sinh, vào trang "Quản lý học sinh".</p>
         <div class="roster-table-wrap">
@@ -341,7 +344,7 @@
               ${students.map((s, i) => `
                 <tr>
                   <td>${i + 1}</td>
-                  <td>${escapeHtml(codes[i] || '—')}</td>
+                  <td>${escapeHtml(displayCodes[i] || '—')}</td>
                   <td>${escapeHtml(s.studentName || '—')}</td>
                   <td>${escapeHtml(s.email || '—')}</td>
                   <td>${escapeHtml(s.address || '—')}</td>
@@ -536,7 +539,15 @@
       let addedCount = 0;
       if (selectedStudentUids.length) {
         const selectedStudents = knownStudents.filter((s) => selectedStudentUids.includes(s.studentUid || s.id));
-        const results = await Promise.allSettled(selectedStudents.map((s) => addStudentToGroup(group.groupCode, s)));
+        const results = await Promise.allSettled(selectedStudents.map(async (s) => {
+          await addStudentToGroup(group.groupCode, s);
+          // Học sinh đang "Chưa xếp nhóm" (chưa thuộc nhóm nào) được chọn thêm vào đây — xoá bản ghi
+          // "Chưa xếp nhóm" cũ đi ngay, tránh còn thừa 2 dòng (vừa "Chưa xếp nhóm" vừa nhóm mới) cho
+          // cùng 1 học sinh, trông như 2 học sinh khác nhau ở trang "Quản lý học sinh" — lỗi thực tế
+          // đã gặp (thiếu bước này từ trước, không phải do tính năng "Xếp vào nhóm" mới thêm).
+          const unassignedEntry = s.groups && s.groups.find((g) => g.unassigned);
+          if (unassignedEntry) await deleteStudent(unassignedEntry.docId);
+        }));
         addedCount = results.filter((r) => r.status === 'fulfilled').length;
       }
       showResult(box, `✓ Đã tạo nhóm "${escapeHtml(group.groupName)}" — mã nhóm: <strong style="color:var(--brand);">${escapeHtml(group.groupCode)}</strong>.${addedCount ? ` Đã thêm ${addedCount} học sinh có sẵn vào nhóm.` : ''} Gửi mã này cho học sinh khác để các em xin vào nhóm.`);

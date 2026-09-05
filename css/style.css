@@ -1008,6 +1008,21 @@ sub { font-size: 0.72em; }
 .roster-table th { background: var(--surface-2); color: var(--text-dim); font-weight: 700; font-size: calc(12px * var(--font-scale)); text-transform: uppercase; letter-spacing: 0.03em; }
 .roster-table tbody tr:last-child td { border-bottom: none; }
 .roster-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+/* Các nút hành động trong bảng danh sách (Zalo/Cấp mã thay thế/Xếp vào nhóm/Xoá học sinh) — dùng
+   .btn thường (to, dễ bấm) sẽ chiếm quá nhiều chỗ khi xếp chồng nhiều nút trong 1 ô hẹp, trông nặng
+   nề so với 1 bảng dữ liệu dày đặc. Thu gọn riêng cho đúng ngữ cảnh này. */
+.roster-table td .btn { padding: 6px 10px; font-size: calc(12.5px * var(--font-scale)); }
+/* Ô tìm kiếm + sắp xếp CỐ ĐỊNH lại khi cuộn trang xuống xem danh sách dài — chỉ phần bảng cuộn qua
+   bên dưới, không phải cuộn lên lại từ đầu mới gõ tìm/đổi cách sắp xếp được. top = đúng chiều cao
+   header (đang sticky sẵn) để 2 thanh dính liền nhau, không đè lên nhau. */
+.roster-toolbar-sticky {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 5;
+  background: var(--surface);
+  padding-bottom: 8px;
+  margin-bottom: -4px;
+}
 
 /* Cây hoa hồng giới thiệu (trang quản trị) — mỗi nhánh con thụt vào + có đường nối dọc bên trái để
    thấy rõ quan hệ giới thiệu nhiều tầng (F1 của F1 = F2...) mà không cần bảng. */

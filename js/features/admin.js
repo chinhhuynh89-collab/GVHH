@@ -313,6 +313,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
               Promise.all(students.map((s) => getStudentSubscription(s.studentUid))),
               Promise.all(students.map((s) => getAccountCode(s.studentUid)))
             ]);
+            const displayCodes = students.map((s, i) => s.loginCode || codes[i]);
             cell.innerHTML = `
               <div class="roster-table-wrap">
                 <table class="roster-table">
@@ -323,7 +324,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
                     ${students.map((s, i) => `
                       <tr>
                         <td>${i + 1}</td>
-                        <td>${escapeHtml(codes[i] || '—')}</td>
+                        <td>${escapeHtml(displayCodes[i] || '—')}</td>
                         <td>${escapeHtml(s.studentName || '—')}</td>
                         <td>${escapeHtml(s.email || '—')}</td>
                         <td>${escapeHtml(s.school || '—')}</td>

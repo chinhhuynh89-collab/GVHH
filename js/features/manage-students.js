@@ -243,10 +243,26 @@
       }
 
       const codes = await Promise.all(students.map((s) => getAccountCode(s.studentUid)));
+      // Học sinh dùng tài khoản do giáo viên cấp đã có sẵn "loginCode" (VD ABC123.07) làm mã định
+      // danh riêng, dễ nhận ra hơn hẳn mã "HS..." chung chung — ưu tiên hiện mã đó ở cột "Mã HS" thay
+      // vì mã chung (chỉ học sinh tự đăng ký bằng Google mới cần dùng đến mã chung, xem auth.js).
+      const displayCodes = students.map((s, i) => s.loginCode || codes[i]);
 
       const groupOptionsHtml = groups.map((g) => `<option value="${escapeHtml(g.groupCode)}">${escapeHtml(g.groupName)}</option>`).join('');
 
-      const rows = students.map((s, i) => {
+      let sortMode = 'recent'; // 'recent' (mới vào nhóm gần đây nhất trước) | 'name' (tên A-Z)
+
+      function sortedIndexes() {
+        const idx = students.map((_, i) => i);
+        if (sortMode === 'name') {
+          idx.sort((a, b) => (students[a].studentName || '').localeCompare(students[b].studentName || '', 'vi'));
+        } else {
+          idx.sort((a, b) => (students[b].latestJoinedAt || '').localeCompare(students[a].latestJoinedAt || ''));
+        }
+        return idx;
+      }
+
+      function buildRowHtml(s, code, sttPlaceholder) {
         // Nhóm đã bị xoá (xem deleteGroup() — xoá nhóm không còn xoá học sinh nữa) có groupName =
         // null — ghi rõ "(Nhóm đã xoá)" thay vì để trống khó hiểu, học sinh đó vẫn còn nguyên để xếp
         // vào nhóm khác. Học sinh nạp lên chưa xếp nhóm (unassigned) ghi rõ "Chưa xếp nhóm".
@@ -254,15 +270,15 @@
         const zaloDigits = (s.phone || '').replace(/[^0-9]/g, '');
         // Chuỗi tìm kiếm gộp sẵn (tên, mã HS, mã đăng nhập, SĐT) — bỏ dấu + thường hoá 1 lần lúc render
         // thay vì tính lại mỗi lần gõ phím, lọc theo dataset ngay trên DOM cho mượt (giống Excel).
-        const searchText = normalizeSearchText([s.studentName, codes[i], s.loginCode, s.phone].filter(Boolean).join(' '));
+        const searchText = normalizeSearchText([s.studentName, code, s.loginCode, s.phone].filter(Boolean).join(' '));
         // Học sinh "Chưa xếp nhóm" (nạp lên chọn "Chưa xếp nhóm" lúc đó) cần 1 cách xếp vào nhóm SAU —
         // trước đây chỉ xếp được lúc TẠO nhóm mới (chọn học sinh có sẵn), không có cách nào xếp vào 1
         // nhóm ĐÃ CÓ SẴN, khiến các học sinh này "mắc kẹt" không hiện trong bất kỳ nhóm nào.
         const unassignedGroup = s.groups.find((g) => g.unassigned);
         return `
-          <tr data-search="${escapeHtml(searchText)}">
-            <td>${i + 1}</td>
-            <td>${escapeHtml(codes[i] || '—')}</td>
+          <tr data-search="${escapeHtml(searchText)}" data-uid="${escapeHtml(s.studentUid)}">
+            <td class="stt-cell">${sttPlaceholder}</td>
+            <td>${escapeHtml(code || '—')}</td>
             <td>${escapeHtml(s.studentName || '')}</td>
             <td>${escapeHtml(s.email || '')}</td>
             <td>${escapeHtml(s.school || '')}</td>
@@ -286,30 +302,133 @@
             </td>
           </tr>
         `;
-      }).join('');
+      }
+
+      // Đánh lại số thứ tự (cột STT) đúng theo vị trí HIỆN CÓ trong bảng — gọi lại ngay sau khi xoá
+      // 1 dòng để không còn để trống số cũ (VD xoá dòng 3 thì dòng 4 trở đi phải lùi lên thành 3, 4...
+      // chứ không nhảy cóc 1,2,4,5).
+      function renumberRows() {
+        $$('#studentRosterBody tr', assignedBody).forEach((tr, idx) => {
+          const cell = tr.querySelector('.stt-cell');
+          if (cell) cell.textContent = idx + 1;
+        });
+      }
+
+      function wireRowButtons() {
+        $$('.assign-group-toggle-btn', assignedBody).forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const form = btn.nextElementSibling;
+            if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+          });
+        });
+        $$('.assign-group-confirm-btn', assignedBody).forEach((confirmBtn) => {
+          confirmBtn.addEventListener('click', async () => {
+            const form = confirmBtn.closest('.assign-group-form');
+            const toggleBtn = form.previousElementSibling;
+            const docId = toggleBtn.dataset.docId;
+            const uid = toggleBtn.dataset.uid;
+            const groupCode = form.querySelector('.assign-group-select-inline').value;
+            const s = students.find((x) => x.studentUid === uid);
+            confirmBtn.disabled = true;
+            try {
+              await assignUnassignedStudentToGroup(docId, groupCode, s);
+              showToast(`Đã xếp "${s.studentName}" vào nhóm.`, false);
+              await renderRosterPanel(panel);
+            } catch (e) {
+              showToast('Không xếp được: ' + e.message);
+              confirmBtn.disabled = false;
+            }
+          });
+        });
+
+        $$('.delete-student-btn', assignedBody).forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const docIds = btn.dataset.docIds ? btn.dataset.docIds.split(',') : [];
+            const name = btn.dataset.name;
+            if (!confirm(`Xoá HẲN học sinh "${name}" khỏi mọi nhóm? Không thể hoàn tác — tiến độ học/gói đã mua của tài khoản này vẫn còn (không mất) nhưng sẽ không còn hiện trong bất kỳ nhóm nào của bạn nữa.`)) return;
+            btn.disabled = true;
+            try {
+              await deleteStudentEverywhere(docIds);
+              // Chỉ xoá ĐÚNG dòng vừa bấm khỏi bảng — trước đây vẽ lại TOÀN BỘ danh sách
+              // (renderRosterPanel(panel)) sau mỗi lần xoá, làm mất vị trí đang cuộn tới (nhảy về đầu
+              // trang) và không có xác nhận rõ ràng đã xoá xong, khiến giáo viên tưởng bấm không có
+              // tác dụng khi đang xoá nhiều học sinh liên tiếp trong danh sách dài.
+              const row = btn.closest('tr');
+              if (row) row.remove();
+              renumberRows();
+              showToast(`Đã xoá "${name}".`, false);
+            } catch (e) {
+              showToast('Không xoá được: ' + e.message);
+              btn.disabled = false;
+            }
+          });
+        });
+
+        $$('.replace-login-btn', assignedBody).forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const uid = btn.dataset.uid;
+            const s = students.find((x) => x.studentUid === uid);
+            const box = document.getElementById(`replace-login-result-${uid}`);
+            if (!confirm(`Cấp mã học sinh MỚI cho "${s.studentName}"? Mã/mật khẩu CŨ sẽ ngừng hoạt động, tiến độ học và gói đã mua ở tài khoản cũ KHÔNG tự chuyển sang tài khoản mới. Chỉ dùng khi học sinh quên mật khẩu và không còn cách nào khác.`)) return;
+            btn.disabled = true;
+            showResult(box, '⏳ Đang tạo mã mới...');
+            try {
+              // Ưu tiên 1 nhóm CÒN TỒN TẠI (groupName khác null) — không lấy nhầm nhóm đã bị xoá làm
+              // nơi xếp tài khoản mới vào, sẽ tạo ra 1 bản ghi "mồ côi" khác ngay khi vừa cấp xong.
+              const stillExisting = s.groups.find((g) => g.groupName !== null);
+              const groupCode = stillExisting ? stillExisting.groupCode : (s.groups[0] && s.groups[0].groupCode);
+              const { loginCode, password } = await issueReplacementLoginForStudent({
+                studentName: s.studentName, school: s.school, className: s.className,
+                address: s.address, phone: s.phone, groupCode
+              });
+              showResult(box, `✓ Mã mới: <strong>${escapeHtml(loginCode)}</strong> — mật khẩu: <strong style="color:var(--brand);">${escapeHtml(password)}</strong>. Gửi ngay cho học sinh, mã này chỉ hiện được 1 lần.`);
+            } catch (e) {
+              btn.disabled = false;
+              showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+            }
+          });
+        });
+      }
+
+      function renderTableBody() {
+        const rowsHtml = sortedIndexes().map((i, order) => buildRowHtml(students[i], displayCodes[i], order + 1)).join('');
+        $('#studentRosterBody', assignedBody).innerHTML = rowsHtml;
+        wireRowButtons();
+      }
 
       assignedBody.innerHTML = `
-        <div class="field" style="margin-bottom:10px;">
-          <label for="studentSearchInput">🔍 Tìm học sinh (tên, mã, SĐT)</label>
-          <input type="text" id="studentSearchInput" placeholder="Gõ để lọc nhanh — VD: tên, mã học sinh, số điện thoại..." autocomplete="off" />
+        <div class="roster-toolbar-sticky">
+          <div class="field" style="margin-bottom:6px;">
+            <label for="studentSearchInput">🔍 Tìm học sinh (tên, mã, SĐT)</label>
+            <input type="text" id="studentSearchInput" placeholder="Gõ để lọc nhanh — VD: tên, mã học sinh, số điện thoại..." autocomplete="off" />
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label for="studentSortSelect">Sắp xếp</label>
+            <select id="studentSortSelect">
+              <option value="recent">Vào nhóm gần đây nhất trước</option>
+              <option value="name">Tên A-Z</option>
+            </select>
+          </div>
+          <p class="hint" id="studentSearchCount" style="margin-bottom:0;"></p>
         </div>
-        <p class="hint" id="studentSearchCount"></p>
         <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang). "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
               <tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th><th></th></tr>
             </thead>
-            <tbody id="studentRosterBody">${rows}</tbody>
+            <tbody id="studentRosterBody"></tbody>
           </table>
         </div>
       `;
 
+      renderTableBody();
+
       const searchInput = $('#studentSearchInput', assignedBody);
       const searchCount = $('#studentSearchCount', assignedBody);
-      const rosterTrs = $$('#studentRosterBody tr', assignedBody);
       searchInput.addEventListener('input', () => {
         const q = normalizeSearchText(searchInput.value.trim());
+        const rosterTrs = $$('#studentRosterBody tr', assignedBody);
         let shown = 0;
         rosterTrs.forEach((tr) => {
           const match = !q || (tr.dataset.search || '').includes(q);
@@ -319,77 +438,13 @@
         searchCount.textContent = q ? `Tìm thấy ${shown}/${rosterTrs.length} học sinh.` : '';
       });
 
-      $$('.assign-group-toggle-btn', assignedBody).forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const form = btn.nextElementSibling;
-          if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
-        });
-      });
-      $$('.assign-group-confirm-btn', assignedBody).forEach((confirmBtn) => {
-        confirmBtn.addEventListener('click', async () => {
-          const form = confirmBtn.closest('.assign-group-form');
-          const toggleBtn = form.previousElementSibling;
-          const docId = toggleBtn.dataset.docId;
-          const uid = toggleBtn.dataset.uid;
-          const groupCode = form.querySelector('.assign-group-select-inline').value;
-          const s = students.find((x) => x.studentUid === uid);
-          confirmBtn.disabled = true;
-          try {
-            await assignUnassignedStudentToGroup(docId, groupCode, s);
-            showToast(`Đã xếp "${s.studentName}" vào nhóm.`, false);
-            await renderRosterPanel(panel);
-          } catch (e) {
-            showToast('Không xếp được: ' + e.message);
-            confirmBtn.disabled = false;
-          }
-        });
-      });
-
-      $$('.delete-student-btn', assignedBody).forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const docIds = btn.dataset.docIds ? btn.dataset.docIds.split(',') : [];
-          const name = btn.dataset.name;
-          if (!confirm(`Xoá HẲN học sinh "${name}" khỏi mọi nhóm? Không thể hoàn tác — tiến độ học/gói đã mua của tài khoản này vẫn còn (không mất) nhưng sẽ không còn hiện trong bất kỳ nhóm nào của bạn nữa.`)) return;
-          btn.disabled = true;
-          try {
-            await deleteStudentEverywhere(docIds);
-            // Chỉ xoá ĐÚNG dòng vừa bấm khỏi bảng — trước đây vẽ lại TOÀN BỘ danh sách
-            // (renderRosterPanel(panel)) sau mỗi lần xoá, làm mất vị trí đang cuộn tới (nhảy về đầu
-            // trang) và không có xác nhận rõ ràng đã xoá xong, khiến giáo viên tưởng bấm không có tác
-            // dụng khi đang xoá nhiều học sinh liên tiếp trong danh sách dài.
-            const row = btn.closest('tr');
-            if (row) row.remove();
-            showToast(`Đã xoá "${name}".`, false);
-          } catch (e) {
-            showToast('Không xoá được: ' + e.message);
-            btn.disabled = false;
-          }
-        });
-      });
-
-      $$('.replace-login-btn', assignedBody).forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const uid = btn.dataset.uid;
-          const s = students.find((x) => x.studentUid === uid);
-          const box = document.getElementById(`replace-login-result-${uid}`);
-          if (!confirm(`Cấp mã học sinh MỚI cho "${s.studentName}"? Mã/mật khẩu CŨ sẽ ngừng hoạt động, tiến độ học và gói đã mua ở tài khoản cũ KHÔNG tự chuyển sang tài khoản mới. Chỉ dùng khi học sinh quên mật khẩu và không còn cách nào khác.`)) return;
-          btn.disabled = true;
-          showResult(box, '⏳ Đang tạo mã mới...');
-          try {
-            // Ưu tiên 1 nhóm CÒN TỒN TẠI (groupName khác null) — không lấy nhầm nhóm đã bị xoá làm
-            // nơi xếp tài khoản mới vào, sẽ tạo ra 1 bản ghi "mồ côi" khác ngay khi vừa cấp xong.
-            const stillExisting = s.groups.find((g) => g.groupName !== null);
-            const groupCode = stillExisting ? stillExisting.groupCode : (s.groups[0] && s.groups[0].groupCode);
-            const { loginCode, password } = await issueReplacementLoginForStudent({
-              studentName: s.studentName, school: s.school, className: s.className,
-              address: s.address, phone: s.phone, groupCode
-            });
-            showResult(box, `✓ Mã mới: <strong>${escapeHtml(loginCode)}</strong> — mật khẩu: <strong style="color:var(--brand);">${escapeHtml(password)}</strong>. Gửi ngay cho học sinh, mã này chỉ hiện được 1 lần.`);
-          } catch (e) {
-            btn.disabled = false;
-            showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
-          }
-        });
+      // Đổi cách sắp xếp -> vẽ lại bảng theo thứ tự mới, bỏ luôn bộ lọc tìm kiếm đang gõ dở (đơn giản
+      // hơn là vừa giữ bộ lọc vừa đổi thứ tự — giáo viên gõ lại tìm rất nhanh nếu cần).
+      $('#studentSortSelect', assignedBody).addEventListener('change', (e) => {
+        sortMode = e.target.value;
+        searchInput.value = '';
+        searchCount.textContent = '';
+        renderTableBody();
       });
     }
 

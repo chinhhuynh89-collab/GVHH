@@ -49,7 +49,13 @@ async function enforceExclusiveRole(user, wantedRole) {
   // Mã cố định — sinh CÙNG LÚC với việc khoá vai trò, lưu luôn vào accountRoles để mọi nơi cần tra
   // "mã của tài khoản X" (VD cột "Mã" trong danh sách giáo viên/học sinh ở trang quản trị/quản lý
   // học sinh) chỉ cần đọc 1 chỗ, không cần biết trước đó là giáo viên hay học sinh.
-  const code = inferredRole === 'teacher' ? deriveTeacherCode(user.uid) : deriveStudentCode(user.uid);
+  // Tài khoản do giáo viên cấp (mã học sinh, email nội bộ tự sinh @hocsinh.hoahoc.app) đã có sẵn
+  // "loginCode" (VD ABC123.07) làm mã định danh riêng, dùng CHÍNH mã đó để đăng nhập — không cần sinh
+  // thêm 1 mã "HS..." khác nữa (2 mã khác nhau cho cùng 1 tài khoản chỉ gây rối, không phục vụ ai cả).
+  // Chỉ sinh mã "HS..." cho học sinh đăng ký thật bằng tài khoản Google (không có mã nào khác để
+  // nhận diện, xem getAccountCode()/danh sách học sinh ở manage-students.js).
+  const isProvisionedStudent = inferredRole === 'student' && !!user.email && user.email.endsWith('@hocsinh.hoahoc.app');
+  const code = inferredRole === 'teacher' ? deriveTeacherCode(user.uid) : (isProvisionedStudent ? null : deriveStudentCode(user.uid));
 
   try {
     await ref.set({ role: inferredRole, code, createdAt: new Date().toISOString() });
