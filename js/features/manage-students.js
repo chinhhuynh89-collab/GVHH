@@ -294,7 +294,7 @@
                 <button class="btn assign-group-toggle-btn" type="button" data-doc-id="${escapeHtml(unassignedGroup.docId)}" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">📥 Xếp vào nhóm</button>
                 <div class="assign-group-form" style="display:none;margin-top:4px;">
                   <select class="assign-group-select-inline" style="width:100%;">${groupOptionsHtml}</select>
-                  <button class="btn primary assign-group-confirm-btn" type="button" style="margin-top:4px;width:100%;">Xếp vào nhóm này</button>
+                  <button class="btn primary assign-group-confirm-btn" type="button" style="margin-top:4px;">Xếp vào nhóm này</button>
                 </div>
               ` : ''}
               <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" style="margin-top:4px;color:#dc2626;">🗑️ Xoá học sinh</button>
@@ -411,8 +411,11 @@
           </div>
           <p class="hint" id="studentSearchCount" style="margin-bottom:0;"></p>
         </div>
-        <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang). "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
-        <button class="btn" id="cleanupDuplicatesBtn" type="button" style="margin-bottom:10px;">🧹 Dọn bản ghi trùng do lỗi cũ (1 lần)</button>
+        <div class="btn-row" style="margin-bottom:8px;">
+          <button class="btn" id="rosterHelpToggleBtn" type="button">❓ Hướng dẫn dùng bảng</button>
+          <button class="btn" id="cleanupDuplicatesBtn" type="button">🧹 Dọn bản ghi trùng do lỗi cũ (1 lần)</button>
+        </div>
+        <p class="hint" id="rosterHelpText" style="display:none;">👉 Kéo ngang bảng để xem đủ các cột. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang). "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
@@ -429,6 +432,13 @@
       // cũ nó sửa (tính năng "chọn học sinh có sẵn" lúc tạo nhóm mới từng để sót bản ghi "Chưa xếp
       // nhóm" cũ sau khi thêm vào nhóm mới). Bấm lại nhiều lần vẫn an toàn — không còn gì để dọn thì
       // chỉ báo "Không có gì để dọn", không xoá nhầm gì thêm.
+      $('#rosterHelpToggleBtn', assignedBody).addEventListener('click', (e) => {
+        const helpText = $('#rosterHelpText', assignedBody);
+        const show = helpText.style.display === 'none';
+        helpText.style.display = show ? '' : 'none';
+        e.currentTarget.textContent = show ? '❌ Đóng hướng dẫn' : '❓ Hướng dẫn dùng bảng';
+      });
+
       $('#cleanupDuplicatesBtn', assignedBody).addEventListener('click', async (e) => {
         const btn = e.currentTarget;
         if (!confirm('Rà và xoá các bản ghi "Chưa xếp nhóm" THỪA của học sinh đã có nhóm thật (do lỗi cũ để sót lại)? Chỉ xoá đúng bản ghi thừa, không đụng tới nhóm thật đang dùng. Không thể hoàn tác.')) return;

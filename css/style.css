@@ -974,8 +974,10 @@ sub { font-size: 0.72em; }
 
 ::selection { background: rgba(20, 184, 166, 0.35); }
 
-/* Bảng danh sách học sinh (Nhóm học sinh) */
-.roster-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+/* Bảng danh sách học sinh (Nhóm học sinh) — GIỚI HẠN chiều cao + tự cuộn dọc RIÊNG bên trong bảng,
+   để việc cuộn xem danh sách dài không kéo theo cuộn mất ô tìm kiếm/sắp xếp phía trên (thanh đó nằm
+   NGOÀI khung cuộn này nên luôn đứng yên, không phụ thuộc vào sticky nữa). */
+.roster-table-wrap { overflow-x: auto; overflow-y: auto; max-height: 60vh; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 
 /* Lưới nút hành động (Nhóm học sinh...) — chia cột đều (2 cột trên điện thoại, 3 cột màn rộng
    hơn) thay vì 1 hàng ngang dễ vỡ bố cục trên điện thoại. */
