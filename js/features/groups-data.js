@@ -115,6 +115,18 @@ async function addStudentToGroup(groupCode, student) {
   }, student.loginCode ? { loginCode: student.loginCode } : {}));
 }
 
+// Xếp 1 học sinh "Chưa xếp nhóm" (nạp lên chọn "Chưa xếp nhóm" lúc đó, hoặc bị bỏ rơi vì lý do khác)
+// vào 1 nhóm cụ thể — tạo bản ghi MỚI đúng nhóm đó (dùng lại addStudentToGroup(), qua đúng luồng
+// kiểm tra giới hạn gói đã có sẵn) rồi XOÁ bản ghi "Chưa xếp nhóm" cũ, tránh còn thừa 2 dòng ("Chưa
+// xếp nhóm" + nhóm mới) cho cùng 1 học sinh. KHÔNG sửa trực tiếp groupCode trên bản ghi cũ vì
+// firestore.rules chỉ cho giáo viên sửa field "teacherUid" của bản ghi CŨ CHƯA có teacherUid (tự
+// nhận sở hữu bản ghi thời trước khi có field này), không cho sửa groupCode — tạo mới + xoá cũ dùng
+// đúng quyền create/delete đã có sẵn, không cần xin thêm quyền mới trong Firestore Rules.
+async function assignUnassignedStudentToGroup(unassignedDocId, groupCode, student) {
+  await addStudentToGroup(groupCode, student);
+  await deleteStudent(unassignedDocId);
+}
+
 // Xoá 1 học sinh khỏi 1 nhóm cụ thể (chỉ xoá bản ghi "students" đó — nếu học sinh này học nhiều
 // nhóm khác, các nhóm kia không bị ảnh hưởng).
 async function deleteStudent(studentId) {
@@ -231,11 +243,11 @@ function mergeStudentsAcrossGroups(docs, groupNameByCode) {
     // nhóm nào đang tồn tại), cần đánh dấu riêng (unassigned: true) để nơi hiển thị ghi đúng "Chưa xếp
     // nhóm" thay vì nhầm thành "(Nhóm đã xoá)".
     merged.groups.push(!s.groupCode ? {
-      groupCode: '', groupName: null, joinedAt: s.joinedAt, unassigned: true
+      groupCode: '', groupName: null, joinedAt: s.joinedAt, unassigned: true, docId: s.docId
     } : {
       groupCode: s.groupCode,
       groupName: groupNameByCode.has(s.groupCode) ? groupNameByCode.get(s.groupCode) : null,
-      joinedAt: s.joinedAt
+      joinedAt: s.joinedAt, docId: s.docId
     });
     merged.docIds.push(s.docId);
     if ((s.joinedAt || '') > (merged.latestJoinedAt || '')) merged.latestJoinedAt = s.joinedAt;

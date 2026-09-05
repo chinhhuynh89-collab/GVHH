@@ -195,22 +195,24 @@
          teacher-student-accounts.js), KHÔNG hiện cho tài khoản Google (đổi mật khẩu Google không
          qua app này được). Nhận diện qua email nội bộ tự sinh, xem script cuối trang. -->
     <div class="card" id="studentChangePasswordCard" style="display:none;">
-      <h2><span class="icon">🔑</span>Đổi mật khẩu</h2>
-      <p class="hint" style="margin-top:-4px;">Đổi mật khẩu đăng nhập của riêng bạn — không ảnh hưởng tới mã học sinh.</p>
-      <div class="field">
-        <label for="oldStudentPasswordInput">Mật khẩu hiện tại</label>
-        <input type="password" id="oldStudentPasswordInput" />
+      <button class="btn block" id="studentChangePasswordToggleBtn" type="button">🔑 Đổi mật khẩu</button>
+      <div id="studentChangePasswordForm" style="display:none;margin-top:10px;">
+        <p class="hint" style="margin-top:-4px;">Đổi mật khẩu đăng nhập của riêng bạn — không ảnh hưởng tới mã học sinh.</p>
+        <div class="field">
+          <label for="oldStudentPasswordInput">Mật khẩu hiện tại</label>
+          <input type="password" id="oldStudentPasswordInput" />
+        </div>
+        <div class="field">
+          <label for="newStudentPasswordInput">Mật khẩu mới</label>
+          <input type="password" id="newStudentPasswordInput" />
+        </div>
+        <div class="field">
+          <label for="newStudentPasswordConfirmInput">Nhập lại mật khẩu mới</label>
+          <input type="password" id="newStudentPasswordConfirmInput" />
+        </div>
+        <button class="btn primary block" id="changeStudentPasswordBtn" type="button">Đổi mật khẩu</button>
+        <div class="result-box" id="changeStudentPasswordResult"></div>
       </div>
-      <div class="field">
-        <label for="newStudentPasswordInput">Mật khẩu mới</label>
-        <input type="password" id="newStudentPasswordInput" />
-      </div>
-      <div class="field">
-        <label for="newStudentPasswordConfirmInput">Nhập lại mật khẩu mới</label>
-        <input type="password" id="newStudentPasswordConfirmInput" />
-      </div>
-      <button class="btn primary block" id="changeStudentPasswordBtn" type="button">Đổi mật khẩu</button>
-      <div class="result-box" id="changeStudentPasswordResult"></div>
     </div>
 
     <div class="section-label">Dành cho học sinh</div>
@@ -616,6 +618,14 @@
   // teacher-student-accounts.js) — tài khoản Google không có email dạng này nên tự ẩn card.
   if (!user || !user.email || !user.email.endsWith('@hocsinh.hoahoc.app')) return;
   card.style.display = 'block';
+  // Form đổi mật khẩu THU GỌN mặc định (chỉ hiện nút bấm) — trước đây hiện SẴN cả form mỗi lần tải
+  // lại trang dù đã đổi mật khẩu xong từ trước, trông như lỗi "đổi rồi vẫn cứ hiện lại". Giờ chỉ mở
+  // ra khi tự bấm, và sau khi đổi xong chỉ thu gọn lại FORM (không ẩn hẳn card) để vẫn bấm đổi lại
+  // được sau này nếu cần, không phải tính năng dùng 1 lần.
+  const form = document.getElementById('studentChangePasswordForm');
+  document.getElementById('studentChangePasswordToggleBtn').addEventListener('click', () => {
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  });
   document.getElementById('changeStudentPasswordBtn').addEventListener('click', async () => {
     const oldPassword = document.getElementById('oldStudentPasswordInput').value;
     const newPassword = document.getElementById('newStudentPasswordInput').value;
@@ -627,11 +637,14 @@
     showResult(box, '⏳ Đang đổi mật khẩu...');
     try {
       await changeOwnStudentPassword(oldPassword, newPassword);
-      // Đóng hẳn mục đổi mật khẩu lại sau khi đổi xong — đã đổi xong thì không cần hiện form này nữa,
-      // đỡ chiếm chỗ trang chủ; báo bằng thông báo nổi (showToast) vì card sắp ẩn ngay sau đó, dùng
-      // result-box bên trong card (sắp biến mất cùng lúc) sẽ không kịp cho học sinh thấy.
+      // Thu gọn FORM lại sau khi đổi xong (không ẩn hẳn card/nút "🔑 Đổi mật khẩu") — báo bằng thông
+      // báo nổi (showToast) vì form sắp ẩn ngay sau đó, dùng result-box bên trong (sắp biến mất cùng
+      // lúc) sẽ không kịp cho học sinh thấy.
       showToast('Đã cập nhật mật khẩu mới — lần đăng nhập sau nhớ dùng mật khẩu mới.', false);
-      card.style.display = 'none';
+      document.getElementById('oldStudentPasswordInput').value = '';
+      document.getElementById('newStudentPasswordInput').value = '';
+      document.getElementById('newStudentPasswordConfirmInput').value = '';
+      form.style.display = 'none';
     } catch (e) {
       const friendly = e.code === 'auth/wrong-password' ? 'Mật khẩu hiện tại không đúng.' : e.message;
       showResult(box, `⚠️ ${escapeHtml(friendly)}`, true);

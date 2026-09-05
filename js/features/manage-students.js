@@ -244,6 +244,8 @@
 
       const codes = await Promise.all(students.map((s) => getAccountCode(s.studentUid)));
 
+      const groupOptionsHtml = groups.map((g) => `<option value="${escapeHtml(g.groupCode)}">${escapeHtml(g.groupName)}</option>`).join('');
+
       const rows = students.map((s, i) => {
         // Nhóm đã bị xoá (xem deleteGroup() — xoá nhóm không còn xoá học sinh nữa) có groupName =
         // null — ghi rõ "(Nhóm đã xoá)" thay vì để trống khó hiểu, học sinh đó vẫn còn nguyên để xếp
@@ -253,6 +255,10 @@
         // Chuỗi tìm kiếm gộp sẵn (tên, mã HS, mã đăng nhập, SĐT) — bỏ dấu + thường hoá 1 lần lúc render
         // thay vì tính lại mỗi lần gõ phím, lọc theo dataset ngay trên DOM cho mượt (giống Excel).
         const searchText = normalizeSearchText([s.studentName, codes[i], s.loginCode, s.phone].filter(Boolean).join(' '));
+        // Học sinh "Chưa xếp nhóm" (nạp lên chọn "Chưa xếp nhóm" lúc đó) cần 1 cách xếp vào nhóm SAU —
+        // trước đây chỉ xếp được lúc TẠO nhóm mới (chọn học sinh có sẵn), không có cách nào xếp vào 1
+        // nhóm ĐÃ CÓ SẴN, khiến các học sinh này "mắc kẹt" không hiện trong bất kỳ nhóm nào.
+        const unassignedGroup = s.groups.find((g) => g.unassigned);
         return `
           <tr data-search="${escapeHtml(searchText)}">
             <td>${i + 1}</td>
@@ -268,6 +274,13 @@
             <td>
               ${zaloDigits ? `<a class="btn" href="https://zalo.me/${escapeHtml(zaloDigits)}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
               ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">🔑 Cấp mã thay thế</button>` : ''}
+              ${unassignedGroup && groups.length ? `
+                <button class="btn assign-group-toggle-btn" type="button" data-doc-id="${escapeHtml(unassignedGroup.docId)}" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">📥 Xếp vào nhóm</button>
+                <div class="assign-group-form" style="display:none;margin-top:4px;">
+                  <select class="assign-group-select-inline" style="width:100%;">${groupOptionsHtml}</select>
+                  <button class="btn primary assign-group-confirm-btn" type="button" style="margin-top:4px;width:100%;">Xếp vào nhóm này</button>
+                </div>
+              ` : ''}
               <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" style="margin-top:4px;color:#dc2626;">🗑️ Xoá học sinh</button>
               <div class="result-box" id="replace-login-result-${escapeHtml(s.studentUid)}"></div>
             </td>
@@ -304,6 +317,32 @@
           if (match) shown++;
         });
         searchCount.textContent = q ? `Tìm thấy ${shown}/${rosterTrs.length} học sinh.` : '';
+      });
+
+      $$('.assign-group-toggle-btn', assignedBody).forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const form = btn.nextElementSibling;
+          if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        });
+      });
+      $$('.assign-group-confirm-btn', assignedBody).forEach((confirmBtn) => {
+        confirmBtn.addEventListener('click', async () => {
+          const form = confirmBtn.closest('.assign-group-form');
+          const toggleBtn = form.previousElementSibling;
+          const docId = toggleBtn.dataset.docId;
+          const uid = toggleBtn.dataset.uid;
+          const groupCode = form.querySelector('.assign-group-select-inline').value;
+          const s = students.find((x) => x.studentUid === uid);
+          confirmBtn.disabled = true;
+          try {
+            await assignUnassignedStudentToGroup(docId, groupCode, s);
+            showToast(`Đã xếp "${s.studentName}" vào nhóm.`, false);
+            await renderRosterPanel(panel);
+          } catch (e) {
+            showToast('Không xếp được: ' + e.message);
+            confirmBtn.disabled = false;
+          }
+        });
       });
 
       $$('.delete-student-btn', assignedBody).forEach((btn) => {
