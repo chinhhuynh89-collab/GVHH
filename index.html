@@ -695,10 +695,13 @@
     loginChoice.style.display = 'none';
     hideResult($('#registerToggleResult'));
     formCard.style.display = 'block';
-    // Đã có hồ sơ từ lần đăng ký/xin vào nhóm TRƯỚC (tài khoản này) — tự điền sẵn, khỏi gõ lại từ
-    // đầu, vẫn sửa được nếu sai/đã đổi thông tin.
+    // Đã có hồ sơ/thông tin từ trước (tài khoản này) — tự điền sẵn, khỏi gõ lại từ đầu, vẫn sửa được
+    // nếu sai/đã đổi thông tin. Dùng getLockedStudentIdentity() (join-group.js) thay vì đọc thẳng
+    // "studentProfiles" — với tài khoản do giáo viên cấp (mã học sinh), ưu tiên đúng thông tin giáo
+    // viên đã nhập trong danh sách học sinh thay vì hồ sơ tự khai (có thể còn sót dữ liệu sai/rác từ
+    // trước khi trang "Xin vào nhóm" khoá sửa mục này lại).
     try {
-      const profile = typeof getStudentProfile === 'function' ? await getStudentProfile(user.uid) : null;
+      const profile = typeof getLockedStudentIdentity === 'function' ? await getLockedStudentIdentity(user.uid, user.email || '') : null;
       if (profile) {
         document.getElementById('regName').value = profile.studentName || '';
         document.getElementById('regSchool').value = profile.school || '';

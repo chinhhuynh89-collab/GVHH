@@ -218,21 +218,39 @@ function initJoinGroupPage() {
   requireStudentAuth((user) => renderJoinPage(user.uid, user.email || ''));
 }
 
-// Thông tin cá nhân "khoá cứng" dùng để xin vào nhóm MỚI — ưu tiên hồ sơ tự lưu (studentProfiles);
-// nếu chưa có (VD tài khoản do giáo viên cấp, nạp hàng loạt, chưa từng tự đăng ký/xin vào nhóm nào
-// qua app) thì lấy tạm từ bất kỳ nhóm nào ĐÃ có sẵn của chính tài khoản này (giáo viên đã nhập lúc
-// nạp danh sách) — không có nguồn nào cả thì coi như chưa có thông tin gì (xem renderJoinPage).
-async function getLockedStudentIdentity(studentUid) {
+// Thông tin cá nhân "khoá cứng" dùng để xin vào nhóm MỚI.
+//
+// Tài khoản do GIÁO VIÊN CẤP (mã học sinh, email nội bộ "...@hocsinh.hoahoc.app"): thông tin ĐÚNG là
+// thông tin giáo viên đã nhập trong danh sách học sinh ("students") lúc cấp tài khoản/nạp danh sách —
+// ưu tiên nguồn này TRƯỚC "studentProfiles" (hồ sơ tự khai). "studentProfiles" chỉ dành cho tài khoản
+// Google tự đăng ký tự gõ thông tin; với tài khoản do giáo viên cấp, doc "studentProfiles" (nếu có)
+// chỉ có thể là dữ liệu SAI/RÁC còn sót lại từ TRƯỚC khi tính năng khoá sửa thông tin này ra đời (lúc
+// đó học sinh còn tự sửa được) — lỗi thực tế đã gặp: hiện tên do học sinh tự gõ bậy thay vì đúng tên
+// giáo viên đã nhập.
+//
+// Tài khoản GOOGLE tự đăng ký: ưu tiên "studentProfiles" (hồ sơ tự lưu, tái sử dụng mọi nơi); nếu
+// chưa từng lưu (VD lần đầu xin vào nhóm) thì lấy tạm từ bất kỳ nhóm nào đã có sẵn.
+//
+// Không có nguồn nào cả (chưa từng đăng ký/chưa từng ở nhóm nào) -> coi như chưa có thông tin gì
+// (xem renderJoinPage).
+async function getLockedStudentIdentity(studentUid, studentEmail) {
+  const isProvisioned = !!(studentEmail && studentEmail.endsWith('@hocsinh.hoahoc.app'));
+  async function fromExistingGroup() {
+    try {
+      const groups = await listMyGroups(studentUid);
+      if (groups.length) {
+        const g = groups[0];
+        return { studentName: g.studentName, school: g.school, className: g.className, address: g.address, phone: g.phone };
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+  if (isProvisioned) {
+    return (await fromExistingGroup()) || (await getStudentProfile(studentUid).catch(() => null));
+  }
   const profile = await getStudentProfile(studentUid).catch(() => null);
   if (profile) return profile;
-  try {
-    const groups = await listMyGroups(studentUid);
-    if (groups.length) {
-      const g = groups[0];
-      return { studentName: g.studentName, school: g.school, className: g.className, address: g.address, phone: g.phone };
-    }
-  } catch (e) { /* ignore */ }
-  return null;
+  return await fromExistingGroup();
 }
 
 // Liệt kê các nhóm ĐÃ được duyệt vào — CHỈ XEM (không có nút "chọn nhóm đang hoạt động" như bản
@@ -312,7 +330,7 @@ async function renderJoinPage(studentUid, studentEmail) {
   // gì (chưa từng đăng ký/chưa từng ở nhóm nào) -> bắt về trang chủ đăng ký trước, ẩn hẳn phần "Mã
   // nhóm" + nút gửi (không có thông tin thật để gửi kèm).
   let lockedIdentity = null;
-  try { lockedIdentity = await getLockedStudentIdentity(studentUid); } catch (e) { /* ignore */ }
+  try { lockedIdentity = await getLockedStudentIdentity(studentUid, studentEmail); } catch (e) { /* ignore */ }
   if (lockedIdentity) {
     $('#joinName').value = lockedIdentity.studentName || '';
     $('#joinSchool').value = lockedIdentity.school || '';
