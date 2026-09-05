@@ -412,6 +412,7 @@
           <p class="hint" id="studentSearchCount" style="margin-bottom:0;"></p>
         </div>
         <p class="hint">👉 Kéo ngang bảng để xem đủ các cột. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang). "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
+        <button class="btn" id="cleanupDuplicatesBtn" type="button" style="margin-bottom:10px;">🧹 Dọn bản ghi trùng do lỗi cũ (1 lần)</button>
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
@@ -423,6 +424,27 @@
       `;
 
       renderTableBody();
+
+      // Dọn 1 lần — xem cleanupOrphanedUnassignedDuplicates() (groups-data.js) để hiểu chính xác lỗi
+      // cũ nó sửa (tính năng "chọn học sinh có sẵn" lúc tạo nhóm mới từng để sót bản ghi "Chưa xếp
+      // nhóm" cũ sau khi thêm vào nhóm mới). Bấm lại nhiều lần vẫn an toàn — không còn gì để dọn thì
+      // chỉ báo "Không có gì để dọn", không xoá nhầm gì thêm.
+      $('#cleanupDuplicatesBtn', assignedBody).addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        if (!confirm('Rà và xoá các bản ghi "Chưa xếp nhóm" THỪA của học sinh đã có nhóm thật (do lỗi cũ để sót lại)? Chỉ xoá đúng bản ghi thừa, không đụng tới nhóm thật đang dùng. Không thể hoàn tác.')) return;
+        btn.disabled = true;
+        btn.textContent = '⏳ Đang rà soát...';
+        try {
+          const removed = await cleanupOrphanedUnassignedDuplicates();
+          showToast(removed ? `Đã dọn ${removed} bản ghi thừa.` : 'Không có gì để dọn.', false);
+          if (removed) await renderRosterPanel(panel);
+        } catch (e2) {
+          showToast('Không dọn được: ' + e2.message);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '🧹 Dọn bản ghi trùng do lỗi cũ (1 lần)';
+        }
+      });
 
       const searchInput = $('#studentSearchInput', assignedBody);
       const searchCount = $('#studentSearchCount', assignedBody);

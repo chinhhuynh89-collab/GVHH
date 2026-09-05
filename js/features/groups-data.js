@@ -276,6 +276,37 @@ async function getAllStudentsForCurrentTeacher() {
   return mergeStudentsAcrossGroups(docs, groupNameByCode);
 }
 
+// Dọn 1 LẦN các bản ghi "Chưa xếp nhóm" (groupCode rỗng) THỪA của những học sinh ĐÃ CÓ bản ghi khác
+// ở 1 nhóm THẬT — tính năng "chọn học sinh có sẵn" lúc tạo nhóm mới (group-manager.js) TỪNG có lỗi
+// không xoá bản ghi "Chưa xếp nhóm" cũ sau khi thêm vào nhóm mới (đã sửa), để sót lại các bản ghi thừa
+// này từ trước khi sửa — khiến 1 học sinh nhìn như xuất hiện lẫn với "Chưa xếp nhóm" dù đã có nhóm
+// thật. CHỈ xoá bản ghi groupCode RỖNG khi CÙNG studentUid đó đã có ÍT NHẤT 1 bản ghi khác groupCode
+// KHÔNG rỗng — học sinh THẬT SỰ chưa vào nhóm nào (chỉ có đúng 1 bản ghi rỗng, không có bản ghi thật
+// nào khác) không bị đụng tới. Trả về số bản ghi đã xoá.
+async function cleanupOrphanedUnassignedDuplicates() {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  const snap = await db.collection('students').where('teacherUid', '==', teacher.uid).get();
+  const docs = snap.docs.map((d) => Object.assign({ docId: d.id }, d.data()));
+  const byKey = new Map();
+  docs.forEach((d) => {
+    const key = d.studentUid || d.docId;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(d);
+  });
+  const toDeleteIds = [];
+  byKey.forEach((list) => {
+    if (list.length < 2 || !list.some((d) => d.groupCode)) return;
+    list.filter((d) => !d.groupCode).forEach((d) => toDeleteIds.push(d.docId));
+  });
+  if (!toDeleteIds.length) return 0;
+  const batch = db.batch();
+  toDeleteIds.forEach((id) => batch.delete(db.collection('students').doc(id)));
+  await batch.commit();
+  return toDeleteIds.length;
+}
+
 // ---------- Học sinh đăng ký bằng MÃ GIÁO VIÊN, chờ xếp vào 1 nhóm cụ thể ----------
 // Khác với students/joinGroupByCode (đăng ký thẳng vào 1 nhóm bằng MÃ NHÓM): học sinh chỉ cần MÃ
 // GIÁO VIÊN — giáo viên nhận thông báo ngay (xem watchPendingRegistrationsForCurrentTeacher), rồi
