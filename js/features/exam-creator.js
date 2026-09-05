@@ -18,6 +18,18 @@ function shuffleArray(arr) {
   return a;
 }
 
+// Câu "Nhập đáp án" không có "options" (không có gì để chọn) — chỉ ghi field phù hợp với từng loại,
+// tránh lưu options:undefined (Firestore không chấp nhận field undefined).
+function publicQuestionFields(q) {
+  const type = getQuestionType(q);
+  return type === 'text' ? { q: q.q, type } : { q: q.q, type, options: q.options };
+}
+function answerKeyFields(q) {
+  const type = getQuestionType(q);
+  const base = { type, explain: q.explain || '' };
+  return type === 'text' ? Object.assign(base, { acceptedAnswers: q.acceptedAnswers }) : Object.assign(base, { correct: q.correct });
+}
+
 async function createExamForCurrentTeacher(examInput) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
@@ -35,11 +47,11 @@ async function createExamForCurrentTeacher(examInput) {
       durationMinutes: examInput.durationMinutes,
       startTime: examInput.startTime,
       endTime: examInput.endTime,
-      questions: examInput.questions.map((q) => ({ q: q.q, options: q.options })),
+      questions: examInput.questions.map(publicQuestionFields),
       createdAt: new Date().toISOString()
     }),
     db.collection('examAnswers').doc(examRef.id).set({
-      answers: examInput.questions.map((q) => ({ correct: q.correct, explain: q.explain || '' }))
+      answers: examInput.questions.map(answerKeyFields)
     })
   ]);
   return examRef.id;
@@ -122,18 +134,55 @@ async function createExamForCurrentTeacher(examInput) {
         const builtIn = found ? (found.chapter.quiz || []) : [];
         let custom = [];
         try { custom = await getCustomQuiz(getCurrentTeacher().uid, chapterId); } catch (e) { custom = []; }
-        return builtIn.concat(custom.map((c) => ({ q: c.q, options: c.options, correct: c.correct, explain: c.explain })));
+        return builtIn.concat(custom.map((c) => Object.assign({}, c)));
       }));
       return pools.flat();
+    }
+
+    function splitPoolByType(pool) {
+      const byType = { abcd: [], truefalse: [], text: [] };
+      pool.forEach((q) => { byType[getQuestionType(q)].push(q); });
+      return byType;
+    }
+
+    let currentPoolByType = { abcd: [], truefalse: [], text: [] };
+
+    // Dựng ĐỘNG ô nhập số lượng cho từng loại — chỉ hiện loại đang có ≥1 câu trong kho, mặc định lấy
+    // hết số câu sẵn có (giáo viên tự giảm xuống nếu muốn ít hơn).
+    function renderExamCountFields() {
+      const rows = QUIZ_TYPE_OPTIONS.filter((t) => currentPoolByType[t.value].length > 0).map((t) => {
+        const available = currentPoolByType[t.value].length;
+        return `
+          <div class="field" style="margin-bottom:8px;">
+            <label for="examCount_${t.value}">${escapeHtml(t.label)} (tối đa ${available} câu có sẵn)</label>
+            <input type="number" id="examCount_${t.value}" min="0" max="${available}" value="${available}" />
+          </div>
+        `;
+      }).join('');
+      $('#examCountFields').innerHTML = rows || '<p class="hint">Chưa có câu hỏi nào để chọn số lượng.</p>';
+    }
+
+    function readExamCounts() {
+      const counts = {};
+      QUIZ_TYPE_OPTIONS.forEach((t) => {
+        const el = document.getElementById('examCount_' + t.value);
+        counts[t.value] = el ? Math.max(0, Math.min(parseInt(el.value, 10) || 0, currentPoolByType[t.value].length)) : 0;
+      });
+      return counts;
     }
 
     async function onChapterChange() {
       const chapterIds = selectedChapterIds();
       const pool = await getQuestionPool(chapterIds);
-      $('#examPoolInfo').textContent = pool.length
-        ? `Kho câu hỏi hiện có: ${pool.length} câu (gộp từ ${chapterIds.length} chương đã chọn).`
-        : 'Chưa có câu hỏi nào trong (các) chương đã chọn — hãy thêm câu hỏi trước hoặc chọn chương khác.';
-      $('#examCount').max = pool.length || 1;
+      currentPoolByType = splitPoolByType(pool);
+      if (!pool.length) {
+        $('#examPoolInfo').textContent = 'Chưa có câu hỏi nào trong (các) chương đã chọn — hãy thêm câu hỏi trước hoặc chọn chương khác.';
+      } else {
+        const breakdown = QUIZ_TYPE_OPTIONS.filter((t) => currentPoolByType[t.value].length > 0)
+          .map((t) => `${t.label}: ${currentPoolByType[t.value].length}`).join(', ');
+        $('#examPoolInfo').textContent = `Kho câu hỏi hiện có: ${pool.length} câu (gộp từ ${chapterIds.length} chương đã chọn) — ${breakdown}.`;
+      }
+      renderExamCountFields();
     }
 
     $('#examGroup').addEventListener('change', onGroupChange);
@@ -143,19 +192,25 @@ async function createExamForCurrentTeacher(examInput) {
       const groupCode = $('#examGroup').value;
       const chapterIds = selectedChapterIds();
       const examTitle = $('#examTitle').value.trim();
-      const count = parseInt($('#examCount').value, 10);
+      const counts = readExamCounts();
+      const count = QUIZ_TYPE_OPTIONS.reduce((sum, t) => sum + counts[t.value], 0);
       const duration = parseInt($('#examDuration').value, 10);
       const startMode = $('#examStartMode').value;
 
       if (!groupCode) { showResult(box, 'Chọn nhóm.', true); return; }
       if (!chapterIds.length) { showResult(box, 'Chọn ít nhất 1 chương.', true); return; }
-      if (!count || count < 1) { showResult(box, 'Nhập số câu hợp lệ.', true); return; }
+      if (!count || count < 1) { showResult(box, 'Chọn ít nhất 1 câu (ở 1 trong các loại).', true); return; }
       if (!duration || duration < 1) { showResult(box, 'Nhập thời gian làm bài hợp lệ.', true); return; }
 
       const pool = await getQuestionPool(chapterIds);
       if (!pool.length) { showResult(box, '(Các) chương đã chọn chưa có câu hỏi trắc nghiệm nào.', true); return; }
+      const poolByType = splitPoolByType(pool);
 
-      const questions = shuffleArray(pool).slice(0, Math.min(count, pool.length));
+      // Rút ngẫu nhiên ĐÚNG số lượng mỗi loại giáo viên đã chọn, gộp lại rồi xáo thêm 1 lần nữa để
+      // thứ tự câu hỏi trong đề không bị xếp thành từng cụm theo loại.
+      const questions = shuffleArray(
+        QUIZ_TYPE_OPTIONS.flatMap((t) => shuffleArray(poolByType[t.value]).slice(0, counts[t.value]))
+      );
       const chapterInfos = await Promise.all(chapterIds.map(resolveChapterInfo));
       const chapterTitles = chapterInfos.filter(Boolean).map((f) => f.chapter.title);
 

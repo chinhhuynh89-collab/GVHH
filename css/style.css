@@ -945,6 +945,9 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .quiz-option.correct { border-color: var(--ok); background: rgba(52, 211, 153, 0.15); color: var(--ok); }
 .quiz-option.wrong { border-color: var(--danger); background: rgba(248, 113, 113, 0.15); color: #fecaca; }
 .quiz-option:disabled { cursor: default; }
+/* Câu "Nhập đáp án" — tái dùng nguyên style .quiz-option/.selected/.correct/.wrong cho <input> thay
+   vì viết CSS riêng, chỉ cần đổi con trỏ chuột cho đúng ngữ cảnh gõ chữ. */
+input.quiz-option { cursor: text; }
 .quiz-explain {
   font-size: calc(13.5px * var(--font-scale));
   color: var(--text-dim);

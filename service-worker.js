@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v164';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v165';
 const ASSETS = [
   './',
   './index.html',
@@ -27,6 +27,7 @@ const ASSETS = [
   './js/features/chapter-meta.js',
   './js/features/quiz-template.js',
   './js/features/quiz-excel.js',
+  './js/features/quiz-common.js',
   './js/features/doc-import.js',
   './js/features/role.js',
   './js/features/firebase-init.js',

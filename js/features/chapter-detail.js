@@ -542,13 +542,26 @@
       </div>
     `;
     const optWrap = $('#selfTestOptions');
-    item.options.forEach((opt, i) => {
-      const b = document.createElement('button');
-      b.className = 'quiz-option' + (answered && i === stAnswers[stIndex] ? ' selected' : '');
-      b.textContent = opt;
-      b.addEventListener('click', () => { stAnswers[stIndex] = i; renderSelfTestQuestion(); });
-      optWrap.appendChild(b);
-    });
+    if (getQuestionType(item) === 'text') {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'quiz-option quiz-text-input';
+      input.placeholder = 'Nhập câu trả lời...';
+      input.value = answered ? stAnswers[stIndex] : '';
+      // Ghi trực tiếp qua sự kiện input (KHÔNG gọi lại renderSelfTestQuestion() mỗi phím gõ) để khỏi
+      // mất focus/con trỏ đang gõ dở — khác với nút bấm ABCD (mỗi click là 1 hành động rời rạc, vẽ
+      // lại được ngay không sao).
+      input.addEventListener('input', () => { stAnswers[stIndex] = input.value.trim() || null; });
+      optWrap.appendChild(input);
+    } else {
+      item.options.forEach((opt, i) => {
+        const b = document.createElement('button');
+        b.className = 'quiz-option' + (answered && i === stAnswers[stIndex] ? ' selected' : '');
+        b.textContent = opt;
+        b.addEventListener('click', () => { stAnswers[stIndex] = i; renderSelfTestQuestion(); });
+        optWrap.appendChild(b);
+      });
+    }
     $('#stPrevBtn').addEventListener('click', () => { if (stIndex > 0) { stIndex--; renderSelfTestQuestion(); } });
     const nextBtn = $('#stNextBtn');
     if (nextBtn) nextBtn.addEventListener('click', () => { if (stIndex < total - 1) { stIndex++; renderSelfTestQuestion(); } });
@@ -567,13 +580,15 @@
     const total = stQuestions.length;
     let correctCount = 0;
     const reviewHtml = stQuestions.map((item, i) => {
-      const isOk = stAnswers[i] === item.correct;
+      const isOk = isQuizAnswerCorrect(item, stAnswers[i]);
       if (isOk) correctCount++;
+      const yourAnswerText = stAnswers[i] == null ? '(chưa trả lời)'
+        : (getQuestionType(item) === 'text' ? stAnswers[i] : ((item.options && item.options[stAnswers[i]]) || ''));
       return `
         <div class="quiz-review-item ${isOk ? 'ok' : 'bad'}">
           <div class="qi-q">${i + 1}. ${escapeHtml(item.q)}</div>
-          <div>Đáp án đúng: ${escapeHtml(item.options[item.correct])}</div>
-          <div class="qi-status">${isOk ? '✓ Bạn trả lời đúng' : '✗ Bạn chọn: ' + (stAnswers[i] != null ? escapeHtml(item.options[stAnswers[i]]) : '(chưa trả lời)')}</div>
+          <div>Đáp án đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>
+          <div class="qi-status">${isOk ? '✓ Bạn trả lời đúng' : '✗ Bạn chọn: ' + escapeHtml(yourAnswerText)}</div>
         </div>
       `;
     }).join('');
@@ -619,31 +634,61 @@
     }
     if (qFinished) { renderQuizResult(); return; }
     const item = effectiveQuiz[qIndex];
+    const type = getQuestionType(item);
     const answered = qAnswers[qIndex] !== null && qAnswers[qIndex] !== undefined;
     $('#quizWrap').innerHTML = `
       <div class="quiz-progress">Câu ${qIndex + 1}/${total}</div>
       <div class="quiz-question">${escapeHtml(item.q)}</div>
       <div class="quiz-options" id="quizOptions"></div>
+      ${type === 'text' && answered ? `<div class="hint" style="margin:-6px 0 10px;">Đáp án đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>` : ''}
       <div class="quiz-explain ${answered ? 'show' : ''}" id="quizExplain">${escapeHtml(item.explain || '')}</div>
       <button class="btn primary block" id="quizNextBtn" style="display:${answered ? 'flex' : 'none'};">${qIndex === total - 1 ? 'Xem kết quả' : 'Câu tiếp →'}</button>
     `;
     const optWrap = $('#quizOptions');
-    item.options.forEach((opt, i) => {
-      const b = document.createElement('button');
-      b.className = 'quiz-option';
-      b.textContent = opt;
+    if (type === 'text') {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'quiz-option quiz-text-input';
+      input.placeholder = 'Nhập câu trả lời...';
+      input.value = answered ? qAnswers[qIndex] : '';
+      optWrap.appendChild(input);
       if (answered) {
-        b.disabled = true;
-        if (i === item.correct) b.classList.add('correct');
-        else if (i === qAnswers[qIndex]) b.classList.add('wrong');
+        input.disabled = true;
+        input.classList.add(isQuizAnswerCorrect(item, qAnswers[qIndex]) ? 'correct' : 'wrong');
+      } else {
+        const checkBtn = document.createElement('button');
+        checkBtn.type = 'button';
+        checkBtn.className = 'btn primary block';
+        checkBtn.style.marginTop = '8px';
+        checkBtn.textContent = 'Kiểm tra';
+        const submit = () => {
+          const val = input.value.trim();
+          if (!val) return;
+          qAnswers[qIndex] = val;
+          renderQuiz();
+        };
+        checkBtn.addEventListener('click', submit);
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+        optWrap.appendChild(checkBtn);
       }
-      b.addEventListener('click', () => {
-        if (qAnswers[qIndex] !== null && qAnswers[qIndex] !== undefined) return;
-        qAnswers[qIndex] = i;
-        renderQuiz();
+    } else {
+      item.options.forEach((opt, i) => {
+        const b = document.createElement('button');
+        b.className = 'quiz-option';
+        b.textContent = opt;
+        if (answered) {
+          b.disabled = true;
+          if (i === item.correct) b.classList.add('correct');
+          else if (i === qAnswers[qIndex]) b.classList.add('wrong');
+        }
+        b.addEventListener('click', () => {
+          if (qAnswers[qIndex] !== null && qAnswers[qIndex] !== undefined) return;
+          qAnswers[qIndex] = i;
+          renderQuiz();
+        });
+        optWrap.appendChild(b);
       });
-      optWrap.appendChild(b);
-    });
+    }
     if (answered) {
       $('#quizNextBtn').addEventListener('click', () => {
         if (qIndex < total - 1) { qIndex++; renderQuiz(); }
@@ -656,13 +701,15 @@
     const total = effectiveQuiz.length;
     let correctCount = 0;
     const reviewHtml = effectiveQuiz.map((item, i) => {
-      const isOk = qAnswers[i] === item.correct;
+      const isOk = isQuizAnswerCorrect(item, qAnswers[i]);
       if (isOk) correctCount++;
+      const yourAnswerText = qAnswers[i] == null ? '(chưa trả lời)'
+        : (getQuestionType(item) === 'text' ? qAnswers[i] : ((item.options && item.options[qAnswers[i]]) || ''));
       return `
         <div class="quiz-review-item ${isOk ? 'ok' : 'bad'}">
           <div class="qi-q">${i + 1}. ${escapeHtml(item.q)}</div>
-          <div>Đáp án đúng: ${escapeHtml(item.options[item.correct])}</div>
-          <div class="qi-status">${isOk ? '✓ Bạn trả lời đúng' : '✗ Bạn chọn: ' + (qAnswers[i] != null ? escapeHtml(item.options[qAnswers[i]]) : '(chưa trả lời)')}</div>
+          <div>Đáp án đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>
+          <div class="qi-status">${isOk ? '✓ Bạn trả lời đúng' : '✗ Bạn chọn: ' + escapeHtml(yourAnswerText)}</div>
         </div>
       `;
     }).join('');
@@ -692,7 +739,7 @@
     box.innerHTML = items.length ? items.map((item) => `
       <div class="quiz-review-item" style="text-align:left;">
         <div class="qi-q">${escapeHtml(item.q)}</div>
-        <div class="hint">Đúng: ${escapeHtml(item.options[item.correct])}</div>
+        <div class="hint">[${QUIZ_TYPE_LABELS[getQuestionType(item)]}] Đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>
         <div class="hint" style="margin-top:4px;">
           ${item.kind === 'builtin' ? (item.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
           · <a href="#" class="quiz-edit" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">Sửa</a>
@@ -754,12 +801,27 @@
     });
   }
 
+  // Hiện đúng khối field tương ứng loại câu hỏi đang chọn (ABCD / Đúng-Sai / Nhập đáp án) — 3 khối
+  // luôn cùng tồn tại trong DOM, chỉ ẩn/hiện chứ không dựng lại, để không mất dữ liệu đã gõ nếu người
+  // dùng đổi qua đổi lại loại trước khi lưu.
+  function updateQuizFormTypeFields() {
+    const type = $('#quizFormType').value;
+    $('#quizFormAbcdFields').style.display = type === 'abcd' ? 'block' : 'none';
+    $('#quizFormTfFields').style.display = type === 'truefalse' ? 'block' : 'none';
+    $('#quizFormTextFields').style.display = type === 'text' ? 'block' : 'none';
+  }
+
   function openQuizForm(existing) {
     const box = $('#quizForm');
     box.style.display = 'block';
     $('#quizFormQ').value = existing ? existing.q : '';
-    [0, 1, 2, 3].forEach((i) => { $('#quizFormOpt' + i).value = existing ? existing.options[i] : ''; });
-    $$('input[name="quizFormCorrect"]').forEach((r, i) => { r.checked = existing ? existing.correct === i : i === 0; });
+    const type = existing ? getQuestionType(existing) : 'abcd';
+    $('#quizFormType').value = type;
+    updateQuizFormTypeFields();
+    [0, 1, 2, 3].forEach((i) => { $('#quizFormOpt' + i).value = (existing && type === 'abcd') ? existing.options[i] : ''; });
+    $$('input[name="quizFormCorrect"]').forEach((r, i) => { r.checked = (existing && type === 'abcd') ? existing.correct === i : i === 0; });
+    $$('input[name="quizFormTf"]').forEach((r, i) => { r.checked = (existing && type === 'truefalse') ? existing.correct === i : i === 0; });
+    $('#quizFormAccepted').value = (existing && type === 'text') ? (existing.acceptedAnswers || '') : '';
     $('#quizFormExplain').value = existing ? (existing.explain || '') : '';
     box.dataset.kind = existing ? existing.kind : 'custom';
     box.dataset.id = (existing && existing.kind === 'custom') ? existing.id : '';
@@ -770,29 +832,48 @@
   function initQuizManager() {
     if (!owner.isOwner) return;
 
+    $('#quizFormType').innerHTML = QUIZ_TYPE_OPTIONS.map((o) => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('');
+    $('#quizFormType').addEventListener('change', updateQuizFormTypeFields);
+
     $('#quizFormAddBtn').addEventListener('click', () => openQuizForm(null));
     $('#quizFormCancel').addEventListener('click', () => { $('#quizForm').style.display = 'none'; });
     $('#quizFormSave').addEventListener('click', async () => {
       const q = $('#quizFormQ').value.trim();
-      const options = [0, 1, 2, 3].map((i) => $('#quizFormOpt' + i).value.trim());
-      const correctRadio = $$('input[name="quizFormCorrect"]').find((r) => r.checked);
-      const correct = correctRadio ? parseInt(correctRadio.value, 10) : 0;
+      const type = $('#quizFormType').value;
       const explain = $('#quizFormExplain').value.trim();
-      if (!q || options.some((o) => !o)) return;
+      if (!q) return;
+
+      let question;
+      if (type === 'truefalse') {
+        const tfRadio = $$('input[name="quizFormTf"]').find((r) => r.checked);
+        const correct = tfRadio ? parseInt(tfRadio.value, 10) : 0;
+        question = { q, type: 'truefalse', options: ['Đúng', 'Sai'], correct, explain };
+      } else if (type === 'text') {
+        const acceptedAnswers = $('#quizFormAccepted').value.trim();
+        if (!acceptedAnswers) return;
+        question = { q, type: 'text', acceptedAnswers, explain };
+      } else {
+        const options = [0, 1, 2, 3].map((i) => $('#quizFormOpt' + i).value.trim());
+        if (options.some((o) => !o)) return;
+        const correctRadio = $$('input[name="quizFormCorrect"]').find((r) => r.checked);
+        const correct = correctRadio ? parseInt(correctRadio.value, 10) : 0;
+        question = { q, type: 'abcd', options, correct, explain };
+      }
+
       const box = $('#quizForm');
       const kind = box.dataset.kind;
       try {
         if (kind === 'builtin') {
           const index = box.dataset.index;
-          await setChapterMeta(chapter.id, { ['quizOverrides.' + index]: { q, options, correct, explain } });
-          chapterMeta.quizOverrides = Object.assign({}, chapterMeta.quizOverrides, { [index]: { q, options, correct, explain } });
+          await setChapterMeta(chapter.id, { ['quizOverrides.' + index]: question });
+          chapterMeta.quizOverrides = Object.assign({}, chapterMeta.quizOverrides, { [index]: question });
         } else if (box.dataset.id) {
-          await updateCustomQuiz(box.dataset.id, { q, options, correct, explain });
+          await updateCustomQuiz(box.dataset.id, question);
           const it = customQuizCache.find((x) => x.id === box.dataset.id);
-          if (it) { it.q = q; it.options = options; it.correct = correct; it.explain = explain; }
+          if (it) Object.assign(it, question);
         } else {
-          const id = await addCustomQuiz(chapter.id, { q, options, correct, explain });
-          customQuizCache.push({ id, chapterId: chapter.id, q, options, correct, explain });
+          const id = await addCustomQuiz(chapter.id, question);
+          customQuizCache.push(Object.assign({ id, chapterId: chapter.id }, question));
         }
         $('#quizForm').style.display = 'none';
         rebuildEffectiveQuiz();

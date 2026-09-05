@@ -140,6 +140,10 @@
           <input type="text" id="quizFormQ" />
         </div>
         <div class="field">
+          <label for="quizFormType">Loại câu hỏi</label>
+          <select id="quizFormType"></select>
+        </div>
+        <div class="field" id="quizFormAbcdFields">
           <label>4 đáp án — chọn đáp án đúng</label>
           <div style="display:flex;flex-direction:column;gap:8px;">
             <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="0" checked /><input type="text" id="quizFormOpt0" placeholder="Đáp án A" style="flex:1;" /></div>
@@ -147,6 +151,17 @@
             <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="2" /><input type="text" id="quizFormOpt2" placeholder="Đáp án C" style="flex:1;" /></div>
             <div style="display:flex;gap:8px;align-items:center;"><input type="radio" name="quizFormCorrect" value="3" /><input type="text" id="quizFormOpt3" placeholder="Đáp án D" style="flex:1;" /></div>
           </div>
+        </div>
+        <div class="field" id="quizFormTfFields" style="display:none;">
+          <label>Đáp án đúng</label>
+          <div style="display:flex;gap:16px;align-items:center;">
+            <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="quizFormTf" value="0" checked />Đúng</label>
+            <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="quizFormTf" value="1" />Sai</label>
+          </div>
+        </div>
+        <div class="field" id="quizFormTextFields" style="display:none;">
+          <label for="quizFormAccepted">Đáp án chấp nhận (nhiều đáp án cách nhau bởi dấu "|")</label>
+          <input type="text" id="quizFormAccepted" placeholder="VD: NaCl | natri clorua" />
         </div>
         <div class="field">
           <label for="quizFormExplain">Giải thích (tuỳ chọn)</label>
@@ -163,8 +178,8 @@
     <div class="card" id="quizTxtCard" style="display:none;">
       <h2><span class="icon">📄</span>Nạp file câu hỏi (.txt)</h2>
       <div class="hint">
-        <strong>Định dạng mẫu:</strong><br>
-        <code style="display:block;background:var(--bg-soft);padding:8px;border-radius:8px;margin-top:6px;white-space:pre-wrap;">Câu hỏi ở đây?
+        <strong>Định dạng mẫu — 3 dạng câu hỏi, mỗi câu cách nhau 1 dòng trống:</strong><br>
+        <code style="display:block;background:var(--bg-soft);padding:8px;border-radius:8px;margin-top:6px;white-space:pre-wrap;">Câu hỏi ABCD ở đây?
 A) Đáp án A
 B) Đáp án B
 C) Đáp án C
@@ -172,7 +187,11 @@ D) Đáp án D
 Đúng: B
 Giải thích: nội dung (tuỳ chọn)
 
-(Để trống 1 dòng rồi viết câu tiếp theo...)</code>
+Câu hỏi Đúng/Sai ở đây?
+Đúng: Đúng
+
+Câu hỏi Nhập đáp án ở đây?
+Đáp án: đáp án đúng | biến thể khác cũng chấp nhận</code>
       </div>
       <input type="file" id="quizBulkFileInput" accept=".txt" style="display:none;" />
       <button class="btn primary block" id="quizBulkBtn" style="margin-top:10px;">+ Chọn file .txt</button>
@@ -181,7 +200,7 @@ Giải thích: nội dung (tuỳ chọn)
 
     <div class="card" id="quizExcelCard" style="display:none;">
       <h2><span class="icon">📊</span>Nạp file Excel/CSV</h2>
-      <div class="hint">Theo đúng 7 cột thứ tự: Câu hỏi, Đáp án A, B, C, D, Đáp án đúng (A/B/C/D), Giải thích. Tải mẫu ở màn hình trước, mở bằng Excel/Google Sheets, điền theo hàng, lưu lại rồi nạp lên.</div>
+      <div class="hint">Theo đúng 8 cột thứ tự: Câu hỏi, Đáp án A, B, C, D, Đáp án đúng, Giải thích, Loại câu. Cột "Loại câu" để trống = ABCD (4 cột đáp án A-D bắt buộc điền); ghi "DungSai" hoặc "TuLuan" thì để trống 4 cột đáp án A-D, cột "Đáp án đúng" ghi "Đúng"/"Sai" (Đúng-Sai) hoặc đáp án chấp nhận, nhiều đáp án cách nhau bởi "|" (Tự luận). Tải mẫu ở màn hình trước, mở bằng Excel/Google Sheets, điền theo hàng, lưu lại rồi nạp lên.</div>
       <input type="file" id="quizExcelFileInput" accept=".xlsx,.csv" style="display:none;" />
       <button class="btn primary block" id="quizExcelBtn" style="margin-top:10px;">+ Chọn file Excel/CSV</button>
       <div id="quizExcelResult"></div>
@@ -245,6 +264,7 @@ Giải thích: nội dung (tuỳ chọn)
 <script src="../js/features/quiz-template.js"></script>
 <script src="../js/features/doc-import.js"></script>
 <script src="../js/features/quiz-excel.js"></script>
+<script src="../js/features/quiz-common.js"></script>
 <script src="../js/features/chapter-detail.js"></script>
 </body>
 </html>

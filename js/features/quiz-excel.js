@@ -1,9 +1,14 @@
 // Nạp hàng loạt câu hỏi trắc nghiệm từ file Excel (.xlsx) hoặc CSV theo mẫu cột cố định.
 // Đọc .xlsx bằng cách tái sử dụng bộ đọc ZIP/XML đã có trong doc-import.js (readZipEntryText) — không cần thư viện ngoài.
 //
-// Mẫu cột (theo đúng thứ tự): Câu hỏi | Đáp án A | Đáp án B | Đáp án C | Đáp án D | Đáp án đúng (A/B/C/D) | Giải thích
+// Mẫu cột (theo đúng thứ tự): Câu hỏi | Đáp án A | Đáp án B | Đáp án C | Đáp án D | Đáp án đúng | Giải thích | Loại câu
+//
+// Cột "Loại câu" (CUỐI CÙNG, không chèn giữa) — để trống = ABCD (giữ nguyên tương thích file mẫu CŨ
+// tải từ trước, thiếu hẳn cột này). Ghi "DungSai" -> để trống 4 cột đáp án A-D, cột "Đáp án đúng" ghi
+// "Đúng" hoặc "Sai". Ghi "TuLuan" -> để trống 4 cột đáp án A-D, cột "Đáp án đúng" ghi đáp án chấp
+// nhận được (nhiều đáp án cách nhau bởi dấu "|").
 
-const QUIZ_TEMPLATE_HEADERS = ['Câu hỏi', 'Đáp án A', 'Đáp án B', 'Đáp án C', 'Đáp án D', 'Đáp án đúng (A/B/C/D)', 'Giải thích (tuỳ chọn)'];
+const QUIZ_TEMPLATE_HEADERS = ['Câu hỏi', 'Đáp án A', 'Đáp án B', 'Đáp án C', 'Đáp án D', 'Đáp án đúng', 'Giải thích (tuỳ chọn)', 'Loại câu (để trống = ABCD, hoặc ghi DungSai / TuLuan)'];
 
 function csvEscapeField(value) {
   const s = String(value == null ? '' : value);
@@ -14,8 +19,10 @@ function csvEscapeField(value) {
 function downloadQuizTemplateCSV() {
   const rows = [
     QUIZ_TEMPLATE_HEADERS,
-    ['Nguyên tử trung hoà về điện vì:', 'Số proton = số neutron', 'Số electron = số neutron', 'Số electron = số proton', 'Nguyên tử không có electron', 'C', 'Điện tích proton và electron cân bằng khi số lượng hai loại hạt bằng nhau.'],
-    ['Kim loại nào ở thể lỏng tại nhiệt độ thường?', 'Sắt', 'Thuỷ ngân', 'Nhôm', 'Kẽm', 'B', '']
+    ['Nguyên tử trung hoà về điện vì:', 'Số proton = số neutron', 'Số electron = số neutron', 'Số electron = số proton', 'Nguyên tử không có electron', 'C', 'Điện tích proton và electron cân bằng khi số lượng hai loại hạt bằng nhau.', ''],
+    ['Kim loại nào ở thể lỏng tại nhiệt độ thường?', 'Sắt', 'Thuỷ ngân', 'Nhôm', 'Kẽm', 'B', '', ''],
+    ['NaOH là 1 bazơ mạnh.', '', '', '', '', 'Đúng', '', 'DungSai'],
+    ['Công thức hoá học của muối ăn?', '', '', '', '', 'NaCl | natri clorua', '', 'TuLuan']
   ];
   const csv = rows.map((r) => r.map(csvEscapeField).join(',')).join('\r\n');
   // \uFEFF (BOM) để Excel nhận đúng bảng mã UTF-8, không lỗi font tiếng Việt khi mở lại.
@@ -110,6 +117,15 @@ async function readXlsxGrid(arrayBuffer) {
   return grid.filter((r) => r.some((c) => (c || '').toString().trim() !== ''));
 }
 
+// Chuẩn hoá cột "Loại câu" (cột cuối, có thể thiếu hẳn ở file mẫu CŨ) — thiếu/để trống/không nhận
+// diện được -> mặc định "abcd" (giữ nguyên tương thích ngược hoàn toàn).
+function normalizeQuizTypeCell(raw) {
+  const v = (raw || '').toString().trim().toLowerCase().replace(/[\s/]+/g, '');
+  if (['dungsai', 'đúngsai', 'truefalse'].includes(v)) return 'truefalse';
+  if (['tuluan', 'tựluận', 'nhậpđápán', 'nhapdapan', 'text'].includes(v)) return 'text';
+  return 'abcd';
+}
+
 function rowsToQuizQuestions(rows) {
   if (rows.length < 2) throw new Error('File chưa có dữ liệu câu hỏi (chỉ thấy dòng tiêu đề hoặc trống).');
   const dataRows = rows.slice(1); // bỏ dòng tiêu đề
@@ -120,15 +136,33 @@ function rowsToQuizQuestions(rows) {
     const q = (row[0] || '').toString().trim();
     if (!q && row.every((c) => !(c || '').toString().trim())) return; // dòng trống hoàn toàn -> bỏ qua
     if (!q) { errors.push(`Dòng ${lineNo}: thiếu nội dung câu hỏi`); return; }
+    const correctRaw = (row[5] || '').toString().trim();
+    const explain = (row[6] || '').toString().trim();
+    const type = normalizeQuizTypeCell(row[7]);
+
+    if (type === 'text') {
+      if (!correctRaw) { errors.push(`Dòng ${lineNo}: thiếu đáp án đúng ở cột "Đáp án đúng" cho câu Nhập đáp án`); return; }
+      questions.push({ q, type: 'text', acceptedAnswers: correctRaw, explain });
+      return;
+    }
+    if (type === 'truefalse') {
+      const v = correctRaw.toLowerCase();
+      let correct = -1;
+      if (['đúng', 'dung', 'true', 'd'].includes(v)) correct = 0;
+      else if (['sai', 'false', 's'].includes(v)) correct = 1;
+      if (correct === -1) { errors.push(`Dòng ${lineNo}: cột "Đáp án đúng" phải ghi Đúng hoặc Sai (đang là "${correctRaw || '(trống)'}")`); return; }
+      questions.push({ q, type: 'truefalse', options: ['Đúng', 'Sai'], correct, explain });
+      return;
+    }
+
     const options = [1, 2, 3, 4].map((i) => (row[i] || '').toString().trim());
     if (options.some((o) => !o)) { errors.push(`Dòng ${lineNo}: thiếu 1 trong 4 đáp án A/B/C/D`); return; }
-    const correctRaw = (row[5] || '').toString().trim().toUpperCase();
+    const correctUpper = correctRaw.toUpperCase();
     let correct = -1;
-    if (/^[A-D]$/.test(correctRaw)) correct = correctRaw.charCodeAt(0) - 65;
-    else if (/^[1-4]$/.test(correctRaw)) correct = parseInt(correctRaw, 10) - 1;
+    if (/^[A-D]$/.test(correctUpper)) correct = correctUpper.charCodeAt(0) - 65;
+    else if (/^[1-4]$/.test(correctUpper)) correct = parseInt(correctUpper, 10) - 1;
     if (correct === -1) { errors.push(`Dòng ${lineNo}: cột "Đáp án đúng" phải là A/B/C/D hoặc 1-4 (đang là "${correctRaw || '(trống)'}")`); return; }
-    const explain = (row[6] || '').toString().trim();
-    questions.push({ q, options, correct, explain });
+    questions.push({ q, type: 'abcd', options, correct, explain });
   });
   return { questions, errors };
 }

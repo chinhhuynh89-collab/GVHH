@@ -85,7 +85,8 @@
     const n = exam.questions.length;
     answers = new Array(n).fill(null);
     questionOrder = shuffleIndices(n);
-    optionOrder = exam.questions.map((q) => shuffleIndices(q.options.length));
+    // Câu "Nhập đáp án" không có options để xáo (mảng rỗng, vô hại — không dùng tới ở renderQuestion).
+    optionOrder = exam.questions.map((q) => shuffleIndices(getQuestionType(q) === 'text' ? 0 : q.options.length));
     qIndex = 0;
     startedAt = Date.now();
     renderQuestion();
@@ -143,13 +144,25 @@
       </div>
     `;
     const optWrap = $('#examOptions');
-    dispOptions.forEach((origOptIdx) => {
-      const b = document.createElement('button');
-      b.className = 'quiz-option' + (answers[origIdx] === origOptIdx ? ' selected' : '');
-      b.textContent = item.options[origOptIdx];
-      b.addEventListener('click', () => { answers[origIdx] = origOptIdx; renderQuestion(); });
-      optWrap.appendChild(b);
-    });
+    if (getQuestionType(item) === 'text') {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'quiz-option quiz-text-input';
+      input.placeholder = 'Nhập câu trả lời...';
+      input.value = answers[origIdx] || '';
+      // Ghi trực tiếp qua sự kiện input, KHÔNG gọi lại renderQuestion() mỗi phím gõ — tránh mất
+      // focus/con trỏ đang gõ dở (khác nút bấm ABCD, mỗi click là 1 hành động rời rạc).
+      input.addEventListener('input', () => { answers[origIdx] = input.value.trim() || null; });
+      optWrap.appendChild(input);
+    } else {
+      dispOptions.forEach((origOptIdx) => {
+        const b = document.createElement('button');
+        b.className = 'quiz-option' + (answers[origIdx] === origOptIdx ? ' selected' : '');
+        b.textContent = item.options[origOptIdx];
+        b.addEventListener('click', () => { answers[origIdx] = origOptIdx; renderQuestion(); });
+        optWrap.appendChild(b);
+      });
+    }
     updateTimer();
     if ($('#examPrevBtn')) $('#examPrevBtn').addEventListener('click', () => { qIndex--; renderQuestion(); });
     if ($('#examNextBtn')) $('#examNextBtn').addEventListener('click', () => { qIndex++; renderQuestion(); });
@@ -174,7 +187,7 @@
       const answerKey = answerDoc.exists ? (answerDoc.data().answers || []) : [];
 
       let correctCount = 0;
-      answerKey.forEach((a, i) => { if (answers[i] === a.correct) correctCount++; });
+      answerKey.forEach((a, i) => { if (isQuizAnswerCorrect(a, answers[i])) correctCount++; });
       const total = answerKey.length;
       const score = total ? Math.round((correctCount / total) * 100) : 0;
 
