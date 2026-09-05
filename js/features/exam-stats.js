@@ -38,11 +38,21 @@
       box.innerHTML = '<p class="hint">⏳ Đang tải kết quả...</p>';
       try {
         const { db } = ensureFirebase();
-        const snap = await db.collection('submissions').where('examId', '==', examId).get();
+        // Tải kèm câu hỏi (exams) + đáp án đúng (examAnswers) CÙNG LÚC với danh sách bài nộp — chỉ 2
+        // lượt đọc thêm cho CẢ đợt (không phải từng học sinh) — để bấm "Xem bài làm" của bất kỳ em nào
+        // cũng hiện được ngay, không cần tải thêm mỗi lần bấm.
+        const [snap, examDoc, answerDoc] = await Promise.all([
+          db.collection('submissions').where('examId', '==', examId).get(),
+          db.collection('exams').doc(examId).get(),
+          db.collection('examAnswers').doc(examId).get()
+        ]);
+        const reviewItems = (examDoc.exists && answerDoc.exists)
+          ? mergeExamAndAnswerKey(examDoc.data().questions, answerDoc.data().answers)
+          : null;
         const results = snap.docs.map((d) => d.data())
           .map((s) => ({
             studentName: s.studentName, score: s.score, correctCount: s.correctCount, total: s.total,
-            startedAt: s.startedAt, submittedAt: s.submittedAt
+            startedAt: s.startedAt, submittedAt: s.submittedAt, answers: s.answers
           }))
           .sort((a, b) => b.score - a.score);
 
@@ -69,9 +79,27 @@
               <div class="qi-q">${i + 1}. ${escapeHtml(r.studentName)} — ${toScore10(r.score).toFixed(1)} điểm</div>
               <div>${r.correctCount}/${r.total} câu đúng (${r.score}%)</div>
               <div class="hint">Bắt đầu: ${r.startedAt ? new Date(r.startedAt).toLocaleTimeString('vi-VN') : '—'} · Nộp lúc: ${new Date(r.submittedAt).toLocaleTimeString('vi-VN')} (${new Date(r.submittedAt).toLocaleDateString('vi-VN')})</div>
+              ${reviewItems ? `
+                <button class="btn stats-review-toggle" type="button" data-idx="${i}" style="margin-top:6px;">👁️ Xem bài làm</button>
+                <div class="stats-review-panel" id="statsReview-${i}" style="display:none;margin-top:8px;"></div>
+              ` : ''}
             </div>
           `).join('')}
         `;
+        if (reviewItems) {
+          $$('.stats-review-toggle', box).forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const idx = parseInt(btn.dataset.idx, 10);
+              const panel = $('#statsReview-' + idx, box);
+              const opening = panel.style.display === 'none';
+              panel.style.display = opening ? 'block' : 'none';
+              btn.textContent = opening ? '👁️ Ẩn bài làm' : '👁️ Xem bài làm';
+              if (!opening || panel.dataset.loaded) return;
+              panel.innerHTML = buildSubmissionReviewHtml(reviewItems, results[idx].answers);
+              panel.dataset.loaded = '1';
+            });
+          });
+        }
       } catch (e) {
         box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
       }

@@ -278,6 +278,32 @@
           ${rows.map(renderHistoryRow).join('')}
         </div>
       `;
+      // Xem lại chi tiết bài làm ĐÃ NỘP — tải examAnswers (đáp án đúng) CHỈ khi thật sự bấm xem (không
+      // tải trước cho mọi đợt, đỡ tốn lượt đọc Firestore nếu học sinh không xem lại), rồi ghép với
+      // exam.questions để có đủ {q, options/acceptedAnswers, correct/type} cho isQuizAnswerCorrect/
+      // formatCorrectAnswerDisplay (quiz-common.js) chấm và hiện lại đúng như lúc làm bài.
+      $$('.history-review-toggle', box).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const examId = btn.dataset.examId;
+          const panel = $('#historyReview-' + examId, box);
+          const opening = panel.style.display === 'none';
+          panel.style.display = opening ? 'block' : 'none';
+          btn.textContent = opening ? '👁️ Ẩn bài làm' : '👁️ Xem bài làm';
+          if (!opening || panel.dataset.loaded) return;
+          panel.innerHTML = '<p class="hint">⏳ Đang tải...</p>';
+          try {
+            const exam = exams.find((e) => e.examId === examId);
+            const sub = subByExamId.get(examId);
+            const answerDoc = await db.collection('examAnswers').doc(examId).get();
+            const answerKey = answerDoc.exists ? (answerDoc.data().answers || []) : [];
+            const items = mergeExamAndAnswerKey(exam.questions, answerKey);
+            panel.innerHTML = buildSubmissionReviewHtml(items, sub.answers);
+            panel.dataset.loaded = '1';
+          } catch (e) {
+            panel.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
+          }
+        });
+      });
     } catch (e) {
       box.innerHTML = `<div class="result-box show error">⚠️ Không tải được lịch sử kiểm tra: ${escapeHtml(e.message)}</div>`;
     }
@@ -291,6 +317,8 @@
           <div class="qi-q">✅ ${title}</div>
           <div>${r.status.correctCount}/${r.status.total} câu đúng — <strong>${r.status.score10.toFixed(1)} điểm</strong></div>
           <div class="hint">Thời gian làm bài: ${r.status.duration} · Nộp lúc: ${r.status.submittedAt}</div>
+          <button class="btn history-review-toggle" type="button" data-exam-id="${escapeHtml(r.exam.examId)}" style="margin-top:6px;">👁️ Xem bài làm</button>
+          <div class="history-review-panel" id="historyReview-${escapeHtml(r.exam.examId)}" style="display:none;margin-top:8px;"></div>
         </div>
       `;
     }

@@ -59,3 +59,32 @@ function formatCorrectAnswerDisplay(item) {
   }
   return (item.options && item.options[item.correct]) || '';
 }
+
+// ---------- Xem lại 1 bài kiểm tra ĐÃ NỘP (dùng ở cả 2 phía: học sinh xem lại bài mình, giáo viên
+// xem bài của 1 học sinh cụ thể — xem exam-taker.js/exam-stats.js) ----------
+
+// "exams/{id}.questions" (câu hỏi, KHÔNG có đáp án — công khai) và "examAnswers/{id}.answers" (đáp
+// án đúng, cùng thứ tự) được TÁCH RIÊNG lúc tạo đề (xem exam-creator.js) — ghép lại đúng theo chỉ số
+// thành 1 mảng "item" đủ {q, options/acceptedAnswers, correct/type} để isQuizAnswerCorrect/
+// formatCorrectAnswerDisplay dùng được, giống hệt shape câu hỏi ở mọi nơi khác trong app.
+function mergeExamAndAnswerKey(examQuestions, answerKeyAnswers) {
+  return (examQuestions || []).map((q, i) => Object.assign({}, q, (answerKeyAnswers || [])[i] || {}));
+}
+
+// Dựng HTML xem lại từng câu (đúng/sai + đáp án đúng + đã chọn gì) — CÙNG 1 khuôn dùng ở mọi nơi xem
+// lại bài kiểm tra, tránh viết lặp lại logic này (đã từng lặp 3-4 lần độc lập trước khi có file này).
+function buildSubmissionReviewHtml(items, answers) {
+  return items.map((item, i) => {
+    const answer = (answers || [])[i];
+    const isOk = isQuizAnswerCorrect(item, answer);
+    const yourAnswerText = answer == null ? '(chưa trả lời)'
+      : (getQuestionType(item) === 'text' ? answer : ((item.options && item.options[answer]) || ''));
+    return `
+      <div class="quiz-review-item ${isOk ? 'ok' : 'bad'}">
+        <div class="qi-q">${i + 1}. ${escapeHtml(item.q)}</div>
+        <div>Đáp án đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>
+        <div class="qi-status">${isOk ? '✓ Trả lời đúng' : '✗ Đã chọn: ' + escapeHtml(yourAnswerText)}</div>
+      </div>
+    `;
+  }).join('');
+}
