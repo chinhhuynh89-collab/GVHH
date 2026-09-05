@@ -248,13 +248,20 @@ async function bulkImportProvisionedStudents(groupCode, rows, onProgress) {
 // ---------- Mẫu file nạp danh sách + xuất file mã ----------
 const STUDENT_IMPORT_TEMPLATE_HEADERS = ['Họ và tên', 'Trường', 'Lớp', 'Địa chỉ', 'Số điện thoại'];
 
+const STUDENT_IMPORT_TEMPLATE_ROWS = [
+  STUDENT_IMPORT_TEMPLATE_HEADERS,
+  ['Nguyễn Văn A', 'THCS Nguyễn Trãi', '6A1', '12 Lê Lợi, Quy Nhơn', '0912345678'],
+  ['Trần Thị B', 'THCS Nguyễn Trãi', '6A1', '45 Trần Hưng Đạo, Quy Nhơn', '0987654321']
+];
+
+// File .xlsx thật — KHÔNG bao giờ gặp lỗi mất dấu tiếng Việt do bảng mã ANSI như .csv (xem doc-import.js:
+// buildXlsxBlob). Đây là lựa chọn mặc định khuyên dùng; giữ lại bản .csv bên dưới cho ai vẫn muốn dùng.
+function downloadStudentImportTemplateXLSX() {
+  return downloadXlsx(STUDENT_IMPORT_TEMPLATE_ROWS, 'mau-nap-danh-sach-hoc-sinh.xlsx');
+}
+
 function downloadStudentImportTemplateCSV() {
-  const rows = [
-    STUDENT_IMPORT_TEMPLATE_HEADERS,
-    ['Nguyễn Văn A', 'THCS Nguyễn Trãi', '6A1', '12 Lê Lợi, Quy Nhơn', '0912345678'],
-    ['Trần Thị B', 'THCS Nguyễn Trãi', '6A1', '45 Trần Hưng Đạo, Quy Nhơn', '0987654321']
-  ];
-  downloadCSV(rows, 'mau-nap-danh-sach-hoc-sinh.csv');
+  downloadCSV(STUDENT_IMPORT_TEMPLATE_ROWS, 'mau-nap-danh-sach-hoc-sinh.csv');
 }
 
 function downloadStudentCodesCSV(results, groupName) {
