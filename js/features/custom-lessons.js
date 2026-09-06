@@ -5,6 +5,7 @@
 async function addCustomLesson(chapterId, lesson) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên để thêm bài giảng.');
+  if (typeof enforceCustomChapterLimit === 'function') await enforceCustomChapterLimit(teacher.uid, chapterId);
   const { db } = ensureFirebase();
   const ref = await db.collection('teachers').doc(teacher.uid).collection('customLessons').add(
     Object.assign({ chapterId, addedAt: new Date().toISOString() }, lesson)
@@ -17,6 +18,7 @@ async function addCustomLesson(chapterId, lesson) {
 async function addCustomLessonBatch(chapterId, lessons) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên để thêm bài giảng.');
+  if (typeof enforceCustomChapterLimit === 'function') await enforceCustomChapterLimit(teacher.uid, chapterId);
   const { db } = ensureFirebase();
   const batch = db.batch();
   const col = db.collection('teachers').doc(teacher.uid).collection('customLessons');

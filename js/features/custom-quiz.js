@@ -4,6 +4,7 @@
 async function addCustomQuiz(chapterId, question) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên để thêm câu hỏi.');
+  if (typeof enforceCustomChapterLimit === 'function') await enforceCustomChapterLimit(teacher.uid, chapterId);
   const { db } = ensureFirebase();
   const ref = await db.collection('teachers').doc(teacher.uid).collection('customQuiz').add(
     Object.assign({ chapterId, addedAt: new Date().toISOString() }, question)
@@ -14,6 +15,7 @@ async function addCustomQuiz(chapterId, question) {
 async function addCustomQuizBatch(chapterId, questions) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên để nạp câu hỏi.');
+  if (typeof enforceCustomChapterLimit === 'function') await enforceCustomChapterLimit(teacher.uid, chapterId);
   const { db } = ensureFirebase();
   const batch = db.batch();
   const col = db.collection('teachers').doc(teacher.uid).collection('customQuiz');

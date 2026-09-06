@@ -471,3 +471,52 @@ async function enforceTeacherStudentLimit(teacherUid) {
     throw new Error(`Gói miễn phí chỉ được tối đa ${cfg.teacherFreeLimits.maxStudentsFree} học sinh. Vào trang "Hồ sơ" để nâng cấp gói Pro (không giới hạn).`);
   }
 }
+
+// ---------- Khoá nhóm khi vượt hạn mức miễn phí (giáo viên không gia hạn Pro) ----------
+// Nhóm THỪA = nhóm tạo SAU CÙNG (mới nhất) vượt hạn mức — sắp theo createdAt TĂNG DẦN, giữ lại N
+// nhóm ĐẦU TIÊN (cũ nhất, "maxGroupsFree"), khoá các nhóm còn lại. KHÔNG lưu trạng thái "khoá" cứng
+// vào từng nhóm — tính lại MỖI LẦN theo đúng trạng thái gói hiện tại, nên giáo viên gia hạn Pro là
+// tự mở hết ngay, không cần thao tác gì thêm. Dùng CHUNG cho cả giáo viên (trang "Nhóm học sinh" —
+// hiện khoá + chặn mở khung chi tiết) lẫn học sinh (chapter-overview.js/chapter-detail.js/
+// exam-taker.js — chặn luôn học/làm bài nếu ĐÚNG nhóm mình đang ở bị khoá).
+async function getLockedGroupCodesForTeacher(teacherUid) {
+  if (typeof getMonetizationConfig !== 'function' || !teacherUid) return new Set();
+  const cfg = await getMonetizationConfig();
+  if (!cfg.enabled) return new Set();
+  const sub = await getTeacherSubscription(teacherUid);
+  if (sub.tier === 'pro') return new Set();
+  const { db } = ensureFirebase();
+  const snap = await db.collection('groups').where('teacherUid', '==', teacherUid).get();
+  const groups = snap.docs.map((d) => d.data())
+    .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  const limit = cfg.teacherFreeLimits.maxGroupsFree;
+  const locked = new Set();
+  groups.slice(limit).forEach((g) => locked.add(g.groupCode));
+  return locked;
+}
+
+async function isGroupLockedForTeacher(teacherUid, groupCode) {
+  if (!groupCode) return false;
+  const locked = await getLockedGroupCodesForTeacher(teacherUid);
+  return locked.has(groupCode);
+}
+
+// ---------- Ẩn học sinh vượt hạn mức miễn phí (giáo viên không gia hạn Pro) ----------
+// Học sinh THỪA = học sinh vào SAU CÙNG (mới nhất) vượt hạn mức — sắp theo latestJoinedAt TĂNG DẦN
+// (vào sớm nhất trước), giữ lại N học sinh ĐẦU TIÊN. CHỈ ẩn khỏi màn hình QUẢN LÝ của giáo viên
+// (không xem/thao tác được: xếp nhóm, xoá, cấp lại mã...) — KHÁC với nhóm bị khoá ở trên, bản thân
+// học sinh đó vẫn tự đăng nhập/học/làm bài BÌNH THƯỜNG, không hề bị ảnh hưởng. Nhận sẵn "students"
+// (mảng đã gộp từ getAllStudentsForCurrentTeacher()) thay vì tự tải lại, tránh 1 lượt đọc thừa ở nơi
+// đã có sẵn danh sách.
+async function getHiddenStudentUidsForTeacher(teacherUid, students) {
+  if (typeof getMonetizationConfig !== 'function' || !teacherUid) return new Set();
+  const cfg = await getMonetizationConfig();
+  if (!cfg.enabled) return new Set();
+  const sub = await getTeacherSubscription(teacherUid);
+  if (sub.tier === 'pro') return new Set();
+  const limit = cfg.teacherFreeLimits.maxStudentsFree;
+  const sorted = students.slice().sort((a, b) => (a.latestJoinedAt || '').localeCompare(b.latestJoinedAt || ''));
+  const hidden = new Set();
+  sorted.slice(limit).forEach((s) => { if (s.studentUid) hidden.add(s.studentUid); });
+  return hidden;
+}

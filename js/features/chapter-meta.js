@@ -11,6 +11,7 @@ async function getChapterMeta(ownerUid, chapterId) {
 async function setChapterMeta(chapterId, patch) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  if (typeof enforceCustomChapterLimit === 'function') await enforceCustomChapterLimit(teacher.uid, chapterId);
   const { db } = ensureFirebase();
   await db.collection('teachers').doc(teacher.uid).collection('chapterMeta').doc(chapterId).set(patch, { merge: true });
 }

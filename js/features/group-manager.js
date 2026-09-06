@@ -12,6 +12,7 @@
   let knownStudents = []; // học sinh đã có sẵn trong danh sách (mọi nhóm) — để chọn thêm thẳng vào nhóm mới
   let openGroupId = null; // nhóm đang mở khung chi tiết (kiểu lưới nút + 1 khung nội dung, giống trang Quản trị)
   let activeExamGroupCodes = new Set(); // mã các nhóm đang có đề kiểm tra mở — xem getActiveExamGroupCodesForCurrentTeacher()
+  let lockedGroupCodes = new Set(); // mã các nhóm bị khoá do vượt hạn mức miễn phí — xem getLockedGroupCodesForTeacher()
 
   // Bấm ra ngoài (vùng nền tối) cũng đóng cửa sổ chi tiết nhóm — giống cách đóng chi tiết nguyên tố ở
   // Bảng tuần hoàn, không cần chạm đúng nút ✕.
@@ -128,8 +129,11 @@
     const menu = $('#groupMenuGrid');
     menu.innerHTML = '<p class="hint">⏳ Đang tải danh sách nhóm...</p>';
     try {
+      const teacher = getCurrentTeacher();
       groupsCache = await listGroupsForCurrentTeacher();
       activeExamGroupCodes = await getActiveExamGroupCodesForCurrentTeacher();
+      lockedGroupCodes = typeof getLockedGroupCodesForTeacher === 'function' && teacher
+        ? await getLockedGroupCodesForTeacher(teacher.uid) : new Set();
     } catch (e) {
       menu.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
       return;
@@ -140,8 +144,9 @@
       return;
     }
     menu.innerHTML = groupsCache.map((g) => `
-      <button class="btn group-menu-btn ${g.id === openGroupId ? 'has-open' : ''}" type="button" data-group-id="${g.id}">
-        ${activeExamGroupCodes.has(g.groupCode) ? '<span class="gmb-live-badge">🔴 Đang kiểm tra</span>' : ''}
+      <button class="btn group-menu-btn ${g.id === openGroupId ? 'has-open' : ''} ${lockedGroupCodes.has(g.groupCode) ? 'is-locked' : ''}" type="button" data-group-id="${g.id}">
+        ${lockedGroupCodes.has(g.groupCode) ? '<span class="gmb-live-badge" style="background:#6b7a99;">🔒 Đã khoá</span>'
+          : activeExamGroupCodes.has(g.groupCode) ? '<span class="gmb-live-badge">🔴 Đang kiểm tra</span>' : ''}
         <span class="gmb-name">${escapeHtml(g.groupName)}</span>
         <span class="gmb-code">${escapeHtml(g.groupCode)}</span>
         <span class="gmb-count">👥 ${g.studentCount} học sinh</span>
@@ -252,6 +257,27 @@
   function renderGroupPanel(groupId) {
     const g = groupsCache.find((gr) => gr.id === groupId);
     if (!g) { closeGroupPanel(); return; }
+    // Nhóm bị khoá (vượt hạn mức miễn phí, gói Pro hết hạn không gia hạn) — chặn NGAY ở đây (không
+    // chỉ ở click handler của lưới nút) vì đây là nơi DUY NHẤT thực sự vẽ khung chi tiết, dù mở qua
+    // đường nào (bấm nút lưới, hay link "?group=..." từ trang khác) cũng phải qua đây.
+    if (lockedGroupCodes.has(g.groupCode)) {
+      $('#groupSectionPanel').innerHTML = `
+        <button class="close-btn" id="groupPanelCloseBtn" type="button" aria-label="Đóng">✕</button>
+        <div class="group-detail">
+          <div class="group-detail-head">
+            <div class="group-detail-icon" style="background:linear-gradient(135deg,#6b7a99,#3d4a63);">🔒</div>
+            <div class="group-detail-head-text">
+              <div class="group-detail-meta">Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
+              <div class="group-detail-title">${escapeHtml(g.groupName)}</div>
+            </div>
+          </div>
+          <p class="hint">🔒 Nhóm này đang bị khoá vì vượt hạn mức số nhóm của gói miễn phí (gói Pro đã hết hạn/chưa gia hạn) — đây là 1 trong các nhóm tạo SAU CÙNG. Học sinh trong nhóm cũng tạm thời không học/làm bài kiểm tra được cho tới khi bạn gia hạn Pro.</p>
+          <a class="btn primary block" href="nang-cap.html">⭐ Gia hạn Pro để mở khoá nhóm này</a>
+        </div>
+      `;
+      $('#groupPanelCloseBtn').addEventListener('click', closeGroupPanel);
+      return;
+    }
     $('#groupSectionPanel').innerHTML = groupCardHtml(g);
     $('#groupPanelCloseBtn').addEventListener('click', closeGroupPanel);
     wireAddStudentToggles();

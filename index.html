@@ -1035,25 +1035,19 @@
   if (!card || !outerCard) return;
   try {
     const { db } = ensureFirebase();
-    const col = db.collection('teachers').doc(teacher.uid);
-    const [lessonsSnap, quizSnap, metaSnap, groups, examsSnap, students] = await Promise.all([
-      col.collection('customLessons').get(),
-      col.collection('customQuiz').get(),
-      col.collection('chapterMeta').get(),
+    const [chapterIds, groups, examsSnap, students] = await Promise.all([
+      // "Chương đã soạn" dùng chung getAuthoredChapterIds() (monetization.js) — cũng là hàm áp hạn
+      // mức "Tối đa số chương tự soạn" cho gói miễn phí (enforceCustomChapterLimit), tránh viết trùng
+      // logic union 3 nguồn (customLessons/customQuiz/chapterMeta).
+      typeof getAuthoredChapterIds === 'function' ? getAuthoredChapterIds(teacher.uid) : Promise.resolve(new Set()),
       typeof listGroupsForCurrentTeacher === 'function' ? listGroupsForCurrentTeacher() : Promise.resolve([]),
       db.collection('exams').where('teacherUid', '==', teacher.uid).get(),
       typeof getAllStudentsForCurrentTeacher === 'function' ? getAllStudentsForCurrentTeacher() : Promise.resolve([])
     ]);
 
-    // "Chương đã soạn" = hợp các chapterId có mặt ở bài giảng/câu hỏi tự thêm HOẶC đã sửa tiêu đề/mô
-    // tả (chapterMeta) — 1 chương chỉ tính 1 lần dù có cả 2-3 loại. "Lớp" suy ra từ TIỀN TỐ id chương
-    // gốc (VD "c10-3" -> lớp 10, xem findChapterAnywhere/curriculum.js) — chương của 1 CHƯƠNG TRÌNH
-    // RIÊNG do giáo viên tự tạo (programChapters, id ngẫu nhiên không theo mẫu "c<lớp>-...") không
-    // thuộc khối lớp nào nên không tính vào số "lớp".
-    const chapterIds = new Set();
-    lessonsSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
-    quizSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
-    metaSnap.docs.forEach((d) => chapterIds.add(d.id));
+    // "Lớp" suy ra từ TIỀN TỐ id chương gốc (VD "c10-3" -> lớp 10, xem findChapterAnywhere/
+    // curriculum.js) — chương của 1 CHƯƠNG TRÌNH RIÊNG do giáo viên tự tạo (programChapters, id ngẫu
+    // nhiên không theo mẫu "c<lớp>-...") không thuộc khối lớp nào nên không tính vào số "lớp".
     const grades = new Set();
     chapterIds.forEach((id) => {
       const m = /^c(\d+)-/.exec(id);

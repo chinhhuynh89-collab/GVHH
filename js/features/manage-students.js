@@ -235,8 +235,18 @@
       const assignedBody = $('#manageStudentsBody', panel);
 
       let students = [];
+      let hiddenCount = 0;
       try {
-        students = await getAllStudentsForCurrentTeacher();
+        const allStudents = await getAllStudentsForCurrentTeacher();
+        // Vượt hạn mức miễn phí (gói Pro hết hạn, không gia hạn) -> chỉ hiện/thao tác được đúng số
+        // học sinh miễn phí cho phép (vào sớm nhất trước), số dư ra ẨN HẲN khỏi danh sách này — bản
+        // thân các em vẫn đăng nhập/học/làm bài bình thường, chỉ là giáo viên tạm thời không quản lý
+        // được nữa cho tới khi gia hạn (xem getHiddenStudentUidsForTeacher, groups-data.js).
+        const hiddenUids = typeof getHiddenStudentUidsForTeacher === 'function'
+          ? await getHiddenStudentUidsForTeacher(user.uid, allStudents)
+          : new Set();
+        students = allStudents.filter((s) => !hiddenUids.has(s.studentUid));
+        hiddenCount = allStudents.length - students.length;
       } catch (e) {
         assignedBody.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
         return;
@@ -246,6 +256,10 @@
         assignedBody.innerHTML = '<p class="hint">Chưa có học sinh nào trong nhóm.</p>';
         return;
       }
+
+      const hiddenNoticeHtml = hiddenCount
+        ? `<div class="result-box show error" style="margin-bottom:10px;">🔒 Gói miễn phí đã hết hạn/vượt hạn mức — đang ẩn ${hiddenCount} học sinh vào sau (chỉ hiện ${students.length} học sinh vào sớm nhất). <a href="nang-cap.html">Gia hạn Pro</a> để quản lý lại toàn bộ.</div>`
+        : '';
 
       const codes = await Promise.all(students.map((s) => getAccountCode(s.studentUid)));
       // Học sinh dùng tài khoản do giáo viên cấp đã có sẵn "loginCode" (VD ABC123.07) làm mã định
@@ -458,6 +472,7 @@
       }
 
       assignedBody.innerHTML = `
+        ${hiddenNoticeHtml}
         <div class="roster-toolbar-sticky">
           <div class="field" style="margin-bottom:6px;">
             <label for="studentSearchInput">🔍 Tìm học sinh (tên, mã, SĐT)</label>

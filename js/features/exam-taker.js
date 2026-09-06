@@ -17,7 +17,7 @@
   // Bắt đăng nhập ĐÚNG tài khoản Google đã dùng lúc vào nhóm trước khi cho làm bài — nộp bài cần ghi
   // Firestore với studentUid khớp request.auth.uid (xem firestore.rules), nếu phiên đăng nhập đã hết
   // hạn (VD lâu không mở app) thì phải đăng nhập lại mới nộp bài được.
-  requireStudentAuth((user) => {
+  requireStudentAuth(async (user) => {
     if (user.uid !== membership.studentUid) {
       main.innerHTML = `
         <div class="card">
@@ -26,6 +26,21 @@
         </div>
       `;
       return;
+    }
+    // Nhóm bị khoá (vượt hạn mức số nhóm miễn phí, giáo viên chưa gia hạn Pro) — chặn làm bài kiểm
+    // tra, không riêng gì học/xem chương (chapter-overview.js/chapter-detail.js đã chặn tương tự).
+    if (membership.teacherUid && typeof isGroupLockedForTeacher === 'function') {
+      try {
+        if (await isGroupLockedForTeacher(membership.teacherUid, membership.groupCode)) {
+          main.innerHTML = `
+            <div class="card">
+              <h2><span class="icon">🔒</span>Nhóm đang bị khoá</h2>
+              <p class="hint">Nhóm của bạn đang bị khoá vì giáo viên đã vượt hạn mức số nhóm của gói miễn phí (gói Pro đã hết hạn/chưa gia hạn). Nhắn giáo viên gia hạn Pro để mở lại nhé.</p>
+            </div>
+          `;
+          return;
+        }
+      } catch (e) { /* lỗi mạng tạm thời -> coi như chưa khoá, không chặn nhầm vì 1 lần lỗi mạng */ }
     }
     startExamTaker();
   });

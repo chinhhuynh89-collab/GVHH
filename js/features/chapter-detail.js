@@ -988,6 +988,23 @@
       if (membership && membership.studentId && typeof hydrateProgressFromServer === 'function') {
         await hydrateProgressFromServer(membership.studentId);
       }
+      // Nhóm bị khoá (vượt hạn mức số nhóm miễn phí, giáo viên chưa gia hạn Pro) — chặn NGAY, không
+      // hiện bài giảng/flashcard/trắc nghiệm của nhóm đang bị khoá. Chỉ áp dụng cho HỌC SINH thật (có
+      // membership) — giáo viên xem/soạn chương của chính mình (resolveContentOwner isOwner:true bên
+      // dưới) không bị ảnh hưởng bởi khoá nhóm.
+      if (membership && membership.teacherUid && typeof isGroupLockedForTeacher === 'function') {
+        try {
+          if (await isGroupLockedForTeacher(membership.teacherUid, membership.groupCode)) {
+            document.querySelector('main').innerHTML = `
+              <div class="card">
+                <h2><span class="icon">🔒</span>Nhóm đang bị khoá</h2>
+                <p class="hint">Nhóm của bạn đang bị khoá vì giáo viên đã vượt hạn mức số nhóm của gói miễn phí (gói Pro đã hết hạn/chưa gia hạn). Nhắn giáo viên gia hạn Pro để mở lại nhé.</p>
+              </div>
+            `;
+            return;
+          }
+        } catch (e) { /* lỗi mạng tạm thời -> coi như chưa khoá, không chặn nhầm vì 1 lần lỗi mạng */ }
+      }
     }
 
     owner = isFirebaseConfigured() ? await resolveContentOwner() : { uid: null, isOwner: false };

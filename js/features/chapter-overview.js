@@ -13,7 +13,7 @@
 //   hưởng, chỉ trang này).
 
 (function () {
-  let viewerMode = 'guest'; // 'teacher' | 'group' | 'guest' | 'no-firebase'
+  let viewerMode = 'guest'; // 'teacher' | 'group' | 'guest' | 'no-firebase' | 'locked'
   let freeModeLockedByGroup = false;
   let chapterActivity = {};
   let ownPrograms = [];
@@ -98,6 +98,15 @@
     // hiện nhầm cho tài khoản MỚI trên cùng máy.
     const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
     if (!membership || !membership.groupCode) { viewerMode = 'guest'; return; }
+
+    // Nhóm bị khoá (vượt hạn mức số nhóm miễn phí, giáo viên chưa gia hạn Pro) — chặn NGAY, trước cả
+    // khi tải tiến độ/chương trình, để không lộ nội dung của nhóm đang bị khoá.
+    if (typeof isGroupLockedForTeacher === 'function' && membership.teacherUid) {
+      try {
+        if (await isGroupLockedForTeacher(membership.teacherUid, membership.groupCode)) { viewerMode = 'locked'; return; }
+      } catch (e) { /* lỗi mạng tạm thời -> coi như chưa khoá, không chặn nhầm vì 1 lần lỗi mạng */ }
+    }
+
     if (typeof hydrateProgressFromServer === 'function') await hydrateProgressFromServer(membership.studentId);
 
     try {
@@ -154,6 +163,13 @@
     gate.style.display = 'block';
     if (viewerMode === 'no-firebase') {
       gate.innerHTML = `<p class="hint">⚠️ Tính năng này chưa được giáo viên bật (chưa kết nối Firebase).</p>`;
+      return;
+    }
+    if (viewerMode === 'locked') {
+      gate.innerHTML = `
+        <h2><span class="icon">🔒</span>Nhóm đang bị khoá</h2>
+        <p class="hint">Nhóm của bạn đang bị khoá vì giáo viên đã vượt hạn mức số nhóm của gói miễn phí (gói Pro đã hết hạn/chưa gia hạn). Nhắn giáo viên gia hạn Pro để mở lại nhé.</p>
+      `;
       return;
     }
     const role = typeof getRole === 'function' ? getRole() : null;
@@ -390,7 +406,7 @@
 
   (async function init() {
     await initContext();
-    if (viewerMode === 'guest' || viewerMode === 'no-firebase') { renderGate(); return; }
+    if (viewerMode === 'guest' || viewerMode === 'no-firebase' || viewerMode === 'locked') { renderGate(); return; }
     applyHeaderTitle();
     $('#overviewWrap').style.display = 'block';
     buildTabs();

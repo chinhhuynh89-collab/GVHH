@@ -361,3 +361,38 @@ async function findTeacherUidByCode(teacherCode) {
     return snap.empty ? null : snap.docs[0].id;
   } catch (e) { return null; }
 }
+
+// ---------- Hạn mức "số chương tự soạn" (maxCustomChaptersFree) ----------
+// "Đã soạn" = có mặt ở bài giảng/câu hỏi tự thêm (customLessons/customQuiz) HOẶC đã sửa tiêu đề/mô
+// tả/ghi đè (chapterMeta) — 1 chương chỉ tính 1 lần dù có cả 2-3 loại. Y HỆT cách tính ở khối "Thống
+// kê nhanh" trang chủ (index.html) — tách ra đây để DÙNG CHUNG, tránh viết trùng logic union.
+async function getAuthoredChapterIds(teacherUid) {
+  const { db } = ensureFirebase();
+  const col = db.collection('teachers').doc(teacherUid);
+  const [lessonsSnap, quizSnap, metaSnap] = await Promise.all([
+    col.collection('customLessons').get(),
+    col.collection('customQuiz').get(),
+    col.collection('chapterMeta').get()
+  ]);
+  const chapterIds = new Set();
+  lessonsSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
+  quizSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
+  metaSnap.docs.forEach((d) => chapterIds.add(d.id));
+  return chapterIds;
+}
+
+// Gọi TRƯỚC khi ghi bài giảng/câu hỏi/ghi đè MỚI cho 1 chapterId — chỉ chặn nếu đây là chương CHƯA
+// từng soạn gì (chapterId không có trong tập đã đếm) VÀ đã đạt hạn mức; chương ĐÃ soạn rồi thì luôn
+// cho soạn thêm/sửa/xoá bình thường (không tính thêm, và không khoá ngược những gì đã có).
+async function enforceCustomChapterLimit(teacherUid, chapterId) {
+  if (typeof getMonetizationConfig !== 'function') return;
+  const cfg = await getMonetizationConfig();
+  if (!cfg.enabled) return;
+  const sub = await getTeacherSubscription(teacherUid);
+  if (sub.tier === 'pro') return;
+  const chapterIds = await getAuthoredChapterIds(teacherUid);
+  if (chapterIds.has(chapterId)) return;
+  if (chapterIds.size >= cfg.teacherFreeLimits.maxCustomChaptersFree) {
+    throw new Error(`Gói miễn phí chỉ được soạn tối đa ${cfg.teacherFreeLimits.maxCustomChaptersFree} chương (bài giảng/câu hỏi tự thêm/tiêu đề-mô tả riêng). Vào trang "Hồ sơ" để nâng cấp gói Pro (không giới hạn).`);
+  }
+}
