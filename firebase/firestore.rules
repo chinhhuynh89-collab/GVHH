@@ -292,5 +292,17 @@ service cloud.firestore {
       allow read: if true;
       allow write: if request.auth != null && (request.auth.uid == teacherUid || isAdmin());
     }
+
+    // ---------- Đề xuất/góp ý/báo lỗi từ người dùng (xem js/features/feedback.js) ----------
+    // Ai đã đăng nhập (giáo viên lẫn học sinh) đều gửi được — chỉ tạo được đúng bản ghi của MÌNH
+    // (uid khớp), không sửa/xoá được sau khi gửi (tránh sửa lại nội dung admin đã đọc). CHỈ admin đọc
+    // được — nội dung có thể riêng tư (than phiền/góp ý về trải nghiệm cá nhân); admin sửa được để
+    // đánh dấu đã xử lý (status), xoá được để dọn spam.
+    match /feedback/{id} {
+      allow read: if isAdmin();
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.uid
+                    && request.resource.data.keys().hasAll(['uid', 'role', 'name', 'code', 'category', 'content', 'status', 'createdAt']);
+      allow update, delete: if isAdmin();
+    }
   }
 }

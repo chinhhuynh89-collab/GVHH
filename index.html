@@ -320,6 +320,7 @@
 <script src="js/features/teacher-student-accounts.js"></script>
 <script src="js/features/join-group.js"></script>
 <script src="js/features/groups-data.js"></script>
+<script src="js/features/feedback.js"></script>
 <script src="js/features/teacher-exam-monitor.js"></script>
 <script src="js/features/branding.js"></script>
 <script>
@@ -545,6 +546,23 @@
           <div class="result-box" id="changeStudentPasswordResult"></div>
         </div>
       ` : ''}
+      <button class="btn block" id="topFeedbackToggleBtn" type="button" style="margin-top:8px;">📝 Đề xuất/góp ý</button>
+      <div id="topFeedbackForm" style="display:none;margin-top:10px;text-align:left;">
+        <div class="field">
+          <label for="topFeedbackCategory">Loại góp ý</label>
+          <select id="topFeedbackCategory">
+            <option value="suggestion">💡 Góp ý chung</option>
+            <option value="feature">✨ Đề xuất tính năng mới</option>
+            <option value="bug">🐛 Báo lỗi</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="topFeedbackContent">Nội dung</label>
+          <textarea id="topFeedbackContent" rows="4" placeholder="Mô tả cụ thể ý kiến/tính năng mong muốn/lỗi bạn gặp phải..."></textarea>
+        </div>
+        <button class="btn primary block" id="topFeedbackSubmitBtn" type="button">Gửi</button>
+        <div class="result-box" id="topFeedbackResult"></div>
+      </div>
     `;
     $('#topAuthActionBtn').addEventListener('click', async () => {
       const actionBtn = $('#topAuthActionBtn');
@@ -584,6 +602,52 @@
         }
       });
     }
+
+    // Đề xuất/góp ý/báo lỗi — bất kỳ ai đã đăng nhập cũng gửi được (không riêng tài khoản mã học
+    // sinh như đổi mật khẩu ở trên). Tự dò tên/mã đúng theo vai trò đang đăng nhập để admin dễ nhận
+    // ra ai gửi (giáo viên: tên+mã hiển thị trong hồ sơ; học sinh: đúng tên/mã đã đăng ký với giáo
+    // viên, xem getVerifiedMembership).
+    $('#topFeedbackToggleBtn').addEventListener('click', () => {
+      const form = $('#topFeedbackForm');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    });
+    $('#topFeedbackSubmitBtn').addEventListener('click', async () => {
+      const btn = $('#topFeedbackSubmitBtn');
+      const box = $('#topFeedbackResult');
+      const content = $('#topFeedbackContent').value.trim();
+      const category = $('#topFeedbackCategory').value;
+      if (!content) { showResult(box, '⚠️ Nhập nội dung góp ý.', true); return; }
+      btn.disabled = true;
+      showResult(box, '⏳ Đang gửi...');
+      try {
+        const currentRole = getRole();
+        let name = user.displayName || user.email || '';
+        let code = await getAccountCode(user.uid);
+        if (currentRole === 'student') {
+          const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
+          if (membership && membership.studentName) name = membership.studentName;
+          if (membership && membership.loginCode) code = membership.loginCode;
+        } else if (currentRole === 'teacher') {
+          try {
+            const { db } = ensureFirebase();
+            const profSnap = await db.collection('teacherProfiles').doc(user.uid).get();
+            if (profSnap.exists) {
+              const p = profSnap.data();
+              if (p.displayName) name = p.displayName;
+              if (p.teacherCode) code = p.teacherCode;
+            }
+          } catch (e) { /* dùng tạm tên/mã đã có, không chặn việc gửi góp ý */ }
+        }
+        await submitFeedback({ uid: user.uid, role: currentRole || 'unknown', name, code: code || '—', category, content });
+        showToast('Đã gửi góp ý, cảm ơn bạn!', false);
+        $('#topFeedbackContent').value = '';
+        $('#topFeedbackForm').style.display = 'none';
+        btn.disabled = false;
+      } catch (e) {
+        btn.disabled = false;
+        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+      }
+    });
   } else {
     // Chỉ hiện nút "Đăng nhập" nhanh khi ĐÃ từng chọn vai trò trước đó (role đã biết) — lần đầu mở
     // app, chưa chọn vai trò thì màn "Bạn là ai?" (#roleChooserCard) đã lo phần đăng nhập rồi, hiện

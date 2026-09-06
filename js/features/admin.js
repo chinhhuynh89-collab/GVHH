@@ -80,6 +80,16 @@ function normalizeZaloUrl(v) {
       }
     }).catch(() => { /* ignore */ });
 
+    // Số góp ý/báo lỗi CHƯA XỬ LÝ — hiện chấm đỏ trên nút "Phản ánh/đề xuất", giống hệt cách làm ở
+    // "Duyệt thanh toán" phía trên.
+    db.collection('feedback').where('status', '==', 'new').get().then((newSnap) => {
+      if (newSnap.size) {
+        const badge = $('#feedbackCountBadge');
+        badge.textContent = newSnap.size > 99 ? '99+' : String(newSnap.size);
+        badge.style.display = 'flex';
+      }
+    }).catch(() => { /* ignore */ });
+
     // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
     // Gắn nút bấm NGAY LẬP TỨC (đồng bộ, không chờ await nào ở trên) — đây là phần quan trọng nhất
     // của trang nên phải chắc chắn hoạt động dù mạng chậm hay cfg tải lỗi.
@@ -91,6 +101,7 @@ function normalizeZaloUrl(v) {
       plans: buildPlansSection,
       payment: buildPaymentSection,
       commissions: buildCommissionsSection,
+      feedback: buildFeedbackSection,
       resetAccount: buildResetAccountSection
     };
 
@@ -766,6 +777,79 @@ function normalizeZaloUrl(v) {
             }
           });
         });
+      } catch (e) {
+        box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+      }
+    }
+
+    // ---------- 📝 Phản ánh/đề xuất ----------
+    // Bảng tổng hợp góp ý/báo lỗi/đề xuất tính năng từ giáo viên VÀ học sinh (xem js/features/
+    // feedback.js: submitFeedback) — mới nhất lên đầu, để admin kịp thời hồi đáp/nâng cấp sản phẩm.
+    // "Đánh dấu đã xử lý" chỉ đổi trạng thái hiển thị (không xoá) — vẫn xem lại được nếu cần, chỉ đỡ
+    // rối khi lọc "Chưa xử lý".
+    async function buildFeedbackSection(panel) {
+      panel.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">📝</span>Phản ánh/đề xuất của người dùng</h2>
+          <p class="hint" style="margin-top:-4px;">Giáo viên và học sinh gửi qua menu đăng nhập (góc phải trang chủ) — mới nhất lên đầu.</p>
+          <div id="feedbackListBody"><p class="hint">⏳ Đang tải...</p></div>
+        </div>
+      `;
+      const box = $('#feedbackListBody');
+      try {
+        const list = await listAllFeedback();
+        if (!list.length) { box.innerHTML = '<p class="hint">Chưa có phản ánh/đề xuất nào.</p>'; return; }
+
+        const badge = $('#feedbackCountBadge');
+        const newCount = list.filter((f) => f.status !== 'done').length;
+        if (newCount) { badge.textContent = newCount > 99 ? '99+' : String(newCount); badge.style.display = 'flex'; }
+        else badge.style.display = 'none';
+
+        const categoryLabel = (c) => c === 'bug' ? '🐛 Báo lỗi' : c === 'feature' ? '✨ Đề xuất tính năng' : '💡 Góp ý chung';
+        const roleLabel = (r) => r === 'teacher' ? 'Giáo viên' : r === 'student' ? 'Học sinh' : '—';
+
+        function renderTable() {
+          box.innerHTML = `
+            <div class="roster-table-wrap">
+              <table class="roster-table">
+                <thead>
+                  <tr><th>Thời gian</th><th>Tên người dùng</th><th>Mã</th><th>Vai trò</th><th>Loại</th><th>Nội dung</th><th>Trạng thái</th><th></th></tr>
+                </thead>
+                <tbody>
+                  ${list.map((f) => `
+                    <tr${f.status === 'done' ? ' style="opacity:0.6;"' : ''}>
+                      <td>${escapeHtml((f.createdAt || '').replace('T', ' ').slice(0, 16))}</td>
+                      <td>${escapeHtml(f.name || '(chưa rõ tên)')}</td>
+                      <td>${escapeHtml(f.code || '—')}</td>
+                      <td>${roleLabel(f.role)}</td>
+                      <td>${categoryLabel(f.category)}</td>
+                      <td style="white-space:normal;min-width:260px;">${escapeHtml(f.content)}</td>
+                      <td>${f.status === 'done' ? '✅ Đã xử lý' : '🆕 Chưa xử lý'}</td>
+                      <td><button class="btn feedback-status-btn" type="button" data-id="${f.id}" data-status="${f.status === 'done' ? 'new' : 'done'}">${f.status === 'done' ? '↩️ Bỏ đánh dấu' : '✅ Đánh dấu đã xử lý'}</button></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+          $$('.feedback-status-btn', box).forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const id = btn.dataset.id;
+              const nextStatus = btn.dataset.status;
+              btn.disabled = true;
+              try {
+                await setFeedbackStatus(id, nextStatus);
+                const item = list.find((f) => f.id === id);
+                if (item) item.status = nextStatus;
+                renderTable();
+              } catch (e) {
+                showToast('Không lưu được: ' + e.message);
+                btn.disabled = false;
+              }
+            });
+          });
+        }
+        renderTable();
       } catch (e) {
         box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
       }
