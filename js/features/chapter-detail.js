@@ -80,6 +80,170 @@
       .concat(customQuizCache.map((it) => Object.assign({ kind: 'custom' }, it)));
   }
 
+  // ---------- Kho chung: chia sẻ/nhập bài giảng-câu hỏi-flashcard giữa các giáo viên ----------
+  // Xem js/features/shared-bank.js. Chỉ áp dụng cho nội dung TỰ THÊM (kind==='custom', không phải
+  // ghi đè nội dung mặc định) của chương CHÍNH KHOÁ (isCurriculumChapter) — chương thuộc chương
+  // trình riêng của giáo viên không chia sẻ được vì chapterId ngẫu nhiên, không ai khác tra ra được.
+  function bankShareLinkHtml(contentType, item) {
+    if (item.kind !== 'custom' || !isCurriculumChapter(chapter.id)) return '';
+    return item.sharedBankId
+      ? ` · <a href="#" class="bank-share-toggle" data-content-type="${contentType}" data-source-id="${item.id}" data-bank-id="${item.sharedBankId}">✅ Đã chia sẻ (gỡ)</a>`
+      : ` · <a href="#" class="bank-share-toggle" data-content-type="${contentType}" data-source-id="${item.id}">🌐 Chia sẻ vào kho chung</a>`;
+  }
+
+  // Xây đúng shape mà addCustomLesson/addCustomQuiz/addCustomFlashcard đang nhận — KHÔNG gồm field
+  // thừa (VD options/correct với câu "Nhập đáp án") để giữ nhất quán với dữ liệu tự soạn thông thường.
+  function buildBankPayload(contentType, item) {
+    if (contentType === 'lesson') return { title: item.title, points: item.points, sourceFileName: item.sourceFileName || null };
+    if (contentType === 'flashcard') return { front: item.front, back: item.back };
+    const type = getQuestionType(item);
+    if (type === 'text') return { q: item.q, type, acceptedAnswers: item.acceptedAnswers, explain: item.explain || '' };
+    return { q: item.q, type, options: item.options, correct: item.correct, explain: item.explain || '' };
+  }
+
+  function wireBankShareLinks(box, contentType, cache, onChanged) {
+    $$('.bank-share-toggle', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const sourceId = a.dataset.sourceId;
+        const bankId = a.dataset.bankId;
+        const item = cache.find((it) => it.id === sourceId);
+        if (!item) return;
+        try {
+          if (bankId) {
+            await unshareFromBank(bankId, contentType, sourceId);
+            item.sharedBankId = null;
+          } else {
+            const newBankId = await shareToBank(contentType, sourceId, chapter.id, buildBankPayload(contentType, item));
+            item.sharedBankId = newBankId;
+          }
+          onChanged();
+        } catch (err) {
+          showToast('Không thực hiện được: ' + err.message);
+        }
+      });
+    });
+  }
+
+  function renderBankItemPreview(contentType, payload) {
+    if (contentType === 'lesson') return `<strong>${escapeHtml(payload.title)}</strong><div class="hint">${payload.points.length} ý</div>`;
+    if (contentType === 'flashcard') return `<strong>${escapeHtml(payload.front)}</strong><div class="hint">${escapeHtml(payload.back)}</div>`;
+    return `<strong>${escapeHtml(payload.q)}</strong><div class="hint">[${QUIZ_TYPE_LABELS[getQuestionType(payload)]}] Đúng: ${escapeHtml(formatCorrectAnswerDisplay(payload))}</div>`;
+  }
+
+  // Khung DÙNG CHUNG cho cả 3 loại — tự tải danh sách đã chia sẻ CHO ĐÚNG chương này, tick chọn +
+  // nhập bản sao (Promise.allSettled để báo đúng "X/Y đã nhập" nếu 1 vài mục lỗi giữa chừng), cộng
+  // 1 nút "Báo cáo nội dung sai" tái dùng thẳng submitFeedback() đã có (feedback.js) — không cần xây
+  // cơ chế kiểm duyệt riêng cho kho chung.
+  async function renderBankChecklist(box, contentType, onImported) {
+    box.innerHTML = '<p class="hint">⏳ Đang tải kho chung...</p>';
+    if (!isCurriculumChapter(chapter.id)) {
+      box.innerHTML = '<p class="hint">Kho chung chỉ áp dụng cho chương chính khoá (lớp 6-12) — chương trình riêng không dùng được.</p>';
+      return;
+    }
+    let items;
+    try {
+      items = await listBankItemsForChapter(chapter.id, contentType);
+    } catch (e) {
+      box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+      return;
+    }
+    if (!items.length) {
+      box.innerHTML = '<p class="hint">Chưa có giáo viên nào chia sẻ nội dung cho chương này.</p>';
+      return;
+    }
+    box.innerHTML = `
+      <p class="hint">Tick chọn nội dung muốn nhập — tạo bản sao riêng trong chương của bạn, sửa/xoá được như tự soạn, không ảnh hưởng bản gốc.</p>
+      <div style="max-height:340px;overflow-y:auto;margin:8px 0;">
+        ${items.map((item) => `
+          <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;cursor:pointer;">
+            <input type="checkbox" class="bank-item-check" value="${item.id}" style="margin-top:3px;flex-shrink:0;" />
+            <span style="flex:1;">
+              ${renderBankItemPreview(contentType, item.payload)}
+              <div class="hint">Chia sẻ bởi ${escapeHtml(item.sharedByName || 'Giáo viên')} · Đã nhập ${item.importCount || 0} lần · <a href="#" class="bank-report-btn" data-bank-id="${item.id}">🚩 Báo cáo nội dung sai</a></div>
+            </span>
+          </label>
+        `).join('')}
+      </div>
+      <button class="btn primary block bank-import-btn" type="button">Nhập vào chương này</button>
+      <div class="result-box" id="bankImportResult"></div>
+    `;
+    const itemsById = new Map(items.map((it) => [it.id, it]));
+    $('.bank-import-btn', box).addEventListener('click', async () => {
+      const selectedIds = $$('.bank-item-check', box).filter((c) => c.checked).map((c) => c.value);
+      const resultBox = $('#bankImportResult', box);
+      if (!selectedIds.length) { showResult(resultBox, 'Chọn ít nhất 1 mục.', true); return; }
+      const btn = $('.bank-import-btn', box);
+      btn.disabled = true;
+      showResult(resultBox, '⏳ Đang nhập...');
+      const selectedItems = selectedIds.map((id) => itemsById.get(id)).filter(Boolean);
+      const results = await Promise.allSettled(selectedItems.map((item) => importFromBank(item)));
+      const okCount = results.filter((r) => r.status === 'fulfilled').length;
+      showResult(resultBox, `✓ Đã nhập ${okCount}/${selectedItems.length} mục.`);
+      btn.disabled = false;
+      if (okCount > 0 && typeof onImported === 'function') await onImported();
+    });
+    $$('.bank-report-btn', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!confirm('Báo cáo nội dung này có sai sót/không phù hợp? Admin sẽ xem xét.')) return;
+        try {
+          const teacher = getCurrentTeacher();
+          await submitFeedback({
+            uid: teacher.uid, role: 'teacher', name: teacher.displayName || teacher.email || '', code: '',
+            category: 'bug',
+            content: `Báo cáo nội dung sai trong kho chung — loại: ${contentType}, bankId: ${a.dataset.bankId}, chapterId: ${chapter.id}`
+          });
+          showToast('Đã gửi báo cáo, cảm ơn bạn!', false);
+        } catch (err) {
+          showToast('Không gửi được: ' + err.message);
+        }
+      });
+    });
+  }
+
+  function initBankFeatures() {
+    const isCurriculum = isCurriculumChapter(chapter.id);
+    const lessonBankBtn = $('#lessonBankBtn');
+    const flashBankBtn = $('#flashBankBtn');
+    const quizMenuBankBtn = $('#quizMenuBankBtn');
+    if (!isCurriculum) {
+      // Không có kho chung cho chương trình riêng — ẩn hẳn 3 nút thay vì để bấm vào rồi mới báo lỗi.
+      if (lessonBankBtn) lessonBankBtn.style.display = 'none';
+      if (flashBankBtn) flashBankBtn.style.display = 'none';
+      if (quizMenuBankBtn) quizMenuBankBtn.style.display = 'none';
+      return;
+    }
+    lessonBankBtn.addEventListener('click', () => {
+      const panel = $('#lessonBankPanel');
+      const open = panel.style.display !== 'none';
+      panel.style.display = open ? 'none' : 'block';
+      if (!open) renderBankChecklist($('#lessonBankBody'), 'lesson', async () => {
+        customLessonsCache = await getCustomLessons(owner.uid, chapter.id);
+        renderAllLessons();
+      });
+    });
+    flashBankBtn.addEventListener('click', () => {
+      const panel = $('#flashBankPanel');
+      const open = panel.style.display !== 'none';
+      panel.style.display = open ? 'none' : 'block';
+      if (!open) renderBankChecklist($('#flashBankBody'), 'flashcard', async () => {
+        customFlashcardsCache = await getCustomFlashcards(owner.uid, chapter.id);
+        renderFlashManager();
+        renderFlash();
+      });
+    });
+    quizMenuBankBtn.addEventListener('click', () => {
+      showQuizSection('quizBankSection');
+      renderBankChecklist($('#quizBankBody'), 'quiz', async () => {
+        customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
+        rebuildEffectiveQuiz();
+        renderQuizManager();
+        renderQuiz();
+      });
+    });
+  }
+
   // ---------- Tiêu đề / mô tả chương ----------
   function renderHeader() {
     const title = chapterMeta.title || chapter.title;
@@ -136,6 +300,7 @@
               · <a href="#" class="lesson-edit" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">Sửa</a>
               · <a href="#" class="lesson-delete" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">${l.kind === 'builtin' ? 'Ẩn' : 'Xoá'}</a>
               ${l.kind === 'builtin' && l.edited ? ` · <a href="#" class="lesson-restore" data-key="${l.index}">Khôi phục mặc định</a>` : ''}
+              ${bankShareLinkHtml('lesson', l)}
             </div>
           ` : ''}
         </div>
@@ -143,7 +308,7 @@
     }
     setChapterProgress(chapter.id, { lessonViewed: true });
     refreshDots();
-    if (owner.isOwner) wireLessonActions(box);
+    if (owner.isOwner) { wireLessonActions(box); wireBankShareLinks(box, 'lesson', customLessonsCache, renderAllLessons); }
   }
 
   function wireLessonActions(box) {
@@ -343,11 +508,13 @@
             · <a href="#" class="flash-edit" data-kind="${c.kind}" data-key="${c.kind === 'builtin' ? c.index : c.id}">Sửa</a>
             · <a href="#" class="flash-delete" data-kind="${c.kind}" data-key="${c.kind === 'builtin' ? c.index : c.id}">${c.kind === 'builtin' ? 'Ẩn' : 'Xoá'}</a>
             ${c.kind === 'builtin' && c.edited ? ` · <a href="#" class="flash-restore" data-key="${c.index}">Khôi phục mặc định</a>` : ''}
+            ${bankShareLinkHtml('flashcard', c)}
           </div>
         </div>
       `).join('');
     }
     wireFlashActions(box);
+    wireBankShareLinks(box, 'flashcard', customFlashcardsCache, renderFlashManager);
   }
 
   function wireFlashActions(box) {
@@ -745,6 +912,7 @@
           · <a href="#" class="quiz-edit" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">Sửa</a>
           · <a href="#" class="quiz-delete" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">${item.kind === 'builtin' ? 'Ẩn' : 'Xoá'}</a>
           ${item.kind === 'builtin' && item.edited ? ` · <a href="#" class="quiz-restore" data-key="${item.index}">Khôi phục mặc định</a>` : ''}
+          ${bankShareLinkHtml('quiz', item)}
         </div>
       </div>
     `).join('') : '<div class="hint">Chưa có câu hỏi nào.</div>';
@@ -804,6 +972,7 @@
         }
       });
     });
+    wireBankShareLinks(box, 'quiz', customQuizCache, renderQuizManager);
   }
 
   // Hiện đúng khối field tương ứng loại câu hỏi đang chọn (ABCD / Đúng-Sai / Nhập đáp án) — 3 khối
@@ -939,7 +1108,7 @@
 
   // ---------- Menu tab Trắc nghiệm: bấm vào mới hiện đúng 1 khung tương ứng, có nút "Quay lại" ----------
   // Học sinh thấy 2 lối vào (Ôn tập / Kiểm tra thử); giáo viên thấy 5 thao tác quản lý câu hỏi.
-  const QUIZ_SECTION_IDS = ['quizEditSection', 'quizTxtCard', 'quizExcelCard', 'selfTestCard', 'quizReviewSection'];
+  const QUIZ_SECTION_IDS = ['quizEditSection', 'quizTxtCard', 'quizExcelCard', 'quizBankSection', 'selfTestCard', 'quizReviewSection'];
 
   function showQuizSection(sectionId) {
     $('#quizStudentMenu').style.display = 'none';
@@ -1043,6 +1212,7 @@
       renderFlashManager();
       renderQuizManager();
       initQuizManager();
+      initBankFeatures();
     }
     initQuizMenu();
     refreshDots();

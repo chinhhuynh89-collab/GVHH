@@ -313,5 +313,25 @@ service cloud.firestore {
                     && request.resource.data.keys().hasAll(['uid', 'role', 'name', 'code', 'category', 'content', 'status', 'createdAt']);
       allow update, delete: if isAdmin();
     }
+
+    // ---------- Ngân hàng nội dung dùng chung (xem js/features/shared-bank.js) ----------
+    // Giáo viên TỰ NGUYỆN chia sẻ bài giảng/câu hỏi/flashcard mình soạn — ai cũng đọc được (để duyệt
+    // qua kho chung), chỉ chính người chia sẻ tạo được (đúng uid) và sửa/xoá được nội dung. "importCount"
+    // là ngoại lệ: BẤT KỲ ai đã đăng nhập cũng tăng được số này khi nhập 1 mục (không sửa được nội
+    // dung khác) — dùng FieldValue.increment nên Firestore tính giá trị mới TRƯỚC khi rules chạy,
+    // request.resource.data.diff(resource.data).affectedKeys() chỉ thấy đúng "importCount" thay đổi.
+    match /sharedContentBank/{id} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.sharedByTeacherUid
+                    && request.resource.data.keys().hasAll(
+                         ['contentType', 'chapterId', 'payload', 'sharedByTeacherUid', 'sharedByName', 'sharedAt', 'importCount'])
+                    && request.resource.data.importCount == 0;
+      allow update: if request.auth != null
+                    && (resource.data.sharedByTeacherUid == request.auth.uid || isAdmin()
+                        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['importCount']));
+      allow delete: if request.auth != null
+                    && (resource.data.sharedByTeacherUid == request.auth.uid || isAdmin());
+    }
   }
 }

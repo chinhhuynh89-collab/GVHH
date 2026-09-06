@@ -53,8 +53,14 @@
     <div class="btn-row" id="lessonToolbar" style="display:none;margin-bottom:12px;">
       <button class="btn" id="manualLessonAddBtn" style="flex:1;">✍️ Viết bài giảng</button>
       <button class="btn" id="docUploadBtn" style="flex:1;" title="Hỗ trợ file .docx, .pdf">📎 Nạp file</button>
+      <button class="btn" id="lessonBankBtn" style="flex:1;" title="Nhập bài giảng đã chia sẻ bởi giáo viên khác">🌐 Kho chung</button>
     </div>
     <input type="file" id="docFileInput" accept=".docx,.pdf" style="display:none;" />
+
+    <div class="card" id="lessonBankPanel" style="display:none;margin-bottom:14px;">
+      <h2 style="margin-top:0;"><span class="icon">🌐</span>Nhập bài giảng từ kho chung</h2>
+      <div id="lessonBankBody"></div>
+    </div>
 
     <div class="card" id="manualLessonForm" style="display:none;margin-bottom:14px;">
       <div class="field">
@@ -89,6 +95,11 @@
 
         <div class="hint" style="margin-top:16px;font-weight:700;">Thêm flashcard mới</div>
         <button class="btn block" id="flashFormAddBtn" style="margin-top:8px;">+ Thêm flashcard</button>
+        <button class="btn block" id="flashBankBtn" style="margin-top:8px;">🌐 Nhập từ kho chung</button>
+        <div class="card" id="flashBankPanel" style="display:none;margin-top:12px;">
+          <h2 style="margin-top:0;"><span class="icon">🌐</span>Nhập flashcard từ kho chung</h2>
+          <div id="flashBankBody"></div>
+        </div>
         <div id="flashForm" style="display:none;margin-top:14px;">
           <div class="field">
             <label for="flashFormFront">Mặt trước</label>
@@ -126,6 +137,7 @@
         <button class="btn" id="quizMenuManualBtn">✍️ Tạo câu hỏi thủ công</button>
         <button class="btn" id="quizMenuTxtBtn">📄 Nạp file txt/Word</button>
         <button class="btn" id="quizMenuExcelBtn">📊 Nạp file Excel/CSV</button>
+        <button class="btn" id="quizMenuBankBtn">🌐 Từ kho chung</button>
         <button class="btn" id="quizTemplateBtn">⬇️ Tải mẫu Excel</button>
       </div>
     </div>
@@ -203,6 +215,11 @@ Câu hỏi Nhập đáp án ở đây?
       <div id="quizBulkResult"></div>
     </div>
 
+    <div class="card" id="quizBankSection" style="display:none;">
+      <h2><span class="icon">🌐</span>Nhập câu hỏi từ kho chung</h2>
+      <div id="quizBankBody"></div>
+    </div>
+
     <div class="card" id="quizExcelCard" style="display:none;">
       <h2><span class="icon">📊</span>Nạp file Excel/CSV</h2>
       <div class="hint">Theo đúng 8 cột thứ tự: Câu hỏi, Đáp án A, B, C, D, Đáp án đúng, Giải thích, Loại câu. Cột "Loại câu" để trống = ABCD (4 cột đáp án A-D bắt buộc điền); ghi "DungSai" hoặc "TuLuan" thì để trống 4 cột đáp án A-D, cột "Đáp án đúng" ghi "Đúng"/"Sai" (Đúng-Sai) hoặc đáp án chấp nhận, nhiều đáp án cách nhau bởi "|" (Tự luận). Tải mẫu ở màn hình trước, mở bằng Excel/Google Sheets, điền theo hàng, lưu lại rồi nạp lên.</div>
@@ -272,6 +289,8 @@ Câu hỏi Nhập đáp án ở đây?
 <script src="../js/features/doc-import.js"></script>
 <script src="../js/features/quiz-excel.js"></script>
 <script src="../js/features/quiz-common.js"></script>
+<script src="../js/features/feedback.js"></script>
+<script src="../js/features/shared-bank.js"></script>
 <script src="../js/features/chapter-detail.js"></script>
 </body>
 </html>
