@@ -16,6 +16,18 @@
 const ADMIN_FRAUD_ORDER_THRESHOLD_24H = 5; // cảnh báo nếu 1 mã giới thiệu phát sinh > N đơn/24h
 const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
 
+// Bản sao gọn của normalizeZaloUrl (branding.js) — trang Quản trị không nạp branding.js (file đó có
+// IIFE tự chạy để cá nhân hoá TRANG CHỦ theo giáo viên, không hợp với ngữ cảnh trang quản trị), nên
+// chỉ lấy lại đúng logic cần dùng: nếu giáo viên nhập số điện thoại thì tự tạo link zalo.me/{số}; đã
+// nhập sẵn link thì giữ nguyên.
+function normalizeZaloUrl(v) {
+  const trimmed = (v || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const digits = trimmed.replace(/[^0-9]/g, '');
+  return digits ? `https://zalo.me/${digits}` : `https://${trimmed}`;
+}
+
 (function () {
   requireTeacherAuth(async (user) => {
     if (!isAdminUser(user)) {
@@ -273,14 +285,15 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
             studentCount: studentCountByUid.get(d.id) || 0, comm,
             referredCount: referredCountByUid.get(d.id) || 0,
             recentOrders: recentOrderCountByReferrer.get(d.id) || 0,
-            online: !!teacherPresence.get(d.id)
+            online: !!teacherPresence.get(d.id),
+            workplace: p.workplace || '', phone: p.phone || '', zaloLink: p.zaloLink || ''
           };
         }).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
 
         if (!rows.length) { box.innerHTML = '<p class="hint">Chưa có giáo viên nào đăng nhập.</p>'; return; }
 
         box.innerHTML = `
-          <p class="hint">👉 Bấm vào TÊN giáo viên để xem email, trạng thái gói, hoa hồng và các nút thao tác.</p>
+          <p class="hint">👉 Bấm vào TÊN giáo viên để xem email, đơn vị công tác, SĐT, trạng thái gói, hoa hồng và các nút liên hệ/thao tác.</p>
           <div class="roster-table-wrap">
             <table class="roster-table">
               <thead>
@@ -299,8 +312,11 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
                     <td colspan="5">
                       <div class="roster-detail-panel">
                         <p class="hint">✉️ ${escapeHtml(r.email)} · ${r.tier === 'pro' ? `Pro (hết hạn ${escapeHtml(r.expiresAt.slice(0, 10))})` : 'Miễn phí'}</p>
+                        <p class="hint">📍 ${escapeHtml(r.workplace || '—')} · ☎️ ${escapeHtml(r.phone || '—')}</p>
                         <p class="hint">💰 Hoa hồng đã trả: ${formatVnd(r.comm.paid)} · Chưa trả: ${formatVnd(r.comm.pending)}</p>
                         <div class="btn-row">
+                          ${r.phone ? `<a class="btn" href="tel:${escapeHtml(r.phone)}">📞 Gọi điện</a>` : ''}
+                          ${normalizeZaloUrl(r.zaloLink) ? `<a class="btn" href="${escapeHtml(normalizeZaloUrl(r.zaloLink))}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
                           <button class="btn roster-expand-btn" type="button" data-uid="${r.uid}">👥 Xem học sinh</button>
                           <button class="btn referral-lock-btn" type="button" data-uid="${r.uid}" data-disabled="${r.referralDisabled ? '1' : '0'}">${r.referralDisabled ? '🔓 Mở lại mã' : '🔒 Khoá mã'}</button>
                         </div>
