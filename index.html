@@ -211,6 +211,7 @@
     </div>
 
     <div class="section-label">Dành cho học sinh</div>
+    <div class="card" id="studentQuickStatsCard" style="display:none;"></div>
     <div class="icon-grid">
       <a class="icon-tile is-active" href="pages/hoc-theo-chuong.html">
         <div class="icon-tile-icon">📘</div>
@@ -681,6 +682,62 @@
       <a class="btn primary block" href="pages/kiem-tra.html">Vào làm bài ngay</a>
     `;
   } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
+})();
+</script>
+<script>
+(async function () {
+  // Thống kê nhanh cho học sinh, hiện ngay phía trên 3 nút "Chương trình học tập/Vào nhóm học tập/
+  // Bài kiểm tra" — giống ý tưởng khối thống kê của giáo viên: liếc qua là biết ngay tình hình học
+  // tập, không cần bấm vào từng trang.
+  if (!isFirebaseConfigured() || getRole() !== 'student') return;
+  const user = await waitForAuthReady();
+  if (!user) return;
+  const card = document.getElementById('studentQuickStatsCard');
+  if (!card) return;
+  try {
+    const { db } = ensureFirebase();
+    const allMemberships = typeof listMyGroups === 'function' ? await listMyGroups(user.uid) : [];
+    // Bản ghi "Chưa xếp nhóm" (groupCode rỗng, do giáo viên nạp danh sách nhưng chưa xếp nhóm — xem
+    // manage-students.js) không tính là 1 "nhóm đang học" thật sự.
+    const memberships = allMemberships.filter((m) => m.groupCode);
+    const groupCodes = Array.from(new Set(memberships.map((m) => m.groupCode)));
+
+    const [progressDocs, examSnaps, submissionsSnap] = await Promise.all([
+      Promise.all(memberships.map((m) => db.collection('progress').doc(m.studentId).get().catch(() => null))),
+      Promise.all(groupCodes.map((code) => db.collection('exams').where('groupCode', '==', code).get().catch(() => null))),
+      db.collection('submissions').where('studentUid', '==', user.uid).get().catch(() => null)
+    ]);
+
+    // "Chương đã học" = hợp các chapterId có tiến độ THẬT (đã xem bài giảng/flashcard hoặc đã làm
+    // trắc nghiệm) trên TẤT CẢ nhóm đang tham gia — 1 chương chỉ tính 1 lần dù học ở nhiều nhóm.
+    const chapterIds = new Set();
+    progressDocs.forEach((doc) => {
+      if (!doc || !doc.exists) return;
+      const chapters = doc.data().chapters || {};
+      Object.keys(chapters).forEach((chapterId) => {
+        const p = chapters[chapterId];
+        if (p && (p.lessonViewed || p.flashcardsViewed || (p.quizBestPercent || 0) > 0)) chapterIds.add(chapterId);
+      });
+    });
+
+    const submittedExamIds = new Set((submissionsSnap ? submissionsSnap.docs : []).map((d) => d.data().examId));
+    const now = new Date();
+    let doneCount = 0;
+    let missedCount = 0;
+    (examSnaps.filter(Boolean)).forEach((snap) => {
+      snap.docs.forEach((d) => {
+        const exam = d.data();
+        if (submittedExamIds.has(d.id)) { doneCount++; }
+        else if (exam.endTime && new Date(exam.endTime) < now) { missedCount++; }
+      });
+    });
+
+    card.style.display = 'block';
+    card.innerHTML = `
+      <p class="hint" style="margin:0 0 4px;">📘 Bạn đã học <strong>${chapterIds.size}</strong> chương, đang học <strong>${groupCodes.length}</strong> nhóm</p>
+      <p class="hint" style="margin:0;">📝 Đã làm <strong>${doneCount}</strong> đợt kiểm tra, bỏ lỡ <strong>${missedCount}</strong> đợt</p>
+    `;
+  } catch (e) { /* lỗi mạng thoáng qua -> ẩn khối thống kê, không chặn phần còn lại của trang chủ */ }
 })();
 </script>
 <script>
