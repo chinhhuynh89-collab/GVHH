@@ -46,6 +46,7 @@ const MONETIZATION_DEFAULTS = {
   // HẲN cả tính năng). Mặc định TẤT CẢ đang tắt (false). Khớp với LOCKABLE_FEATURES bên dưới.
   lockedFeatures: {
     periodicTable: false, calculator: false, equationBalancer: false,
+    chemistryStories: false, formulasLaws: false, referenceTables: false, organicNomenclature: false,
     customPrograms: false, examCreator: false, advancedStats: false
   }
 };
@@ -61,6 +62,10 @@ const LOCKABLE_FEATURES = [
   { id: 'periodicTable', label: 'Bảng tuần hoàn', audience: 'any' },
   { id: 'calculator', label: 'Công cụ tính toán', audience: 'any' },
   { id: 'equationBalancer', label: 'Cân bằng phương trình', audience: 'any' },
+  { id: 'chemistryStories', label: 'Câu chuyện Hoá học', audience: 'any' },
+  { id: 'formulasLaws', label: 'Công thức, Định luật', audience: 'any' },
+  { id: 'referenceTables', label: 'Bảng tra cứu', audience: 'any' },
+  { id: 'organicNomenclature', label: 'Danh pháp hữu cơ', audience: 'any' },
   { id: 'customPrograms', label: 'Tạo chương trình giảng dạy riêng (ngoài lớp 6-12 mặc định)', audience: 'teacher' },
   { id: 'examCreator', label: 'Tạo đề kiểm tra tự động', audience: 'teacher' },
   { id: 'advancedStats', label: 'Thống kê điểm theo từng đợt kiểm tra', audience: 'teacher' }
