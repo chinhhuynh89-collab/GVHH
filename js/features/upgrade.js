@@ -57,7 +57,7 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
     await renderUpgradeFlow({
       plans: cfg.studentPlans,
       title: 'Gói Premium cho học sinh',
-      currentSub: await getStudentSubscription(membership.studentUid),
+      currentSub: await getStudentSubscription(canonicalStudentUid(membership)),
       currentTierLabel: 'Premium',
       extraDesc: 'Mở khoá tính năng nâng cao.',
       defaultContact: membership.phone || '',
@@ -65,7 +65,10 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         type: 'student_upgrade',
         planId,
         orderCode,
-        submitterStudentUid: membership.studentUid,
+        // Dùng UID GỐC (originalStudentUid nếu có, xem canonicalStudentUid) chứ không phải UID đang
+        // đăng nhập — để nếu học sinh này đã từng được cấp lại mã trước đó, gói mua lần này vẫn ghi
+        // đúng vào 1 chỗ ổn định (không bị "tách" gói ra nhiều UID nếu sau này lại cấp lại mã nữa).
+        submitterStudentUid: canonicalStudentUid(membership),
         submitterName: membership.studentName || '',
         amount: plan.price,
         referrerTeacherUid: membership.teacherUid || null,

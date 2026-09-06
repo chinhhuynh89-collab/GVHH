@@ -15,8 +15,13 @@
 // QUAN TRỌNG — Firebase Auth KHÔNG cho phép 1 người tự đổi mật khẩu của người KHÁC (không có "Admin
 // SDK" vì app này chủ động không dùng Cloud Functions/máy chủ riêng). Vì vậy:
 // - Học sinh tự đổi được mật khẩu của CHÍNH MÌNH khi đang đăng nhập (xem changeOwnStudentPassword).
-// - Quên mật khẩu -> KHÔNG có cách "cấp lại" cho tài khoản CŨ — giáo viên phải tạo 1 mã học sinh MỚI
-//   thay thế (xem issueReplacementLoginForStudent), tiến độ/gói ở tài khoản cũ không tự chuyển sang.
+// - Quên mật khẩu -> KHÔNG có cách "cấp lại" cho tài khoản CŨ (Firebase không cho biết mật khẩu cũ để
+//   xác thực đổi, và không có Admin SDK để ép đổi) — giáo viên phải tạo 1 tài khoản đăng nhập MỚI, rồi
+//   GẮN THẲNG vào ĐÚNG các bản ghi "students" cũ (đổi field studentUid/loginCode ngay trên đó, xem
+//   issueReplacementLoginForStudent) thay vì tạo bản ghi mới — nhờ vậy nhóm/tiến độ vẫn còn nguyên,
+//   không tăng ảo số học sinh. studentSubscriptions (gói Premium) vẫn khoá theo UID nên không "chuyển"
+//   theo cách này được — dùng "originalStudentUid" (UID gốc, giữ nguyên qua mọi lần cấp lại) để TRA
+//   ĐÚNG gói cũ thay vì di chuyển dữ liệu (xem canonicalStudentUid, chỗ gọi getStudentSubscription).
 
 const STUDENT_AUTH_EMAIL_DOMAIN = 'hocsinh.hoahoc.app';
 
@@ -370,23 +375,45 @@ async function parseStudentImportFile(file) {
 }
 
 // ---------- Cấp mã thay thế (học sinh quên mật khẩu, không khôi phục được tài khoản cũ) ----------
-// Tạo 1 tài khoản MỚI hoàn toàn (mã học sinh mới, số thứ tự mới) rồi thêm vào ĐÚNG nhóm mà bản ghi
-// cũ đang ở — KHÔNG xoá/đụng gì tới bản ghi cũ (giáo viên tự xoá riêng nếu muốn qua nút "Xoá học
-// sinh" đã có sẵn). Tiến độ/gói của tài khoản CŨ không tự chuyển sang tài khoản mới — xem chú thích
-// đầu file.
-async function issueReplacementLoginForStudent(oldStudentDoc) {
+// Firebase Auth không cho phép "đặt lại mật khẩu" cho tài khoản CŨ (không có Admin SDK — xem chú
+// thích đầu file) nên vẫn phải tạo 1 tài khoản đăng nhập MỚI hoàn toàn. NHƯNG khác với trước đây (tạo
+// hẳn 1 bản ghi "students" MỚI, coi như 1 học sinh khác — làm mất hết nhóm cũ, tăng ảo số học sinh,
+// mất luôn gói/tiến độ): giờ CHỈ đổi studentUid+loginCode NGAY TRÊN các bản ghi "students" đã có sẵn
+// của học sinh này (mọi nhóm của giáo viên này, không riêng 1 nhóm) — giữ NGUYÊN docId nên:
+// - Không tăng số dòng trong "Quản lý học sinh" (đúng vị trí cũ, chỉ đổi mã đăng nhập).
+// - Vẫn còn NGUYÊN mọi nhóm đang tham gia (không phải xin vào lại).
+// - Tiến độ học (progress) vẫn còn NGUYÊN vì khoá theo docId của "students", không theo studentUid.
+// "originalStudentUid" lưu lại UID gốc lần ĐẦU TIÊN (giữ nguyên qua mọi lần cấp lại sau này) — dùng
+// để tra đúng gói Premium cũ (studentSubscriptions vẫn khoá theo UID, không đổi theo được) mà không
+// cần di chuyển/sao chép gì ở đó (xem getStudentSubscription/canonicalStudentUid ở nơi gọi).
+// Lịch sử làm bài kiểm tra (collection "submissions", đã nộp bằng tài khoản CŨ) là NGOẠI LỆ DUY NHẤT
+// không giữ được — bất biến theo thiết kế (rules chặn mọi update), không có cách nào chuyển sang tài
+// khoản mới mà không phá vỡ tính bất biến đó.
+async function issueReplacementLoginForStudent(oldStudentUid) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  const snap = await db.collection('students')
+    .where('teacherUid', '==', teacher.uid).where('studentUid', '==', oldStudentUid).get();
+  if (snap.empty) throw new Error('Không tìm thấy học sinh này trong danh sách của bạn.');
+  const docs = snap.docs;
+  const sample = docs[0].data();
+
   const teacherCode = deriveTeacherCode(teacher.uid);
   const seq = await reserveStudentSeqRange(teacher.uid, 1);
   const loginCode = `${teacherCode}.${String(seq).padStart(2, '0')}`;
   const password = generateStudentPassword();
-  const studentUid = await createProvisionedStudentAuthAccount(loginCode, password, oldStudentDoc.studentName);
-  await addStudentToGroup(oldStudentDoc.groupCode, {
-    studentUid, studentName: oldStudentDoc.studentName, school: oldStudentDoc.school,
-    className: oldStudentDoc.className, address: oldStudentDoc.address, phone: oldStudentDoc.phone,
-    email: '', loginCode
+  const studentUid = await createProvisionedStudentAuthAccount(loginCode, password, sample.studentName);
+
+  const batch = db.batch();
+  docs.forEach((d) => {
+    const data = d.data();
+    batch.update(d.ref, {
+      studentUid, loginCode,
+      originalStudentUid: data.originalStudentUid || data.studentUid
+    });
   });
+  await batch.commit();
   await cleanupSecondaryAuthSession();
   return { loginCode, password };
 }

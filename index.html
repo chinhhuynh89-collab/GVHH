@@ -979,8 +979,13 @@
     });
 
     const uids = students.map((s) => s.studentUid).filter(Boolean);
+    // Gói Premium tra theo UID GỐC (canonicalStudentUid) — học sinh dùng tài khoản do giáo viên cấp
+    // mà đã được cấp lại mã (quên mật khẩu) vẫn đang ĐĂNG NHẬP bằng UID mới, nhưng gói mua từ trước
+    // vẫn nằm ở UID gốc (studentSubscriptions không "chuyển" theo được, xem monetization.js). Trạng
+    // thái online/offline thì phải theo UID ĐANG đăng nhập thật (presence ghi theo phiên hiện tại).
+    const subUids = students.map((s) => canonicalStudentUid(s)).filter(Boolean);
     const [subs, presence] = await Promise.all([
-      Promise.all(uids.map((uid) => getStudentSubscription(uid))),
+      Promise.all(subUids.map((uid) => getStudentSubscription(uid))),
       typeof getPresenceForUids === 'function' ? getPresenceForUids(uids) : Promise.resolve(new Map())
     ]);
     const proCount = subs.filter((s) => s.tier === 'premium').length;
@@ -1155,7 +1160,7 @@
     if (!membership || !membership.groupCode || !membership.studentUid) return;
     const cfg = await getMonetizationConfig();
     if (!cfg.enabled) return;
-    const sub = await getStudentSubscription(membership.studentUid);
+    const sub = await getStudentSubscription(canonicalStudentUid(membership));
     const isPremium = sub.tier === 'premium';
     const code = shortStudentCode(membership.studentId);
     $('#studentUpgradeDesc').innerHTML = isPremium

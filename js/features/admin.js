@@ -376,8 +376,11 @@ function normalizeZaloUrl(v) {
               return true;
             }).sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'vi'));
             if (!students.length) { cell.innerHTML = '<p class="hint">Chưa có học sinh nào.</p>'; return; }
+            // Gói Premium tra theo UID GỐC (canonicalStudentUid) — xem chú thích cùng tên trong
+            // monetization.js: học sinh đã được giáo viên cấp lại mã (quên mật khẩu) đăng nhập bằng
+            // UID mới, nhưng gói mua từ trước vẫn nằm ở UID gốc.
             const [subs, codes, presence] = await Promise.all([
-              Promise.all(students.map((s) => getStudentSubscription(s.studentUid))),
+              Promise.all(students.map((s) => getStudentSubscription(canonicalStudentUid(s)))),
               Promise.all(students.map((s) => getAccountCode(s.studentUid))),
               typeof getPresenceForUids === 'function'
                 ? getPresenceForUids(students.map((s) => s.studentUid)).catch(() => new Map())

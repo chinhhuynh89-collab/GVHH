@@ -400,19 +400,12 @@
             const uid = btn.dataset.uid;
             const s = students.find((x) => x.studentUid === uid);
             const box = document.getElementById(`replace-login-result-${uid}`);
-            if (!confirm(`Cấp mã học sinh MỚI cho "${s.studentName}"? Mã/mật khẩu CŨ sẽ ngừng hoạt động, tiến độ học và gói đã mua ở tài khoản cũ KHÔNG tự chuyển sang tài khoản mới. Chỉ dùng khi học sinh quên mật khẩu và không còn cách nào khác.`)) return;
+            if (!confirm(`Cấp mã đăng nhập MỚI cho "${s.studentName}"? Mã/mật khẩu CŨ sẽ ngừng hoạt động — mã mới vẫn giữ NGUYÊN mọi nhóm đang tham gia, tiến độ học và gói đã mua (không tạo thêm học sinh mới). Chỉ dùng khi học sinh quên mật khẩu và không còn cách nào khác.`)) return;
             btn.disabled = true;
             showResult(box, '⏳ Đang tạo mã mới...');
             try {
-              // Ưu tiên 1 nhóm CÒN TỒN TẠI (groupName khác null) — không lấy nhầm nhóm đã bị xoá làm
-              // nơi xếp tài khoản mới vào, sẽ tạo ra 1 bản ghi "mồ côi" khác ngay khi vừa cấp xong.
-              const stillExisting = s.groups.find((g) => g.groupName !== null);
-              const groupCode = stillExisting ? stillExisting.groupCode : (s.groups[0] && s.groups[0].groupCode);
-              const { loginCode, password } = await issueReplacementLoginForStudent({
-                studentName: s.studentName, school: s.school, className: s.className,
-                address: s.address, phone: s.phone, groupCode
-              });
-              showResult(box, `✓ Mã mới: <strong>${escapeHtml(loginCode)}</strong> — mật khẩu: <strong style="color:var(--brand);">${escapeHtml(password)}</strong>. Gửi ngay cho học sinh, mã này chỉ hiện được 1 lần.`);
+              const { loginCode, password } = await issueReplacementLoginForStudent(uid);
+              showResult(box, `✓ Mã mới: <strong>${escapeHtml(loginCode)}</strong> — mật khẩu: <strong style="color:var(--brand);">${escapeHtml(password)}</strong>. Gửi ngay cho học sinh, mã này chỉ hiện được 1 lần. Học sinh dùng mã mới đăng nhập lại sẽ thấy nguyên nhóm/tiến độ/gói cũ. Mở lại mục này (bấm đóng rồi mở lại) để bảng cập nhật đúng mã mới.`);
             } catch (e) {
               btn.disabled = false;
               showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
@@ -467,7 +460,7 @@
           <button class="btn" id="rosterHelpToggleBtn" type="button">❓ Hướng dẫn dùng bảng</button>
           <button class="btn" id="cleanupDuplicatesBtn" type="button">🧹 Dọn bản ghi trùng do lỗi cũ (1 lần)</button>
         </div>
-        <p class="hint" id="rosterHelpText" style="display:none;">👉 Bấm vào TÊN học sinh để xem thông tin (email, trường, lớp, địa chỉ, SĐT) và các nút thao tác. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang). "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
+        <p class="hint" id="rosterHelpText" style="display:none;">👉 Bấm vào TÊN học sinh để xem thông tin (email, trường, lớp, địa chỉ, SĐT) và các nút thao tác. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã đăng nhập MỚI khi các em quên mật khẩu, vẫn giữ nguyên nhóm/tiến độ/gói đã mua (không tạo thêm học sinh mới), chỉ riêng lịch sử làm bài kiểm tra CŨ (trước khi cấp lại mã) là không chuyển theo được. "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>

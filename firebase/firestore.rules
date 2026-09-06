@@ -156,10 +156,21 @@ service cloud.firestore {
                     && request.resource.data.keys().hasAll(
                       ['groupCode', 'teacherUid', 'studentUid', 'studentName', 'school', 'className', 'address', 'phone', 'joinedAt']
                     );
-      allow update: if request.auth != null
-                    && !('teacherUid' in resource.data)
-                    && request.resource.data.teacherUid == request.auth.uid
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherUid']);
+      allow update: if request.auth != null && (
+                      // Cũ: nhận sở hữu 1 lần cho bản ghi thiếu teacherUid (tạo từ trước khi có field này).
+                      (!('teacherUid' in resource.data)
+                        && request.resource.data.teacherUid == request.auth.uid
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherUid']))
+                      ||
+                      // Mới: giáo viên sở hữu cấp LẠI mã đăng nhập cho học sinh quên mật khẩu (xem
+                      // issueReplacementLoginForStudent, teacher-student-accounts.js) — CHỈ đổi được
+                      // đúng 3 field này (tài khoản đăng nhập mới + gốc để tra gói/tiến độ cũ), KHÔNG
+                      // đổi được tên/trường/lớp/nhóm... qua đường này, giữ nguyên vị trí (docId) nên
+                      // không tăng số lượng học sinh, không mất nhóm đang tham gia.
+                      (resource.data.teacherUid == request.auth.uid
+                        && request.resource.data.teacherUid == request.auth.uid
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['studentUid', 'loginCode', 'originalStudentUid']))
+                    );
       allow delete: if request.auth != null && (request.auth.uid == resource.data.teacherUid || isAdmin());
     }
 

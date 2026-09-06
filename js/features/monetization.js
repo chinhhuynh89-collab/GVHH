@@ -197,6 +197,18 @@ async function getTeacherSubscription(uid) {
   } catch (e) { return { tier: 'free' }; }
 }
 
+// Học sinh dùng tài khoản do giáo viên cấp (mã học sinh) mà quên mật khẩu -> được cấp 1 tài khoản
+// đăng nhập MỚI, nhưng GẮN vào ĐÚNG bản ghi "students" cũ (xem issueReplacementLoginForStudent,
+// teacher-student-accounts.js) để giữ nguyên nhóm/tiến độ. Riêng "studentSubscriptions" (gói
+// Premium) vẫn khoá theo UID nên KHÔNG tự chuyển theo tài khoản mới được — phải tra theo
+// "originalStudentUid" (UID gốc, giữ nguyên qua mọi lần cấp lại mã) thay vì UID đang đăng nhập, nếu
+// không học sinh sẽ bị mất Premium đã mua chỉ vì đổi mã đăng nhập. Tài khoản chưa từng được cấp lại
+// (hoặc học sinh tự đăng ký bằng Google, không đi qua luồng này) không có field này -> rơi về đúng
+// UID hiện tại như trước giờ.
+function canonicalStudentUid(s) {
+  return (s && (s.originalStudentUid || s.studentUid)) || null;
+}
+
 // studentUid = uid tài khoản Google của học sinh (xem js/features/auth.js: requireStudentAuth) —
 // trước đây khoá theo "deviceId" ngẫu nhiên lưu trong localStorage nên đổi thiết bị là mất gói đã
 // mua; giờ gắn theo tài khoản nên sống sót qua mọi lần đổi điện thoại/máy tính.
@@ -276,7 +288,7 @@ async function isViewerPremium() {
     // năng Premium dù không hề đăng nhập. Xem chú thích đầy đủ ở resolveContentOwner() (auth.js).
     const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
     if (membership && membership.groupCode && membership.studentUid) {
-      const sub = await getStudentSubscription(membership.studentUid);
+      const sub = await getStudentSubscription(canonicalStudentUid(membership));
       return sub.tier === 'premium';
     }
   } catch (e) { /* ignore */ }
