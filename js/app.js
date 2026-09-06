@@ -165,6 +165,29 @@ async function shareOrCopyLink(title, text, url, resultBox) {
   }
 }
 
+// Copy 1 đoạn chữ (VD "mã học sinh + mật khẩu") vào bộ nhớ tạm — dùng chung cho mọi nút "📋 Copy"
+// trong app, tránh giáo viên phải tự bôi đen/gõ tay dễ nhầm khi gửi cho học sinh. navigator.clipboard
+// cần ngữ cảnh bảo mật (https hoặc localhost) — GitHub Pages luôn https nên không lo, chỉ cần bọc
+// try/catch phòng trình duyệt cũ/từ chối quyền.
+async function copyTextToClipboard(text) {
+  await navigator.clipboard.writeText(text);
+}
+
+// Bấm Enter ở BẤT KỲ ô nào trong danh sách inputEls -> coi như bấm nút submit — các form đăng nhập/
+// đổi mật khẩu trong app không bọc trong thẻ <form> (chỉ là các <input> + <button type="button">
+// rời rạc trong 1 khung nổi), nên trình duyệt không tự submit khi Enter như form thật; phải tự bắt
+// sự kiện. Không tự bấm khi nút đang bị disabled (VD đang xử lý dở 1 lượt trước đó).
+function wireEnterToSubmit(inputEls, submitBtn) {
+  inputEls.forEach((el) => {
+    if (!el) return;
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (!submitBtn.disabled) submitBtn.click();
+    });
+  });
+}
+
 function initTabs(root) {
   const tabBtns = $$('.tab-btn', root);
   const panels = $$('.tab-panel', root);

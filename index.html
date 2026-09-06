@@ -552,6 +552,10 @@
       $('#topAuthChangePasswordToggleBtn').addEventListener('click', () => {
         form.style.display = form.style.display === 'none' ? 'block' : 'none';
       });
+      wireEnterToSubmit(
+        [$('#oldStudentPasswordInput'), $('#newStudentPasswordInput'), $('#newStudentPasswordConfirmInput')],
+        $('#changeStudentPasswordBtn')
+      );
       $('#changeStudentPasswordBtn').addEventListener('click', async () => {
         const oldPassword = $('#oldStudentPasswordInput').value;
         const newPassword = $('#newStudentPasswordInput').value;
@@ -633,6 +637,7 @@
           if (saved) $('#topAuthCodeInput').value = saved;
         }
       });
+      wireEnterToSubmit([$('#topAuthCodeInput'), $('#topAuthPasswordInput')], $('#topAuthCodeSignInBtn'));
       $('#topAuthCodeSignInBtn').addEventListener('click', async () => {
         const actionBtn = $('#topAuthCodeSignInBtn');
         const code = normalizeLoginCode($('#topAuthCodeInput').value);
@@ -828,6 +833,10 @@
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
   });
 
+  wireEnterToSubmit(
+    [document.getElementById('registerCodeInput'), document.getElementById('registerPasswordInput')],
+    document.getElementById('registerCodeSignInBtn')
+  );
   document.getElementById('registerCodeSignInBtn').addEventListener('click', async () => {
     const box = $('#registerToggleResult');
     const btn = document.getElementById('registerCodeSignInBtn');

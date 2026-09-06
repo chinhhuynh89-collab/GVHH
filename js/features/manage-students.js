@@ -270,8 +270,16 @@
       function buildRowHtml(s, code, sttPlaceholder) {
         // Nhóm đã bị xoá (xem deleteGroup() — xoá nhóm không còn xoá học sinh nữa) có groupName =
         // null — ghi rõ "(Nhóm đã xoá)" thay vì để trống khó hiểu, học sinh đó vẫn còn nguyên để xếp
-        // vào nhóm khác. Học sinh nạp lên chưa xếp nhóm (unassigned) ghi rõ "Chưa xếp nhóm".
-        const groupsText = s.groups.map((g) => escapeHtml(g.unassigned ? 'Chưa xếp nhóm' : (g.groupName || '(Nhóm đã xoá)'))).join(', ');
+        // vào nhóm khác. Học sinh nạp lên chưa xếp nhóm (unassigned) ghi rõ "Chưa xếp nhóm". Nhóm THẬT
+        // (còn tồn tại) làm link dẫn thẳng sang "Nhóm học sinh", tự mở đúng khung chi tiết nhóm đó
+        // (?group=<mã nhóm>, xem group-manager.js — dùng lại tên param "group" đã dùng cho
+        // "tao-de-kiem-tra.html?group=..."/"thong-ke.html?group=..." cho nhất quán) — trước đây chỉ
+        // là chữ, giáo viên phải tự vào "Nhóm học sinh" rồi dò tìm lại đúng nhóm.
+        const groupsText = s.groups.map((g) => {
+          if (g.unassigned) return 'Chưa xếp nhóm';
+          if (!g.groupName) return '(Nhóm đã xoá)';
+          return `<a class="group-link" href="nhom-hoc-sinh.html?group=${encodeURIComponent(g.groupCode)}">${escapeHtml(g.groupName)}</a>`;
+        }).join(', ');
         const zaloDigits = (s.phone || '').replace(/[^0-9]/g, '');
         // Chuỗi tìm kiếm gộp sẵn (tên, mã HS, mã đăng nhập, SĐT) — bỏ dấu + thường hoá 1 lần lúc render
         // thay vì tính lại mỗi lần gõ phím, lọc theo dataset ngay trên DOM cho mượt (giống Excel).
@@ -405,7 +413,15 @@
             showResult(box, '⏳ Đang tạo mã mới...');
             try {
               const { loginCode, password } = await issueReplacementLoginForStudent(uid);
-              showResult(box, `✓ Mã mới: <strong>${escapeHtml(loginCode)}</strong> — mật khẩu: <strong style="color:var(--brand);">${escapeHtml(password)}</strong>. Gửi ngay cho học sinh, mã này chỉ hiện được 1 lần. Học sinh dùng mã mới đăng nhập lại sẽ thấy nguyên nhóm/tiến độ/gói cũ. Mở lại mục này (bấm đóng rồi mở lại) để bảng cập nhật đúng mã mới.`);
+              showResult(box, `✓ Mã mới: <strong>${escapeHtml(loginCode)}</strong> — mật khẩu: <strong style="color:var(--brand);">${escapeHtml(password)}</strong>. Gửi ngay cho học sinh, mã này chỉ hiện được 1 lần. Học sinh dùng mã mới đăng nhập lại sẽ thấy nguyên nhóm/tiến độ/gói cũ. Mở lại mục này (bấm đóng rồi mở lại) để bảng cập nhật đúng mã mới.<br/><button class="btn copy-code-btn" type="button" style="margin-top:8px;">📋 Copy mã + mật khẩu</button>`);
+              $('.copy-code-btn', box).addEventListener('click', async () => {
+                try {
+                  await copyTextToClipboard(`Mã học sinh: ${loginCode} - Mật khẩu: ${password}`);
+                  showToast('Đã copy mã + mật khẩu.', false);
+                } catch (e) {
+                  showToast('Không copy được: ' + e.message);
+                }
+              });
             } catch (e) {
               btn.disabled = false;
               showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
@@ -709,13 +725,14 @@
       body.innerHTML = `
         <div class="roster-table-wrap">
           <table class="roster-table">
-            <thead><tr><th>Họ và tên</th><th>Mã học sinh</th><th>Mật khẩu</th></tr></thead>
+            <thead><tr><th>Họ và tên</th><th>Mã học sinh</th><th>Mật khẩu</th><th></th></tr></thead>
             <tbody>
-              ${results.map((r) => `
+              ${results.map((r, i) => `
                 <tr>
                   <td>${escapeHtml(r.studentName)}</td>
                   <td>${escapeHtml(r.loginCode)}</td>
                   <td>${r.reused ? '<span class="hint">Đã cấp trước đó</span>' : `<strong style="color:var(--brand);">${escapeHtml(r.password)}</strong>`}</td>
+                  <td><button class="btn copy-code-btn" type="button" data-idx="${i}">📋 Copy</button></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -723,6 +740,20 @@
         </div>
         ${errors.length ? `<div class="result-box show error" style="margin-top:10px;">${errors.map((e) => escapeHtml(e.message)).join('<br/>')}</div>` : ''}
       `;
+      // Copy sẵn "Mã học sinh: ... - Mật khẩu: ..." vào bộ nhớ tạm — dán thẳng vào Zalo/tin nhắn gửi
+      // học sinh, tránh gõ tay/bôi đen dễ nhầm lẫn (đặc biệt mật khẩu random khó đọc).
+      $$('.copy-code-btn', body).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const r = results[Number(btn.dataset.idx)];
+          const text = `Mã học sinh: ${r.loginCode}` + (r.password ? ` - Mật khẩu: ${r.password}` : '');
+          try {
+            await copyTextToClipboard(text);
+            showToast(`Đã copy${r.password ? ' mã + mật khẩu' : ' mã học sinh'} của "${r.studentName}".`, false);
+          } catch (e) {
+            showToast('Không copy được: ' + e.message);
+          }
+        });
+      });
     }
   });
 })();

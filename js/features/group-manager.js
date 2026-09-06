@@ -159,6 +159,19 @@
     if (openGroupId) {
       if (groupsCache.some((g) => g.id === openGroupId)) renderGroupPanel(openGroupId);
       else closeGroupPanel();
+      return;
+    }
+    // Đến từ link "?group=<mã nhóm>" (VD bấm vào tên nhóm ở cột "Nhóm đang học" trang "Quản lý học
+    // sinh", hoặc dán tay — dùng lại đúng tên param "group" đã dùng cho
+    // "tao-de-kiem-tra.html?group=..."/"thong-ke.html?group=..." cho nhất quán) — tự mở đúng khung
+    // chi tiết nhóm đó ngay lần tải đầu tiên, khỏi phải tự dò tìm lại. Xoá param khỏi URL ngay sau
+    // khi đọc (renderGroupList() còn được gọi lại nhiều lần sau này, VD sau khi tạo/xoá nhóm — không
+    // nên cứ mở lại đúng nhóm đó mỗi lần).
+    const openCode = new URLSearchParams(window.location.search).get('group');
+    if (openCode) {
+      window.history.replaceState({}, '', window.location.pathname);
+      const target = groupsCache.find((g) => g.groupCode === openCode);
+      if (target) openGroupPanel(target.id);
     }
   }
 
