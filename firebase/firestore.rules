@@ -214,9 +214,18 @@ service cloud.firestore {
 
     // ---------- Tiến độ học theo chương của từng học sinh (để giáo viên xem "Kết quả học tập") ----------
     // 1 doc/học sinh (id = studentId), tự cập nhật liên tục khi học sinh học.
+    // studentId (docId) TRÙNG với docId của "students" — ràng buộc THÊM rằng bản ghi "students" ĐÓ
+    // đang có studentUid khớp đúng người đang ghi, không chỉ tự khai studentUid trong request.resource
+    // (như trước đây) — thiếu ràng buộc này thì 1 học sinh bất kỳ có thể tự khai studentUid=chính
+    // mình rồi ghi đè/xoá tiến độ của MỘT HỌC SINH KHÁC (chỉ cần biết đúng studentId, mà "students"
+    // đọc công khai được nên docId không hề bí mật). Ràng buộc theo "students" (nguồn xác thực gốc)
+    // thay vì theo giá trị cũ trên CHÍNH doc progress — để vẫn ghi được bình thường ngay sau khi giáo
+    // viên cấp lại mã đăng nhập (issueReplacementLoginForStudent đã cập nhật studentUid MỚI trên đúng
+    // "students" doc này trước rồi, nên get() ở đây luôn phản ánh đúng chủ sở hữu HIỆN TẠI).
     match /progress/{studentId} {
       allow read: if true;
       allow create, update: if request.auth != null && request.auth.uid == request.resource.data.studentUid
+                    && get(/databases/$(database)/documents/students/$(studentId)).data.studentUid == request.auth.uid
                     && request.resource.data.keys().hasAll(['studentId', 'groupCode', 'studentUid']);
       allow delete: if isAdmin(); // chỉ để dọn dẹp qua công cụ "Đặt lại tài khoản"
     }

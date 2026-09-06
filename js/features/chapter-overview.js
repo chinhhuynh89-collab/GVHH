@@ -81,6 +81,15 @@
       // sinh mới, chưa vào nhóm") -> chặn giống hệt học sinh thật chưa vào nhóm (viewerMode='guest').
       const previewGroupCode = typeof getPreviewGroupCode === 'function' ? getPreviewGroupCode() : null;
       if (!previewGroupCode) { viewerMode = 'guest'; return; }
+      // Nhóm đang xem thử bị khoá (vượt hạn mức miễn phí) -> phải hiện ĐÚNG như học sinh thật sẽ
+      // thấy (viewerMode='locked'), không được hiện đầy đủ nội dung — nếu không, "xem thử" sẽ cho
+      // giáo viên cảm giác SAI rằng nhóm không hề bị khoá, trong khi học sinh thật vẫn đang bị chặn.
+      if (typeof isGroupLockedForTeacher === 'function') {
+        try {
+          const teacher = getCurrentTeacher();
+          if (teacher && await isGroupLockedForTeacher(teacher.uid, previewGroupCode)) { viewerMode = 'locked'; return; }
+        } catch (e) { /* lỗi mạng tạm thời -> coi như chưa khoá, không chặn nhầm vì 1 lần lỗi mạng */ }
+      }
       try {
         const { db } = ensureFirebase();
         const snap = await db.collection('groups').where('groupCode', '==', previewGroupCode).limit(1).get();

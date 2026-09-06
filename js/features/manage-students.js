@@ -236,6 +236,7 @@
 
       let students = [];
       let hiddenCount = 0;
+      let lockedGroupCodesForRoster = new Set();
       try {
         const allStudents = await getAllStudentsForCurrentTeacher();
         // Vượt hạn mức miễn phí (gói Pro hết hạn, không gia hạn) -> chỉ hiện/thao tác được đúng số
@@ -247,6 +248,12 @@
           : new Set();
         students = allStudents.filter((s) => !hiddenUids.has(s.studentUid));
         hiddenCount = allStudents.length - students.length;
+        // Nhóm bị khoá (vượt hạn mức số nhóm miễn phí) — đánh dấu ngay trong cột "Nhóm đang học" để
+        // giáo viên hiểu vì sao 1 học sinh vẫn hiện/thao tác được ở đây nhưng lại không vào học/làm
+        // bài được (2 hạn mức nhóm/học sinh tính độc lập nhau, không liên thông).
+        lockedGroupCodesForRoster = typeof getLockedGroupCodesForTeacher === 'function'
+          ? await getLockedGroupCodesForTeacher(user.uid)
+          : new Set();
       } catch (e) {
         assignedBody.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
         return;
@@ -292,7 +299,11 @@
         const groupsText = s.groups.map((g) => {
           if (g.unassigned) return 'Chưa xếp nhóm';
           if (!g.groupName) return '(Nhóm đã xoá)';
-          return `<a class="group-link" href="nhom-hoc-sinh.html?group=${encodeURIComponent(g.groupCode)}">${escapeHtml(g.groupName)}</a>`;
+          // Nhóm bị khoá (vượt hạn mức số nhóm miễn phí) — ghi rõ "🔒 (đã khoá)" ngay cạnh tên, để
+          // giáo viên hiểu vì sao học sinh này tuy vẫn hiện/thao tác được ở đây nhưng lại không vào
+          // học/làm bài được (2 hạn mức nhóm/học sinh tính độc lập nhau, xem groups-data.js).
+          const lockedNote = lockedGroupCodesForRoster.has(g.groupCode) ? ' 🔒 (đã khoá)' : '';
+          return `<a class="group-link" href="nhom-hoc-sinh.html?group=${encodeURIComponent(g.groupCode)}">${escapeHtml(g.groupName)}</a>${lockedNote}`;
         }).join(', ');
         const zaloDigits = (s.phone || '').replace(/[^0-9]/g, '');
         // Chuỗi tìm kiếm gộp sẵn (tên, mã HS, mã đăng nhập, SĐT) — bỏ dấu + thường hoá 1 lần lúc render

@@ -710,7 +710,11 @@ function normalizeZaloUrl(v) {
       } else {
         const periodDays = freshCfg.studentPlans[planId].periodDays;
         const expiresAt = new Date(now.getTime() + periodDays * 86400000).toISOString();
-        batch.set(db.collection('studentSubscriptions').doc(sub.submitterStudentUid),
+        // Cấp gói vào ĐÚNG UID GỐC ("subscriptionTargetUid" — ổn định qua mọi lần cấp lại mã đăng
+        // nhập), không phải "submitterStudentUid" (UID đang đăng nhập LÚC GỬI yêu cầu, chỉ dùng để
+        // thoả điều kiện xác thực của firestore.rules) — bản ghi cũ trước khi có field này thì fallback
+        // về submitterStudentUid như trước (không có originalStudentUid để tách 2 field ra).
+        batch.set(db.collection('studentSubscriptions').doc(sub.subscriptionTargetUid || sub.submitterStudentUid),
           { tier: 'premium', expiresAt, updatedAt: nowIso }, { merge: true });
         await createReferralCommissions(sub, freshCfg, freshCfg.commission.studentF1Percent, freshCfg.commission.studentF2Percent, freshCfg.commission.studentHoldDays, nowIso, batch);
       }

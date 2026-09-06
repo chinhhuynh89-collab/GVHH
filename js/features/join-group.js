@@ -70,7 +70,13 @@ async function getVerifiedMembership() {
     try {
       const { db } = ensureFirebase();
       const snap = await db.collection('students').doc(m.studentId).get();
-      if (!snap.exists) {
+      // Kiểm tra THÊM studentUid trên bản ghi "students" ĐANG SỐNG còn khớp tài khoản đang đăng
+      // nhập không — không chỉ "doc còn tồn tại hay không" như trước. Thiếu bước này: sau khi giáo
+      // viên cấp lại mã đăng nhập cho học sinh (issueReplacementLoginForStudent đổi studentUid trên
+      // đúng doc này sang tài khoản MỚI), nếu thiết bị CŨ vẫn còn đăng nhập tài khoản CŨ (chưa đăng
+      // xuất) thì user.uid vẫn khớp m.studentUid (cache cũ) — cache cũ "sống sót" vô thời hạn dù đã
+      // bị thay thế, tiếp tục hiện nhóm/tiến độ của 1 tài khoản đã bị thay thế trên máy đó.
+      if (!snap.exists || snap.data().studentUid !== user.uid) {
         clearMembership();
         return null;
       }

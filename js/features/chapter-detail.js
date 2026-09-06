@@ -755,10 +755,15 @@
         const kind = a.dataset.kind;
         if (kind === 'custom') {
           const item = customQuizCache.find((it) => it.id === a.dataset.key);
-          if (item) openQuizForm({ kind: 'custom', id: item.id, q: item.q, options: item.options, correct: item.correct, explain: item.explain });
+          // Giữ NGUYÊN "type"/"acceptedAnswers" — thiếu 2 field này khiến getQuestionType() luôn hiểu
+          // nhầm thành 'abcd' (mặc định khi thiếu type), rồi openQuizForm() cố đọc existing.options[i]
+          // trên câu hỏi "Nhập đáp án" (không có mảng options) gây lỗi JS giữa chừng, để lại
+          // box.dataset.id/index cũ từ lần sửa TRƯỚC còn sót lại — bấm "Lưu" sau đó có thể ghi đè
+          // nhầm sang câu hỏi khác.
+          if (item) openQuizForm({ kind: 'custom', id: item.id, q: item.q, type: item.type, options: item.options, correct: item.correct, acceptedAnswers: item.acceptedAnswers, explain: item.explain });
         } else {
           const item = getAllQuizItems().find((it) => it.kind === 'builtin' && String(it.index) === a.dataset.key);
-          if (item) openQuizForm({ kind: 'builtin', index: item.index, q: item.q, options: item.options, correct: item.correct, explain: item.explain });
+          if (item) openQuizForm({ kind: 'builtin', index: item.index, q: item.q, type: item.type, options: item.options, correct: item.correct, acceptedAnswers: item.acceptedAnswers, explain: item.explain });
         }
       });
     });
@@ -818,7 +823,7 @@
     const type = existing ? getQuestionType(existing) : 'abcd';
     $('#quizFormType').value = type;
     updateQuizFormTypeFields();
-    [0, 1, 2, 3].forEach((i) => { $('#quizFormOpt' + i).value = (existing && type === 'abcd') ? existing.options[i] : ''; });
+    [0, 1, 2, 3].forEach((i) => { $('#quizFormOpt' + i).value = (existing && type === 'abcd' && existing.options) ? (existing.options[i] || '') : ''; });
     $$('input[name="quizFormCorrect"]').forEach((r, i) => { r.checked = (existing && type === 'abcd') ? existing.correct === i : i === 0; });
     $$('input[name="quizFormTf"]').forEach((r, i) => { r.checked = (existing && type === 'truefalse') ? existing.correct === i : i === 0; });
     $('#quizFormAccepted').value = (existing && type === 'text') ? (existing.acceptedAnswers || '') : '';

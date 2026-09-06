@@ -65,10 +65,14 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         type: 'student_upgrade',
         planId,
         orderCode,
-        // Dùng UID GỐC (originalStudentUid nếu có, xem canonicalStudentUid) chứ không phải UID đang
-        // đăng nhập — để nếu học sinh này đã từng được cấp lại mã trước đó, gói mua lần này vẫn ghi
-        // đúng vào 1 chỗ ổn định (không bị "tách" gói ra nhiều UID nếu sau này lại cấp lại mã nữa).
-        submitterStudentUid: canonicalStudentUid(membership),
+        // submitterStudentUid PHẢI là UID ĐANG ĐĂNG NHẬP THẬT (không phải UID gốc) — firestore.rules
+        // bắt buộc request.auth.uid == submitterStudentUid lúc tạo (và lúc tự đọc lại yêu cầu của
+        // mình), dùng UID gốc ở đây từng khiến học sinh đã được cấp lại mã (quên mật khẩu) không gửi
+        // được yêu cầu mua gói nữa (bị Firestore từ chối thẳng, lỗi khó hiểu). "subscriptionTargetUid"
+        // mới là nơi lưu UID GỐC — admin duyệt xong sẽ cấp gói vào ĐÚNG chỗ ổn định đó (xem
+        // approvePayment, admin.js), không bị "tách" gói ra nhiều UID nếu sau này lại cấp lại mã nữa.
+        submitterStudentUid: membership.studentUid,
+        subscriptionTargetUid: canonicalStudentUid(membership),
         submitterName: membership.studentName || '',
         amount: plan.price,
         referrerTeacherUid: membership.teacherUid || null,

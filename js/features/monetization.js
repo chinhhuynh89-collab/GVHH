@@ -377,7 +377,16 @@ async function getAuthoredChapterIds(teacherUid) {
   const chapterIds = new Set();
   lessonsSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
   quizSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
-  metaSnap.docs.forEach((d) => chapterIds.add(d.id));
+  // Chỉ tính chapterMeta có NỘI DUNG THẬT (tiêu đề/mô tả riêng, hoặc còn ít nhất 1 ghi đè) — giáo
+  // viên "khôi phục mặc định" hết mọi ghi đè + xoá tiêu đề/mô tả riêng (deleteChapterMetaField) thì
+  // doc coi như rỗng (`{}`), không nên tính vĩnh viễn vào hạn mức nữa dù doc Firestore vẫn còn tồn
+  // tại. Ghi đè giá trị `null` (VD ẩn 1 câu hỏi mặc định) vẫn tính — đó là 1 hành động soạn thật sự.
+  metaSnap.docs.forEach((d) => {
+    const data = d.data();
+    const hasOverrides = ['lessonOverrides', 'flashcardOverrides', 'quizOverrides']
+      .some((k) => data[k] && Object.keys(data[k]).length > 0);
+    if (data.title || data.description || hasOverrides) chapterIds.add(d.id);
+  });
   return chapterIds;
 }
 

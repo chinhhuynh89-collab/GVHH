@@ -465,9 +465,14 @@ async function enforceTeacherStudentLimit(teacherUid) {
   if (!cfg.enabled) return;
   const sub = await getTeacherSubscription(teacherUid);
   if (sub.tier === 'pro') return;
-  const groups = await listGroupsForCurrentTeacher();
-  const totalStudents = groups.reduce((sum, g) => sum + (g.studentCount || 0), 0);
-  if (totalStudents >= cfg.teacherFreeLimits.maxStudentsFree) {
+  // Đếm ĐÚNG số học sinh THẬT (dedup theo studentUid), khớp với đúng cách "Quản lý học sinh" đang
+  // đếm/hiện (getAllStudentsForCurrentTeacher/mergeStudentsAcrossGroups) — trước đây cộng dồn
+  // "studentCount" của từng nhóm nên: (a) đếm TRÙNG 1 học sinh học nhiều nhóm của cùng giáo viên,
+  // chặn nhầm dù chưa thật sự đạt hạn mức; (b) KHÔNG đếm học sinh "Chưa xếp nhóm" hoặc thuộc nhóm đã
+  // xoá (không nhóm nào cộng studentCount cho họ), nên giáo viên có thể lách hạn mức bằng cách nạp
+  // danh sách không gán nhóm. Dùng chung 1 nguồn duy nhất để 2 nơi luôn khớp nhau.
+  const students = await getAllStudentsForCurrentTeacher();
+  if (students.length >= cfg.teacherFreeLimits.maxStudentsFree) {
     throw new Error(`Gói miễn phí chỉ được tối đa ${cfg.teacherFreeLimits.maxStudentsFree} học sinh. Vào trang "Hồ sơ" để nâng cấp gói Pro (không giới hạn).`);
   }
 }

@@ -778,10 +778,18 @@
     const memberships = allMemberships.filter((m) => m.groupCode);
     const groupCodes = Array.from(new Set(memberships.map((m) => m.groupCode)));
 
+    // Khớp bài nộp theo "studentId" (docId "students", ỔN ĐỊNH qua mọi lần cấp lại mã đăng nhập —
+    // xem issueReplacementLoginForStudent, teacher-student-accounts.js) thay vì "studentUid" (đổi
+    // theo mỗi lần cấp lại mã) — trước đây lọc theo studentUid khiến bài đã nộp TRƯỚC LÚC được cấp
+    // lại mã "biến mất" khỏi thống kê "Đã làm N đợt kiểm tra", dù bài đó vẫn còn nguyên trong
+    // Firestore. 'in' tối đa 30 giá trị/lượt truy vấn — 1 học sinh hiếm khi có quá 30 lượt vào nhóm.
+    const membershipStudentIds = memberships.map((m) => m.studentId).filter(Boolean).slice(0, 30);
     const [progressDocs, examSnaps, submissionsSnap] = await Promise.all([
       Promise.all(memberships.map((m) => db.collection('progress').doc(m.studentId).get().catch(() => null))),
       Promise.all(groupCodes.map((code) => db.collection('exams').where('groupCode', '==', code).get().catch(() => null))),
-      db.collection('submissions').where('studentUid', '==', user.uid).get().catch(() => null)
+      membershipStudentIds.length
+        ? db.collection('submissions').where('studentId', 'in', membershipStudentIds).get().catch(() => null)
+        : Promise.resolve(null)
     ]);
 
     // "Chương đã học" = hợp các chapterId có tiến độ THẬT (đã xem bài giảng/flashcard hoặc đã làm
@@ -1123,13 +1131,16 @@
         }
       });
 
-      // Khớp ĐÚNG bài nộp của HỌC SINH NÀY dưới GIÁO VIÊN NÀY — submission.studentId phải nằm trong
-      // s.docIds (docId "students" của riêng giáo viên này), tránh tính nhầm bài nộp ở nhóm của MỘT
-      // giáo viên KHÁC nếu học sinh này còn học chung với giáo viên khác nữa.
-      const subsSnap = await db.collection('submissions').where('studentUid', '==', s.studentUid).get().catch(() => null);
+      // Khớp bài nộp theo "studentId" (s.docIds — docId "students" CỦA RIÊNG GIÁO VIÊN NÀY, ỔN ĐỊNH
+      // qua mọi lần cấp lại mã đăng nhập) thay vì "studentUid" (đổi theo mỗi lần cấp lại mã) — vừa
+      // tự động chỉ tính bài nộp dưới ĐÚNG giáo viên này (docIds không lẫn của giáo viên khác), vừa
+      // không bỏ sót hoạt động TRƯỚC LÚC học sinh được cấp lại mã.
+      const docIdsForQuery = s.docIds.slice(0, 30);
+      const subsSnap = docIdsForQuery.length
+        ? await db.collection('submissions').where('studentId', 'in', docIdsForQuery).get().catch(() => null)
+        : null;
       (subsSnap ? subsSnap.docs : []).forEach((d) => {
         const data = d.data();
-        if (!s.docIds.includes(data.studentId)) return;
         if (data.submittedAt && new Date(data.submittedAt) >= since) {
           activityCount++;
           const g = groupByDocId.get(data.studentId);
