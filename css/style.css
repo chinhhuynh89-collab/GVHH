@@ -719,6 +719,7 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   cursor: pointer;
 }
 .example-chips button:active { background: var(--surface-2); }
+.example-chips button.story-chip.is-active { background: var(--brand); color: #fff; border-color: var(--brand); }
 
 /* ---------- Học theo chương: tổng quan ---------- */
 .progress-overview {
