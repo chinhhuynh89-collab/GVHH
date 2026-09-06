@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v178';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v179';
 const ASSETS = [
   './',
   './index.html',

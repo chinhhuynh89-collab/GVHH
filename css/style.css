@@ -1090,6 +1090,30 @@ sub { font-size: 0.72em; }
 .roster-detail-row > td { background: var(--surface-2); white-space: normal; }
 .roster-detail-panel { max-width: 640px; }
 .roster-detail-panel .hint { margin: 0 0 6px; }
+
+/* Khối thống kê nhanh (trang chủ: "Bạn hiện có X lớp...", "Tích cực trong 7 ngày qua"...) — trước
+   đây mỗi số liệu là 1 dòng chữ full-width, chữ ngắn nhưng dòng kéo hết chiều ngang thẻ, để lại
+   khoảng trắng rất rộng bên phải, nhìn mất cân đối. Đóng mỗi số liệu vào 1 "ô" nhỏ (icon màu nổi bật
+   + chữ), xếp 2 cột cho gọn và cân đối — ô nào đứng 1 mình (VD chỉ có 1 kết quả) thêm class "span-2"
+   để chiếm trọn hàng, không để trống nửa bên cạnh. */
+.stat-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.stat-tile {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--border);
+  min-width: 0;
+}
+.stat-tile.span-2 { grid-column: 1 / -1; }
+.stat-tile-icon {
+  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+}
+.stat-tile-icon.hue-teal { background: rgba(20, 184, 166, 0.18); }
+.stat-tile-icon.hue-amber { background: rgba(245, 158, 11, 0.2); }
+.stat-tile-icon.hue-green { background: rgba(52, 211, 153, 0.18); }
+.stat-tile-icon.hue-violet { background: rgba(167, 139, 250, 0.2); }
+.stat-tile-text { font-size: calc(12px * var(--font-scale)); color: var(--text-dim); line-height: 1.35; min-width: 0; }
+.stat-tile-text strong { color: var(--text); }
 /* Khung "Xếp vào nhóm này" (chọn nhóm + xác nhận) — XẾP DỌC (không phải ngang) để ô chọn nhóm tự co
    giãn vừa TÊN NHÓM (bỏ width:100% cũ khiến ô kéo dài hết cột, đẩy nút xác nhận ra ngoài màn hình,
    phải cuộn ngang mới bấm được) và nút xác nhận luôn nằm ngay dưới, gần các nút khác trong cùng ô

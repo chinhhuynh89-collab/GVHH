@@ -735,8 +735,10 @@
 
     card.style.display = 'block';
     card.innerHTML = `
-      <p class="hint" style="margin:0 0 4px;">📘 Bạn đã học <strong>${chapterIds.size}</strong> chương, đang học <strong>${groupCodes.length}</strong> nhóm</p>
-      <p class="hint" style="margin:0;">📝 Đã làm <strong>${doneCount}</strong> đợt kiểm tra, bỏ lỡ <strong>${missedCount}</strong> đợt</p>
+      <div class="stat-tiles">
+        <div class="stat-tile"><div class="stat-tile-icon hue-teal">📘</div><div class="stat-tile-text">Đã học <strong>${chapterIds.size}</strong> chương, đang học <strong>${groupCodes.length}</strong> nhóm</div></div>
+        <div class="stat-tile"><div class="stat-tile-icon hue-amber">📝</div><div class="stat-tile-text">Đã làm <strong>${doneCount}</strong> đợt kiểm tra, bỏ lỡ <strong>${missedCount}</strong> đợt</div></div>
+      </div>
     `;
   } catch (e) { /* lỗi mạng thoáng qua -> ẩn khối thống kê, không chặn phần còn lại của trang chủ */ }
 })();
@@ -993,9 +995,11 @@
 
     card.style.display = 'block';
     card.innerHTML = `
-      <p class="hint" style="margin:0 0 4px;">📘 Bạn hiện có <strong>${grades.size}</strong> lớp, <strong>${chapterIds.size}</strong> chương đã soạn</p>
-      <p class="hint" style="margin:0 0 4px;">👥 Có <strong>${groups.length}</strong> nhóm, kiểm tra <strong>${examsSnap.size}</strong> đợt</p>
-      <p class="hint" style="margin:0;">🧑‍🎓 Có tổng <strong>${uids.length}</strong> học sinh (${proCount} pro, ${uids.length - proCount} miễn phí), <strong>${onlineCount}</strong> online</p>
+      <div class="stat-tiles">
+        <div class="stat-tile"><div class="stat-tile-icon hue-teal">📘</div><div class="stat-tile-text"><strong>${grades.size}</strong> lớp, <strong>${chapterIds.size}</strong> chương đã soạn</div></div>
+        <div class="stat-tile"><div class="stat-tile-icon hue-amber">👥</div><div class="stat-tile-text"><strong>${groups.length}</strong> nhóm, kiểm tra <strong>${examsSnap.size}</strong> đợt</div></div>
+        <div class="stat-tile span-2"><div class="stat-tile-icon hue-green">🧑‍🎓</div><div class="stat-tile-text">Tổng <strong>${uids.length}</strong> học sinh (${proCount} pro, ${uids.length - proCount} miễn phí), <strong>${onlineCount}</strong> online</div></div>
+      </div>
     `;
   } catch (e) { /* lỗi mạng thoáng qua -> ẩn khối thống kê, không chặn phần còn lại của trang chủ */ }
 })();
@@ -1087,12 +1091,18 @@
         return `${escapeHtml(p.studentName)}${groupLabel ? ` (${escapeHtml(groupLabel)})` : ''}`;
       });
 
+    // Ô nào đứng 1 mình (thiếu dữ liệu loại còn lại) thì chiếm trọn hàng (span-2), tránh để trống
+    // nửa bên cạnh — chỉ khi CẢ 2 loại đều có mới xếp cạnh nhau đúng 2 cột.
+    const bothPresent = topGroups.length && topStudents.length;
+    const soloClass = bothPresent ? '' : ' span-2';
     card.style.display = 'block';
     card.innerHTML = `
       <h2 style="margin-top:0;"><span class="icon">🏆</span>Tích cực trong 7 ngày qua</h2>
-      ${topGroups.length ? `<p class="hint" style="margin:0 0 4px;">🏅 Nhóm tích cực nhất: <strong>${topGroups.join('</strong>, <strong>')}</strong></p>` : ''}
-      ${topStudents.length ? `<p class="hint" style="margin:0;">🌟 Học sinh tích cực nhất: <strong>${topStudents.join('</strong>, <strong>')}</strong></p>` : ''}
-      ${!topGroups.length && !topStudents.length ? '<p class="hint" style="margin:0;">Chưa có hoạt động nào trong 7 ngày qua.</p>' : ''}
+      <div class="stat-tiles">
+        ${topGroups.length ? `<div class="stat-tile${soloClass}"><div class="stat-tile-icon hue-violet">🏅</div><div class="stat-tile-text">Nhóm tích cực nhất: <strong>${topGroups.join('</strong>, <strong>')}</strong></div></div>` : ''}
+        ${topStudents.length ? `<div class="stat-tile${soloClass}"><div class="stat-tile-icon hue-amber">🌟</div><div class="stat-tile-text">Học sinh tích cực nhất: <strong>${topStudents.join('</strong>, <strong>')}</strong></div></div>` : ''}
+        ${!topGroups.length && !topStudents.length ? '<div class="stat-tile span-2"><div class="stat-tile-text">Chưa có hoạt động nào trong 7 ngày qua.</div></div>' : ''}
+      </div>
     `;
   } catch (e) { /* lỗi mạng thoáng qua -> ẩn khối này, không chặn phần còn lại của trang chủ */ }
 })();
