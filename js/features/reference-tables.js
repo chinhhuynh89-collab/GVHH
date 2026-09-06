@@ -1,6 +1,6 @@
 // Trang "Bảng tra cứu" — nội dung tĩnh (js/data/reference-tables.js), không cần Firebase/đăng nhập.
-// 4 bảng khác cấu trúc nhau (lưới tính tan, danh sách dãy hoạt động, bảng thế điện cực, bảng nhận
-// biết ion) nên mỗi bảng có hàm vẽ riêng, không dùng chung 1 khuôn thẻ như chemistry-formulas.js.
+// 5 bảng khác cấu trúc nhau (hoá trị, lưới tính tan, danh sách dãy hoạt động, bảng thế điện cực, bảng
+// nhận biết ion) nên mỗi bảng có hàm vẽ riêng, không dùng chung 1 khuôn thẻ như chemistry-formulas.js.
 (function () {
   const chipsBox = $('#refTableChips');
   const box = $('#refTableBox');
@@ -19,6 +19,34 @@
     if (code === 'k') return '<span class="solub-chip khong-tan">K</span>';
     if (code === 'i') return '<span class="solub-chip it-tan">I</span>';
     return '<span class="solub-chip none">–</span>';
+  }
+
+  function renderValenceTable() {
+    const elementRows = ELEMENT_VALENCES.map((e) => `
+      <tr><td>${escapeHtml(e.symbol)}</td><td>${escapeHtml(e.name)}</td><td>${escapeHtml(e.valence)}</td></tr>
+    `).join('');
+    const groupRows = POLYATOMIC_VALENCES.map((g) => `
+      <tr><td>${escapeHtml(g.formula)}</td><td>${escapeHtml(g.name)}</td><td>${escapeHtml(g.valence)}</td></tr>
+    `).join('');
+    box.innerHTML = `
+      <div class="card">
+        <p class="hint" style="margin-top:0;">💡 Quy tắc hoá trị: trong hợp chất AₓBᵧ, x×(hoá trị A) = y×(hoá trị B) — dùng để lập nhanh công thức hoá học.</p>
+        <h3 class="formula-name">Nguyên tố</h3>
+        <div class="roster-table-wrap">
+          <table class="roster-table">
+            <thead><tr><th>Kí hiệu</th><th>Tên nguyên tố</th><th>Hoá trị</th></tr></thead>
+            <tbody>${elementRows}</tbody>
+          </table>
+        </div>
+        <h3 class="formula-name" style="margin-top:16px;">Nhóm nguyên tử thường gặp</h3>
+        <div class="roster-table-wrap">
+          <table class="roster-table">
+            <thead><tr><th>Công thức</th><th>Tên nhóm</th><th>Hoá trị</th></tr></thead>
+            <tbody>${groupRows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
   }
 
   function renderSolubilityTable() {
@@ -100,7 +128,8 @@
 
   function renderSection(id) {
     renderChips(id);
-    if (id === 'solubility') renderSolubilityTable();
+    if (id === 'valence') renderValenceTable();
+    else if (id === 'solubility') renderSolubilityTable();
     else if (id === 'activity') renderActivitySeries();
     else if (id === 'electrode') renderElectrodeSeries();
     else if (id === 'ionid') renderIonTable();

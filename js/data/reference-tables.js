@@ -3,10 +3,58 @@
 // trước khi đưa vào — xem js/features/reference-tables.js để biết cách hiển thị.
 
 const REF_TABLE_SECTIONS = [
+  { id: 'valence', icon: '🔢', label: 'Bảng hoá trị' },
   { id: 'solubility', icon: '🧪', label: 'Bảng tính tan' },
   { id: 'activity', icon: '⚡', label: 'Dãy hoạt động kim loại' },
   { id: 'electrode', icon: '🔋', label: 'Dãy điện hoá chuẩn' },
   { id: 'ionid', icon: '🔍', label: 'Nhận biết ion' }
+];
+
+// ---------- Bảng hoá trị ----------
+// Hoá trị = khả năng liên kết của 1 nguyên tử/nhóm nguyên tử, tính theo số liên kết với H (hoá trị I).
+// Quy tắc hoá trị: trong hợp chất AₓBᵧ, x×(hoá trị A) = y×(hoá trị B) — dùng để lập nhanh công thức hoá học.
+const ELEMENT_VALENCES = [
+  { symbol: 'H', name: 'Hiđro', valence: 'I' },
+  { symbol: 'O', name: 'Oxi', valence: 'II' },
+  { symbol: 'Cl', name: 'Clo', valence: 'I (thường); III, V, VII (trong hợp chất có oxi)' },
+  { symbol: 'Br', name: 'Brom', valence: 'I' },
+  { symbol: 'I', name: 'Iot', valence: 'I' },
+  { symbol: 'Li', name: 'Liti', valence: 'I' },
+  { symbol: 'Na', name: 'Natri', valence: 'I' },
+  { symbol: 'K', name: 'Kali', valence: 'I' },
+  { symbol: 'Ag', name: 'Bạc', valence: 'I' },
+  { symbol: 'Ca', name: 'Canxi', valence: 'II' },
+  { symbol: 'Mg', name: 'Magie', valence: 'II' },
+  { symbol: 'Ba', name: 'Bari', valence: 'II' },
+  { symbol: 'Zn', name: 'Kẽm', valence: 'II' },
+  { symbol: 'Cu', name: 'Đồng', valence: 'I, II' },
+  { symbol: 'Al', name: 'Nhôm', valence: 'III' },
+  { symbol: 'Fe', name: 'Sắt', valence: 'II, III' },
+  { symbol: 'Pb', name: 'Chì', valence: 'II, IV' },
+  { symbol: 'Sn', name: 'Thiếc', valence: 'II, IV' },
+  { symbol: 'Mn', name: 'Mangan', valence: 'II (thường); IV, VII (VD trong KMnO₄)' },
+  { symbol: 'N', name: 'Nitơ', valence: 'III, V (thường gặp trong hợp chất)' },
+  { symbol: 'P', name: 'Photpho', valence: 'III, V' },
+  { symbol: 'S', name: 'Lưu huỳnh', valence: 'II, IV, VI' },
+  { symbol: 'C', name: 'Cacbon', valence: 'IV (thường); II (trong CO)' },
+  { symbol: 'Si', name: 'Silic', valence: 'IV' }
+];
+const POLYATOMIC_VALENCES = [
+  { formula: 'OH', name: 'Hiđroxit', valence: 'I' },
+  { formula: 'NH₄', name: 'Amoni', valence: 'I' },
+  { formula: 'NO₃', name: 'Nitrat', valence: 'I' },
+  { formula: 'HCO₃', name: 'Hiđrocacbonat (bicacbonat)', valence: 'I' },
+  { formula: 'HSO₄', name: 'Hiđrosunfat', valence: 'I' },
+  { formula: 'ClO', name: 'Hipoclorit', valence: 'I' },
+  { formula: 'ClO₃', name: 'Clorat', valence: 'I' },
+  { formula: 'MnO₄', name: 'Pemanganat', valence: 'I' },
+  { formula: 'SO₄', name: 'Sunfat', valence: 'II' },
+  { formula: 'SO₃', name: 'Sunfit', valence: 'II' },
+  { formula: 'CO₃', name: 'Cacbonat', valence: 'II' },
+  { formula: 'CrO₄', name: 'Cromat', valence: 'II' },
+  { formula: 'Cr₂O₇', name: 'Đicromat', valence: 'II' },
+  { formula: 'SiO₃', name: 'Silicat', valence: 'II' },
+  { formula: 'PO₄', name: 'Photphat', valence: 'III' }
 ];
 
 // ---------- Bảng tính tan ----------
