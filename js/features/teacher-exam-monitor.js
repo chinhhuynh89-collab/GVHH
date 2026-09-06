@@ -59,11 +59,14 @@ function markExamStatsSeen(examId) {
     const startedByStudent = new Map(startsSnap.docs.map((d) => [d.data().studentId, d.data()]));
     roster = studentsSnap.docs.map((d) => {
       const st = d.data();
+      // Mặc định chuỗi rỗng — bản ghi "students" rất cũ (trước khi field này bắt buộc) có thể thiếu
+      // studentName, thiếu bước này thì .localeCompare() bên dưới ném lỗi làm hỏng cả thẻ theo dõi.
+      const name = st.studentName || '';
       const sub = submittedByStudent.get(d.id);
       const start = startedByStudent.get(d.id);
-      if (sub) return { name: st.studentName, status: 'done', at: sub.submittedAt, score10: Math.round(sub.score) / 10 };
-      if (start) return { name: st.studentName, status: 'inprogress', at: start.startedAt };
-      return { name: st.studentName, status: 'notstarted' };
+      if (sub) return { name, status: 'done', at: sub.submittedAt, score10: Math.round(sub.score) / 10 };
+      if (start) return { name, status: 'inprogress', at: start.startedAt };
+      return { name, status: 'notstarted' };
     });
     const statusOrder = { inprogress: 0, notstarted: 1, done: 2 };
     roster.sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || a.name.localeCompare(b.name, 'vi'));

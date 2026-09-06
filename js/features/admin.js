@@ -672,9 +672,18 @@ function normalizeZaloUrl(v) {
       } catch (e) { /* không tra được email thì bỏ qua, không chặn duyệt */ }
 
       const holdUntil = new Date(Date.now() + (Number(holdDays) || 0) * 86400000).toISOString();
+      // Chặn TỰ NHẬN hoa hồng từ chính đơn hàng của mình — không chỉ chặn F1 trùng F2 (đã có sẵn) mà
+      // còn phải chặn CẢ F1 lẫn F2 trùng ĐÚNG người mua. auth.js đã chặn 1 giáo viên tự đặt mình làm
+      // người giới thiệu của chính mình (chặn vòng lặp NGẮN NHẤT), nhưng KHÔNG chặn được vòng lặp 2
+      // giáo viên giới thiệu CHÉO nhau (A giới thiệu B, B giới thiệu A) — khi đó nếu A mua gói: F1=B,
+      // F2=(người giới thiệu của B)=A — chính A tự nhận được hoa hồng F2 từ đơn hàng của mình, B thông
+      // đồng nhận F1 — 1 đường rút tiền hoa hồng khống có thật. Chặn ở ĐÚNG bước tạo hoa hồng này (nơi
+      // cuối cùng, áp dụng cho MỌI vòng lặp dài ngắn khác nhau) thay vì cố sửa hết mọi chỗ có thể tạo
+      // ra vòng lặp giới thiệu.
+      const purchaserUid = sub.type === 'teacher_upgrade' ? sub.submitterUid : sub.submitterStudentUid;
       const tiers = [];
-      if (f1Uid) tiers.push({ uid: f1Uid, tier: 'F1', percent: f1Percent });
-      if (f2Uid && f2Uid !== f1Uid) tiers.push({ uid: f2Uid, tier: 'F2', percent: f2Percent });
+      if (f1Uid && f1Uid !== purchaserUid) tiers.push({ uid: f1Uid, tier: 'F1', percent: f1Percent });
+      if (f2Uid && f2Uid !== f1Uid && f2Uid !== purchaserUid) tiers.push({ uid: f2Uid, tier: 'F2', percent: f2Percent });
 
       for (const t of tiers) {
         // Mã giới thiệu bị admin khoá (nghi gian lận) -> bỏ qua ĐÚNG cấp đó, các cấp khác không ảnh hưởng.
@@ -804,10 +813,13 @@ function normalizeZaloUrl(v) {
         const list = await listAllFeedback();
         if (!list.length) { box.innerHTML = '<p class="hint">Chưa có phản ánh/đề xuất nào.</p>'; return; }
 
-        const badge = $('#feedbackCountBadge');
-        const newCount = list.filter((f) => f.status !== 'done').length;
-        if (newCount) { badge.textContent = newCount > 99 ? '99+' : String(newCount); badge.style.display = 'flex'; }
-        else badge.style.display = 'none';
+        function updateFeedbackBadge() {
+          const badge = $('#feedbackCountBadge');
+          const newCount = list.filter((f) => f.status !== 'done').length;
+          if (newCount) { badge.textContent = newCount > 99 ? '99+' : String(newCount); badge.style.display = 'flex'; }
+          else badge.style.display = 'none';
+        }
+        updateFeedbackBadge();
 
         const categoryLabel = (c) => c === 'bug' ? '🐛 Báo lỗi' : c === 'feature' ? '✨ Đề xuất tính năng' : '💡 Góp ý chung';
         const roleLabel = (r) => r === 'teacher' ? 'Giáo viên' : r === 'student' ? 'Học sinh' : '—';
@@ -845,6 +857,7 @@ function normalizeZaloUrl(v) {
                 await setFeedbackStatus(id, nextStatus);
                 const item = list.find((f) => f.id === id);
                 if (item) item.status = nextStatus;
+                updateFeedbackBadge();
                 renderTable();
               } catch (e) {
                 showToast('Không lưu được: ' + e.message);
@@ -1194,40 +1207,71 @@ function normalizeZaloUrl(v) {
       // Gom TOÀN BỘ bản ghi (ở mọi collection) gắn với 1 uid — dùng chung cho cả preview (hiện trước
       // khi xoá) lẫn thao tác xoá thật. Duyệt song song cho nhanh (đa số collection cho đọc công khai
       // hoặc admin đọc được — xem firestore.rules).
+      //
+      // Học sinh dùng tài khoản do giáo viên cấp mà đã từng "Cấp mã thay thế" (quên mật khẩu) có 2
+      // UID liên quan: UID ĐANG SỐNG (studentUid trên "students", dùng để đăng nhập/học/làm bài) và
+      // UID GỐC (originalStudentUid, nơi gói Premium — studentSubscriptions — và các paymentSubmissions
+      // CŨ vẫn đang neo vào, xem issueReplacementLoginForStudent/canonicalStudentUid). Trước đây hàm
+      // này chỉ tra ĐÚNG 1 uid được nhập — nếu admin tra theo UID đang sống (đường thường gặp nhất,
+      // qua resolveUidByEmailOrUid) thì gói Premium + nửa lịch sử mua gói ở UID GỐC lọt lưới hoàn
+      // toàn: không hiện ra để xem trước, và "Xoá toàn bộ dữ liệu" cũng không đụng tới — tưởng đã xoá
+      // sạch nhưng thực ra vẫn còn sót gói đã mua. Dò đủ cả 2 CHIỀU (uid nhập vào có thể là UID đang
+      // sống HOẶC chính UID gốc đã bị thay thế) trước khi gom dữ liệu.
       async function gatherAccountData(uid) {
+        const [byLiveUidProbe, byOriginalUidProbe] = await Promise.all([
+          db.collection('students').where('studentUid', '==', uid).limit(1).get(),
+          db.collection('students').where('originalStudentUid', '==', uid).limit(1).get()
+        ]);
+        let liveUid = uid;
+        let originalUid = null;
+        if (!byLiveUidProbe.empty && byLiveUidProbe.docs[0].data().originalStudentUid) {
+          originalUid = byLiveUidProbe.docs[0].data().originalStudentUid;
+        } else if (!byOriginalUidProbe.empty) {
+          // uid nhập vào chính là UID GỐC đã bị thay thế — dò ra UID đang sống để gom đủ dữ liệu hiện tại.
+          originalUid = uid;
+          liveUid = byOriginalUidProbe.docs[0].data().studentUid;
+        }
+        const studentUids = originalUid && originalUid !== liveUid ? [liveUid, originalUid] : [liveUid];
+
         const [
-          roleDoc, teacherDoc, teacherProfileDoc, subDoc, studentSubDoc,
-          groupsSnap, studentsOwnedSnap, studentsMemberSnap,
-          regsOwnedSnap, regsMemberSnap,
-          progressSnap, submissionsSnap, examStartsSnap,
+          roleDoc, teacherDoc, teacherProfileDoc, subDoc, studentSubDocs,
+          groupsSnap, studentsOwnedSnap, studentsMemberSnaps,
+          regsOwnedSnap, regsMemberSnaps,
+          progressSnaps, submissionsSnaps, examStartsSnaps,
           examsSnap, programsSnap, programChaptersSnap,
           customLessonsSnap, customQuizSnap, customFlashcardsSnap, chapterMetaSnap,
-          paymentsAsTeacherSnap, paymentsAsStudentSnap, commissionsSnap
+          paymentsAsTeacherSnap, paymentsAsStudentSnaps, commissionsSnap
         ] = await Promise.all([
-          db.collection('accountRoles').doc(uid).get(),
-          db.collection('teachers').doc(uid).get(),
-          db.collection('teacherProfiles').doc(uid).get(),
-          db.collection('subscriptions').doc(uid).get(),
-          db.collection('studentSubscriptions').doc(uid).get(),
-          db.collection('groups').where('teacherUid', '==', uid).get(),
-          db.collection('students').where('teacherUid', '==', uid).get(),
-          db.collection('students').where('studentUid', '==', uid).get(),
-          db.collection('studentRegistrations').where('teacherUid', '==', uid).get(),
-          db.collection('studentRegistrations').where('studentUid', '==', uid).get(),
-          db.collection('progress').where('studentUid', '==', uid).get(),
-          db.collection('submissions').where('studentUid', '==', uid).get(),
-          db.collection('examStarts').where('studentUid', '==', uid).get(),
-          db.collection('exams').where('teacherUid', '==', uid).get(),
-          db.collection('programs').where('teacherUid', '==', uid).get(),
-          db.collection('programChapters').where('teacherUid', '==', uid).get(),
-          db.collection('teachers').doc(uid).collection('customLessons').get(),
-          db.collection('teachers').doc(uid).collection('customQuiz').get(),
-          db.collection('teachers').doc(uid).collection('customFlashcards').get(),
-          db.collection('teachers').doc(uid).collection('chapterMeta').get(),
-          db.collection('paymentSubmissions').where('submitterUid', '==', uid).get(),
-          db.collection('paymentSubmissions').where('submitterStudentUid', '==', uid).get(),
-          db.collection('commissions').where('beneficiaryTeacherUid', '==', uid).get()
+          db.collection('accountRoles').doc(liveUid).get(),
+          db.collection('teachers').doc(liveUid).get(),
+          db.collection('teacherProfiles').doc(liveUid).get(),
+          db.collection('subscriptions').doc(liveUid).get(),
+          Promise.all(studentUids.map((u) => db.collection('studentSubscriptions').doc(u).get())),
+          db.collection('groups').where('teacherUid', '==', liveUid).get(),
+          db.collection('students').where('teacherUid', '==', liveUid).get(),
+          Promise.all(studentUids.map((u) => db.collection('students').where('studentUid', '==', u).get())),
+          db.collection('studentRegistrations').where('teacherUid', '==', liveUid).get(),
+          Promise.all(studentUids.map((u) => db.collection('studentRegistrations').where('studentUid', '==', u).get())),
+          Promise.all(studentUids.map((u) => db.collection('progress').where('studentUid', '==', u).get())),
+          Promise.all(studentUids.map((u) => db.collection('submissions').where('studentUid', '==', u).get())),
+          Promise.all(studentUids.map((u) => db.collection('examStarts').where('studentUid', '==', u).get())),
+          db.collection('exams').where('teacherUid', '==', liveUid).get(),
+          db.collection('programs').where('teacherUid', '==', liveUid).get(),
+          db.collection('programChapters').where('teacherUid', '==', liveUid).get(),
+          db.collection('teachers').doc(liveUid).collection('customLessons').get(),
+          db.collection('teachers').doc(liveUid).collection('customQuiz').get(),
+          db.collection('teachers').doc(liveUid).collection('customFlashcards').get(),
+          db.collection('teachers').doc(liveUid).collection('chapterMeta').get(),
+          db.collection('paymentSubmissions').where('submitterUid', '==', liveUid).get(),
+          Promise.all(studentUids.map((u) => db.collection('paymentSubmissions').where('submitterStudentUid', '==', u).get())),
+          db.collection('commissions').where('beneficiaryTeacherUid', '==', liveUid).get()
         ]);
+        const studentsMemberSnap = { docs: [].concat(...studentsMemberSnaps.map((s) => s.docs)) };
+        const regsMemberSnap = { docs: [].concat(...regsMemberSnaps.map((s) => s.docs)) };
+        const progressSnap = { docs: [].concat(...progressSnaps.map((s) => s.docs)) };
+        const submissionsSnap = { docs: [].concat(...submissionsSnaps.map((s) => s.docs)) };
+        const examStartsSnap = { docs: [].concat(...examStartsSnaps.map((s) => s.docs)) };
+        const paymentsAsStudentSnap = { docs: [].concat(...paymentsAsStudentSnaps.map((s) => s.docs)) };
 
         // Đáp án đúng (examAnswers) gắn theo examId của các đề giáo viên này sở hữu — tra thêm 1 vòng.
         const examIds = examsSnap.docs.map((d) => d.id);
@@ -1239,12 +1283,13 @@ function normalizeZaloUrl(v) {
           role: roleDoc.exists ? roleDoc.data() : null,
           teacherName: teacherDoc.exists ? teacherDoc.data().displayName : null,
           teacherEmail: teacherDoc.exists ? teacherDoc.data().email : null,
+          otherStudentUid: originalUid && originalUid !== liveUid ? originalUid : null,
           refsByCollection: {
             accountRoles: roleDoc.exists ? [roleDoc.ref] : [],
             teachers: teacherDoc.exists ? [teacherDoc.ref] : [],
             teacherProfiles: teacherProfileDoc.exists ? [teacherProfileDoc.ref] : [],
             subscriptions: subDoc.exists ? [subDoc.ref] : [],
-            studentSubscriptions: studentSubDoc.exists ? [studentSubDoc.ref] : [],
+            studentSubscriptions: studentSubDocs.filter((s) => s.exists).map((s) => s.ref),
             groups: groupsSnap.docs.map((d) => d.ref),
             students: [...studentsOwnedSnap.docs, ...studentsMemberSnap.docs].map((d) => d.ref),
             studentRegistrations: [...regsOwnedSnap.docs, ...regsMemberSnap.docs].map((d) => d.ref),
@@ -1288,6 +1333,7 @@ function normalizeZaloUrl(v) {
         box.innerHTML = `
           <div class="card" style="margin-top:12px;">
             <p class="hint"><strong>Uid:</strong> ${escapeHtml(uid)}</p>
+            ${data.otherStudentUid ? `<p class="hint">🔁 Tài khoản này từng được "Cấp mã thay thế" — đã tự động gom thêm dữ liệu ở UID gốc <strong>${escapeHtml(data.otherStudentUid)}</strong> (gói Premium/lịch sử mua gói cũ vẫn neo ở đó).</p>` : ''}
             <p class="hint"><strong>Vai trò đã khoá:</strong> ${data.role ? `${escapeHtml(data.role.role === 'teacher' ? 'Giáo viên' : 'Học sinh')} (mã ${escapeHtml(data.role.code || '—')})` : 'Chưa có — tài khoản chưa từng đăng nhập qua app này'}</p>
             ${data.teacherName ? `<p class="hint"><strong>Tên/email giáo viên:</strong> ${escapeHtml(data.teacherName)} (${escapeHtml(data.teacherEmail || '')})</p>` : ''}
             <p class="hint" style="font-weight:700;margin-top:8px;">Dữ liệu tìm thấy — ${allRefs.length} bản ghi:</p>

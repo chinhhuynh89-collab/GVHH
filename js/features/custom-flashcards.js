@@ -4,6 +4,7 @@
 async function addCustomFlashcard(chapterId, card) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên để thêm flashcard.');
+  if (typeof enforceCustomChapterLimit === 'function') await enforceCustomChapterLimit(teacher.uid, chapterId);
   const { db } = ensureFirebase();
   const ref = await db.collection('teachers').doc(teacher.uid).collection('customFlashcards').add(
     Object.assign({ chapterId, addedAt: new Date().toISOString() }, card)

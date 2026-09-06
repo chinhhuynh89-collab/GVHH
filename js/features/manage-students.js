@@ -112,7 +112,12 @@
         return;
       }
 
-      const groupOptions = groups.map((g) => `<option value="${escapeHtml(g.groupCode)}">${escapeHtml(g.groupName)} (${escapeHtml(g.groupCode)})</option>`).join('');
+      // Nhóm đã bị khoá (vượt hạn mức số nhóm miễn phí) không cho chọn để xếp/duyệt học sinh vào —
+      // xếp vào 1 nhóm học sinh không thể học được là vô nghĩa, xem addStudentToGroup (groups-data.js).
+      const lockedGroupCodesForPending = typeof getLockedGroupCodesForTeacher === 'function'
+        ? await getLockedGroupCodesForTeacher(user.uid) : new Set();
+      const selectableGroups = groups.filter((g) => !lockedGroupCodesForPending.has(g.groupCode));
+      const groupOptions = selectableGroups.map((g) => `<option value="${escapeHtml(g.groupCode)}">${escapeHtml(g.groupName)} (${escapeHtml(g.groupCode)})</option>`).join('');
 
       panel.innerHTML = `
         <div class="card">
@@ -130,14 +135,14 @@
                     <button class="btn primary approve-btn" data-reg="${r.id}" type="button" style="flex:1;">✅ Duyệt vào nhóm</button>
                     <button class="btn reject-btn" data-reg="${r.id}" type="button">❌ Từ chối</button>
                   </div>
-                ` : groups.length ? `
+                ` : selectableGroups.length ? `
                   <div class="btn-row" style="margin-top:8px;">
                     <select class="assign-group-select" data-reg="${r.id}" style="flex:1;">${groupOptions}</select>
                     <button class="btn primary assign-btn" data-reg="${r.id}" type="button">Xếp vào nhóm</button>
                   </div>
                   <button class="btn reject-btn" data-reg="${r.id}" type="button" style="margin-top:8px;">Xoá đăng ký này</button>
                 ` : `
-                  <p class="hint" style="margin-top:8px;">⚠️ Bạn chưa có nhóm nào — vào "Nhóm học sinh" tạo nhóm trước.</p>
+                  <p class="hint" style="margin-top:8px;">⚠️ Bạn chưa có nhóm nào ${groups.length ? 'chưa bị khoá ' : ''}— vào "Nhóm học sinh" tạo nhóm ${groups.length ? 'mới, hoặc gia hạn Pro để mở khoá nhóm cũ' : 'trước'}.</p>
                   <button class="btn reject-btn" data-reg="${r.id}" type="button" style="margin-top:8px;">Xoá đăng ký này</button>
                 `}
                 <div class="result-box" id="reg-result-${r.id}"></div>

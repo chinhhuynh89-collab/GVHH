@@ -363,20 +363,23 @@ async function findTeacherUidByCode(teacherCode) {
 }
 
 // ---------- Hạn mức "số chương tự soạn" (maxCustomChaptersFree) ----------
-// "Đã soạn" = có mặt ở bài giảng/câu hỏi tự thêm (customLessons/customQuiz) HOẶC đã sửa tiêu đề/mô
-// tả/ghi đè (chapterMeta) — 1 chương chỉ tính 1 lần dù có cả 2-3 loại. Y HỆT cách tính ở khối "Thống
-// kê nhanh" trang chủ (index.html) — tách ra đây để DÙNG CHUNG, tránh viết trùng logic union.
+// "Đã soạn" = có mặt ở bài giảng/câu hỏi/flashcard tự thêm (customLessons/customQuiz/
+// customFlashcards) HOẶC đã sửa tiêu đề/mô tả/ghi đè (chapterMeta) — 1 chương chỉ tính 1 lần dù có
+// đủ cả 4 loại. Y HỆT cách tính ở khối "Thống kê nhanh" trang chủ (index.html) — tách ra đây để DÙNG
+// CHUNG, tránh viết trùng logic union.
 async function getAuthoredChapterIds(teacherUid) {
   const { db } = ensureFirebase();
   const col = db.collection('teachers').doc(teacherUid);
-  const [lessonsSnap, quizSnap, metaSnap] = await Promise.all([
+  const [lessonsSnap, quizSnap, flashcardsSnap, metaSnap] = await Promise.all([
     col.collection('customLessons').get(),
     col.collection('customQuiz').get(),
+    col.collection('customFlashcards').get(),
     col.collection('chapterMeta').get()
   ]);
   const chapterIds = new Set();
   lessonsSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
   quizSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
+  flashcardsSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
   // Chỉ tính chapterMeta có NỘI DUNG THẬT (tiêu đề/mô tả riêng, hoặc còn ít nhất 1 ghi đè) — giáo
   // viên "khôi phục mặc định" hết mọi ghi đè + xoá tiêu đề/mô tả riêng (deleteChapterMetaField) thì
   // doc coi như rỗng (`{}`), không nên tính vĩnh viễn vào hạn mức nữa dù doc Firestore vẫn còn tồn

@@ -155,6 +155,14 @@ async function addStudentToGroup(groupCode, student) {
   const { db } = ensureFirebase();
 
   await enforceTeacherStudentLimit(teacher.uid);
+  // Nhóm đích đã bị khoá (vượt hạn mức số nhóm miễn phí) — chặn hẳn, không cho thêm học sinh vào 1
+  // nhóm mà chính học sinh đó sẽ không vào học được (xem isGroupLockedForTeacher, cùng file). Quan
+  // trọng nhất với đường "duyệt đăng ký chờ" (assignRegistrationToGroup) — dropdown chọn nhóm ở đó
+  // liệt kê MỌI nhóm, kể cả nhóm đã khoá, nên trước đây có thể duyệt "thành công" vào 1 nhóm vô dụng
+  // mà không có cảnh báo gì.
+  if (typeof isGroupLockedForTeacher === 'function' && await isGroupLockedForTeacher(teacher.uid, groupCode)) {
+    throw new Error('Nhóm này đang bị khoá (vượt hạn mức số nhóm của gói miễn phí) — gia hạn Pro hoặc chọn 1 nhóm khác chưa bị khoá.');
+  }
 
   await db.collection('students').add(Object.assign({
     groupCode, teacherUid: teacher.uid, studentUid: student.studentUid, joinedAt: new Date().toISOString(),
@@ -392,6 +400,26 @@ async function assignRegistrationToGroup(registration, groupCode) {
   await addStudentToGroup(groupCode, registration);
   const { db } = ensureFirebase();
   await db.collection('studentRegistrations').doc(registration.id).delete();
+  // Dọn luôn các đăng ký CHỜ KHÁC của ĐÚNG học sinh này dưới ĐÚNG giáo viên này — 1 tài khoản có thể
+  // gửi CẢ 2 đường cùng lúc (xin vào nhóm bằng mã nhóm CỘNG VỚI đăng ký bằng mã giáo viên), 2 đường
+  // đó dùng 2 ID cố định KHÁC NHAU (`${studentUid}_group_...` / `${studentUid}_teacher_...`) nên
+  // không tự ghi đè lẫn nhau như dự tính ban đầu — nếu giáo viên vô tình duyệt cả 2 thì học sinh bị
+  // xếp nhầm vào 2 nhóm từ 1 ý định xin vào duy nhất. Đã duyệt 1 đường coi như ý định đã được xử lý
+  // xong, tự xoá nốt các đường còn lại đang chờ.
+  if (registration.studentUid) {
+    try {
+      const teacher = getCurrentTeacher();
+      const otherSnap = await db.collection('studentRegistrations')
+        .where('teacherUid', '==', teacher.uid).where('studentUid', '==', registration.studentUid)
+        .where('status', '==', 'pending').get();
+      const others = otherSnap.docs.filter((d) => d.id !== registration.id);
+      if (others.length) {
+        const batch = db.batch();
+        others.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+    } catch (e) { /* lỗi mạng thoáng qua -> không chặn việc duyệt chính, dọn nốt ở lần sau nếu còn */ }
+  }
 }
 
 // Từ chối/xoá 1 đăng ký chờ (VD đăng ký nhầm, spam) — không tạo học sinh vào nhóm nào cả.
