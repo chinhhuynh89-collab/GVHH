@@ -172,6 +172,7 @@
     <div class="card" id="teacherStudentsNotifyCard" style="display:none;"></div>
 
     <div class="section-label">Dành cho giáo viên</div>
+    <div class="card" id="teacherQuickStatsCard" style="display:none;"></div>
     <div class="icon-grid">
       <a class="icon-tile is-active" href="pages/hoc-theo-chuong.html">
         <div class="icon-tile-icon">🎓</div>
@@ -880,6 +881,60 @@
       }
     });
   } catch (e) { /* im lặng bỏ qua nếu chưa kết nối được */ }
+})();
+</script>
+<script>
+(async function () {
+  // Thống kê nhanh cho giáo viên, hiện ngay phía trên 3 nút "Giáo án/Nhóm học sinh/Quản lý học
+  // sinh" — chỉ đọc, không có nút bấm nào, mục đích để giáo viên liếc qua là biết ngay tình hình
+  // (đã soạn bao nhiêu, có bao nhiêu nhóm/học sinh) mà không cần bấm vào từng trang.
+  if (!isFirebaseConfigured() || getRole() !== 'teacher') return;
+  const teacher = await waitForAuthReady();
+  if (!teacher) return;
+  const card = document.getElementById('teacherQuickStatsCard');
+  if (!card) return;
+  try {
+    const { db } = ensureFirebase();
+    const col = db.collection('teachers').doc(teacher.uid);
+    const [lessonsSnap, quizSnap, metaSnap, groups, examsSnap, students] = await Promise.all([
+      col.collection('customLessons').get(),
+      col.collection('customQuiz').get(),
+      col.collection('chapterMeta').get(),
+      typeof listGroupsForCurrentTeacher === 'function' ? listGroupsForCurrentTeacher() : Promise.resolve([]),
+      db.collection('exams').where('teacherUid', '==', teacher.uid).get(),
+      typeof getAllStudentsForCurrentTeacher === 'function' ? getAllStudentsForCurrentTeacher() : Promise.resolve([])
+    ]);
+
+    // "Chương đã soạn" = hợp các chapterId có mặt ở bài giảng/câu hỏi tự thêm HOẶC đã sửa tiêu đề/mô
+    // tả (chapterMeta) — 1 chương chỉ tính 1 lần dù có cả 2-3 loại. "Lớp" suy ra từ TIỀN TỐ id chương
+    // gốc (VD "c10-3" -> lớp 10, xem findChapterAnywhere/curriculum.js) — chương của 1 CHƯƠNG TRÌNH
+    // RIÊNG do giáo viên tự tạo (programChapters, id ngẫu nhiên không theo mẫu "c<lớp>-...") không
+    // thuộc khối lớp nào nên không tính vào số "lớp".
+    const chapterIds = new Set();
+    lessonsSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
+    quizSnap.docs.forEach((d) => { const c = d.data().chapterId; if (c) chapterIds.add(c); });
+    metaSnap.docs.forEach((d) => chapterIds.add(d.id));
+    const grades = new Set();
+    chapterIds.forEach((id) => {
+      const m = /^c(\d+)-/.exec(id);
+      if (m) grades.add(m[1]);
+    });
+
+    const uids = students.map((s) => s.studentUid).filter(Boolean);
+    const [subs, presence] = await Promise.all([
+      Promise.all(uids.map((uid) => getStudentSubscription(uid))),
+      typeof getPresenceForUids === 'function' ? getPresenceForUids(uids) : Promise.resolve(new Map())
+    ]);
+    const proCount = subs.filter((s) => s.tier === 'premium').length;
+    const onlineCount = uids.filter((uid) => presence.get(uid)).length;
+
+    card.style.display = 'block';
+    card.innerHTML = `
+      <p class="hint" style="margin:0 0 4px;">📘 Bạn hiện có <strong>${grades.size}</strong> lớp, <strong>${chapterIds.size}</strong> chương đã soạn</p>
+      <p class="hint" style="margin:0 0 4px;">👥 Có <strong>${groups.length}</strong> nhóm, kiểm tra <strong>${examsSnap.size}</strong> đợt</p>
+      <p class="hint" style="margin:0;">🧑‍🎓 Có tổng <strong>${uids.length}</strong> học sinh (${proCount} pro, ${uids.length - proCount} miễn phí), <strong>${onlineCount}</strong> online</p>
+    `;
+  } catch (e) { /* lỗi mạng thoáng qua -> ẩn khối thống kê, không chặn phần còn lại của trang chủ */ }
 })();
 </script>
 <script>
