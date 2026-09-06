@@ -54,7 +54,7 @@
       </div>
       <div class="card">
         ${story.body.map((p) => `<p>${escapeHtml(p)}</p>`).join('')}
-        <p class="hint">📚 Nguồn tham khảo: <a href="${story.sourceUrl}" target="_blank" rel="noopener">${escapeHtml(story.sourceLabel)}</a></p>
+        <p class="hint">🔗 <a href="${story.sourceUrl}" target="_blank" rel="noopener">Xem chi tiết</a></p>
       </div>
       <a class="btn block" href="cau-chuyen-hoa-hoc.html" style="margin-top:14px;">⬅ Quay lại danh sách</a>
     `;
