@@ -197,7 +197,15 @@
           <div class="group-detail-icon">👥</div>
           <div class="group-detail-head-text">
             <div class="group-detail-meta">Lớp ${escapeHtml(String(g.grade))} · Mã nhóm: <strong style="color:var(--brand);letter-spacing:0.05em;">${escapeHtml(g.groupCode)}</strong></div>
-            <div class="group-detail-title">${escapeHtml(g.groupName)}</div>
+            <div class="group-title-row" id="groupTitleDisplay-${g.id}">
+              <div class="group-detail-title">${escapeHtml(g.groupName)}</div>
+              <button class="group-name-edit-btn" type="button" data-group-id="${g.id}" title="Sửa tên nhóm" aria-label="Sửa tên nhóm">✏️</button>
+            </div>
+            <div class="group-title-edit-row" id="groupTitleEdit-${g.id}" style="display:none;">
+              <input type="text" class="group-name-input" value="${escapeHtml(g.groupName)}" maxlength="80" />
+              <button class="btn primary group-name-save-btn" type="button" data-group-id="${g.id}">✓ Lưu</button>
+              <button class="btn group-name-cancel-btn" type="button" data-group-id="${g.id}">✕ Huỷ</button>
+            </div>
           </div>
           ${activeExamGroupCodes.has(g.groupCode) ? '<span class="gmb-live-badge">🔴 Đang kiểm tra</span>' : ''}
         </div>
@@ -253,6 +261,7 @@
     wireFreeModeToggles();
     wireZaloEditButtons();
     wireDeleteGroupButtons();
+    wireGroupNameEdit();
   }
 
   // Kiểu accordion: mỗi nhóm chỉ mở 1 trong 4 mục (thêm học sinh / danh sách học sinh / kết quả học
@@ -286,6 +295,54 @@
           group.freeMode = next;
         } catch (e) {
           el.classList.toggle('on', !next); // lỗi thì trả lại trạng thái cũ
+          showToast('Không lưu được: ' + e.message);
+        }
+      });
+    });
+  }
+
+  // Sửa tên nhóm ngay tại chỗ (bấm biểu tượng ✏️ cạnh tên) — KHÔNG dùng prompt() như link Zalo, vì
+  // đây là tên nhóm chính, sửa trực tiếp trên khung nhìn thấy ngay kết quả tự nhiên hơn. Chỉ đổi
+  // ĐÚNG field groupName, không đụng gì khác (chương trình/mã nhóm/học sinh vẫn nguyên).
+  function wireGroupNameEdit() {
+    $$('.group-name-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const groupId = btn.dataset.groupId;
+        $('#groupTitleDisplay-' + groupId).style.display = 'none';
+        const editRow = $('#groupTitleEdit-' + groupId);
+        editRow.style.display = 'flex';
+        const input = $('.group-name-input', editRow);
+        input.focus();
+        input.select();
+      });
+    });
+    $$('.group-name-cancel-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const groupId = btn.dataset.groupId;
+        $('#groupTitleEdit-' + groupId).style.display = 'none';
+        $('#groupTitleDisplay-' + groupId).style.display = '';
+      });
+    });
+    $$('.group-name-input').forEach((input) => {
+      wireEnterToSubmit([input], input.closest('.group-title-edit-row').querySelector('.group-name-save-btn'));
+    });
+    $$('.group-name-save-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const groupId = btn.dataset.groupId;
+        const editRow = $('#groupTitleEdit-' + groupId);
+        const input = $('.group-name-input', editRow);
+        const newName = input.value.trim();
+        if (!newName) { showToast('Nhập tên nhóm.'); return; }
+        btn.disabled = true;
+        try {
+          await updateGroupName(groupId, newName);
+          const group = groupsCache.find((gr) => gr.id === groupId);
+          if (group) group.groupName = newName;
+          const menuNameEl = document.querySelector(`.group-menu-btn[data-group-id="${groupId}"] .gmb-name`);
+          if (menuNameEl) menuNameEl.textContent = newName;
+          renderGroupPanel(groupId); // vẽ lại khung — tên mới hiện luôn, khung sửa tự đóng lại
+        } catch (e) {
+          btn.disabled = false;
           showToast('Không lưu được: ' + e.message);
         }
       });

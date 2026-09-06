@@ -45,6 +45,15 @@ async function updateGroupZaloLink(groupId, zaloGroupLink) {
   await db.collection('groups').doc(groupId).update({ zaloGroupLink: zaloGroupLink || '' });
 }
 
+// Sửa tên nhóm (VD lỡ gõ sai lúc tạo, hoặc muốn đặt tên rõ ràng hơn) — không ảnh hưởng mã nhóm/
+// chương trình học/danh sách học sinh, học sinh trong nhóm sẽ tự thấy tên mới ở lần tải trang sau.
+async function updateGroupName(groupId, groupName) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  await db.collection('groups').doc(groupId).update({ groupName });
+}
+
 // Xoá hẳn 1 nhóm — CHỈ xoá bản ghi "groups", KHÔNG đụng tới học sinh (trước đây có xoá kèm toàn bộ
 // "students" của nhóm — SAI: xoá nhầm nhóm là mất luôn danh sách học sinh không cứu được, học sinh
 // vẫn còn tài khoản/tiến độ nhưng "biến mất" khỏi trang Quản lý học sinh). Học sinh của nhóm đã xoá
