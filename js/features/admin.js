@@ -280,33 +280,53 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
         if (!rows.length) { box.innerHTML = '<p class="hint">Chưa có giáo viên nào đăng nhập.</p>'; return; }
 
         box.innerHTML = `
-          <p class="hint">👉 Kéo ngang bảng để xem đủ các cột</p>
+          <p class="hint">👉 Bấm vào TÊN giáo viên để xem email, trạng thái gói, hoa hồng và các nút thao tác.</p>
           <div class="roster-table-wrap">
             <table class="roster-table">
               <thead>
-                <tr><th>Trạng thái</th><th>Mã GV</th><th>Tên</th><th>Email</th><th>Trạng thái gói</th><th>Số học sinh</th><th>Đã giới thiệu</th><th>Hoa hồng đã trả</th><th>Hoa hồng chưa trả</th><th></th><th></th></tr>
+                <tr><th>Trạng thái</th><th>Mã GV</th><th>Tên</th><th>Số học sinh</th><th>Đã giới thiệu</th></tr>
               </thead>
               <tbody>
                 ${rows.map((r) => `
-                  <tr>
+                  <tr class="teacher-row">
                     <td>${r.online ? '<span class="presence-online">🟢 Online</span>' : '<span class="presence-offline">⚪ Offline</span>'}</td>
                     <td>${escapeHtml(r.teacherCode)}</td>
-                    <td>${escapeHtml(r.name)}</td>
-                    <td>${escapeHtml(r.email)}</td>
-                    <td>${r.tier === 'pro' ? `Pro (hết hạn ${escapeHtml(r.expiresAt.slice(0, 10))})` : 'Miễn phí'}</td>
+                    <td><button class="roster-name-toggle" type="button" data-uid="${r.uid}">▸ ${escapeHtml(r.name)}</button></td>
                     <td>${r.studentCount}</td>
                     <td>${r.referredCount}${r.recentOrders > ADMIN_FRAUD_ORDER_THRESHOLD_24H ? ` <span title="${r.recentOrders} đơn trong 24h qua">⚠️</span>` : ''}</td>
-                    <td>${formatVnd(r.comm.paid)}</td>
-                    <td>${formatVnd(r.comm.pending)}</td>
-                    <td><button class="btn roster-expand-btn" type="button" data-uid="${r.uid}">👥 Xem học sinh</button></td>
-                    <td><button class="btn referral-lock-btn" type="button" data-uid="${r.uid}" data-disabled="${r.referralDisabled ? '1' : '0'}">${r.referralDisabled ? '🔓 Mở lại mã' : '🔒 Khoá mã'}</button></td>
                   </tr>
-                  <tr id="roster-students-${r.uid}" style="display:none;"><td colspan="11"></td></tr>
+                  <tr class="roster-detail-row" style="display:none;">
+                    <td colspan="5">
+                      <div class="roster-detail-panel">
+                        <p class="hint">✉️ ${escapeHtml(r.email)} · ${r.tier === 'pro' ? `Pro (hết hạn ${escapeHtml(r.expiresAt.slice(0, 10))})` : 'Miễn phí'}</p>
+                        <p class="hint">💰 Hoa hồng đã trả: ${formatVnd(r.comm.paid)} · Chưa trả: ${formatVnd(r.comm.pending)}</p>
+                        <div class="btn-row">
+                          <button class="btn roster-expand-btn" type="button" data-uid="${r.uid}">👥 Xem học sinh</button>
+                          <button class="btn referral-lock-btn" type="button" data-uid="${r.uid}" data-disabled="${r.referralDisabled ? '1' : '0'}">${r.referralDisabled ? '🔓 Mở lại mã' : '🔒 Khoá mã'}</button>
+                        </div>
+                        <div id="roster-students-${r.uid}" style="display:none;margin-top:10px;"></div>
+                      </div>
+                    </td>
+                  </tr>
                 `).join('')}
               </tbody>
             </table>
           </div>
         `;
+
+        $$('.roster-name-toggle', box).forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const detailRow = btn.closest('tr').nextElementSibling;
+            if (!detailRow || !detailRow.classList.contains('roster-detail-row')) return;
+            const open = detailRow.style.display !== 'none';
+            $$('.roster-detail-row', box).forEach((r) => { r.style.display = 'none'; });
+            $$('.roster-name-toggle', box).forEach((b) => { b.textContent = b.textContent.replace(/^▾/, '▸'); });
+            if (!open) {
+              detailRow.style.display = 'table-row';
+              btn.textContent = btn.textContent.replace(/^▸/, '▾');
+            }
+          });
+        });
 
         $$('.roster-expand-btn', box).forEach((btn) => {
           btn.addEventListener('click', async () => {
@@ -314,9 +334,9 @@ const PLAN_TIER_ORDER = ['month1', 'month6', 'year1'];
             const row = document.getElementById(`roster-students-${uid}`);
             const open = row.style.display !== 'none';
             if (open) { row.style.display = 'none'; btn.textContent = '👥 Xem học sinh'; return; }
-            row.style.display = 'table-row';
+            row.style.display = 'block';
             btn.textContent = '👥 Ẩn học sinh';
-            const cell = row.querySelector('td');
+            const cell = row;
             if (row.dataset.loaded) return;
             row.dataset.loaded = '1';
             cell.innerHTML = '<p class="hint">⏳ Đang tải...</p>';

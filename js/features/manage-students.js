@@ -280,31 +280,37 @@
         // trước đây chỉ xếp được lúc TẠO nhóm mới (chọn học sinh có sẵn), không có cách nào xếp vào 1
         // nhóm ĐÃ CÓ SẴN, khiến các học sinh này "mắc kẹt" không hiện trong bất kỳ nhóm nào.
         const unassignedGroup = s.groups.find((g) => g.unassigned);
+        const uid = escapeHtml(s.studentUid);
+        // Bảng chính chỉ giữ vài cột cốt lõi — Thông tin (email/trường/lớp/địa chỉ/SĐT) + toàn bộ nút
+        // hành động dồn vào 1 khung ẩn, chỉ hiện khi bấm vào tên (tránh bảng quá rộng, tràn ra ngoài).
         return `
-          <tr data-search="${escapeHtml(searchText)}" data-uid="${escapeHtml(s.studentUid)}">
+          <tr class="roster-row" data-search="${escapeHtml(searchText)}" data-uid="${uid}">
             <td class="stt-cell">${sttPlaceholder}</td>
-            <td class="presence-cell" data-presence-uid="${escapeHtml(s.studentUid)}">…</td>
+            <td class="presence-cell" data-presence-uid="${uid}">…</td>
             <td>${escapeHtml(code || '—')}</td>
-            <td>${escapeHtml(s.studentName || '')}</td>
-            <td>${escapeHtml(s.email || '')}</td>
-            <td>${escapeHtml(s.school || '')}</td>
-            <td>${escapeHtml(s.className || '')}</td>
-            <td>${escapeHtml(s.address || '')}</td>
-            <td>${escapeHtml(s.phone || '')}</td>
+            <td><button class="roster-name-toggle" type="button" data-uid="${uid}">▸ ${escapeHtml(s.studentName || '(chưa rõ tên)')}</button></td>
             <td>${groupsText}</td>
             <td>${escapeHtml((s.latestJoinedAt || '').slice(0, 10))}</td>
-            <td>
-              ${zaloDigits ? `<a class="btn" href="https://zalo.me/${escapeHtml(zaloDigits)}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
-              ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">🔑 Cấp mã thay thế</button>` : ''}
-              ${unassignedGroup && groups.length ? `
-                <button class="btn assign-group-toggle-btn" type="button" data-doc-id="${escapeHtml(unassignedGroup.docId)}" data-uid="${escapeHtml(s.studentUid)}" style="margin-top:4px;">📥 Xếp vào nhóm</button>
-                <div class="assign-group-form" style="display:none;">
-                  <select class="assign-group-select-inline">${groupOptionsHtml}</select>
-                  <button class="btn primary assign-group-confirm-btn" type="button">Xếp vào nhóm này</button>
+          </tr>
+          <tr class="roster-detail-row" data-uid="${uid}" style="display:none;">
+            <td colspan="6">
+              <div class="roster-detail-panel">
+                <p class="hint">ℹ️ ${escapeHtml(s.email || '—')} · ${escapeHtml(s.school || '—')} · Lớp ${escapeHtml(s.className || '—')}</p>
+                <p class="hint">📍 ${escapeHtml(s.address || '—')} · ☎️ ${escapeHtml(s.phone || '—')}</p>
+                <div class="btn-row">
+                  ${zaloDigits ? `<a class="btn" href="https://zalo.me/${escapeHtml(zaloDigits)}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
+                  ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${uid}">🔑 Cấp mã thay thế</button>` : ''}
+                  ${unassignedGroup && groups.length ? `<button class="btn assign-group-toggle-btn" type="button" data-doc-id="${escapeHtml(unassignedGroup.docId)}" data-uid="${uid}">📥 Xếp vào nhóm</button>` : ''}
+                  <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" style="color:#dc2626;">🗑️ Xoá học sinh</button>
                 </div>
-              ` : ''}
-              <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" style="margin-top:4px;color:#dc2626;">🗑️ Xoá học sinh</button>
-              <div class="result-box" id="replace-login-result-${escapeHtml(s.studentUid)}"></div>
+                ${unassignedGroup && groups.length ? `
+                  <div class="assign-group-form" style="display:none;">
+                    <select class="assign-group-select-inline">${groupOptionsHtml}</select>
+                    <button class="btn primary assign-group-confirm-btn" type="button">Xếp vào nhóm này</button>
+                  </div>
+                ` : ''}
+                <div class="result-box" id="replace-login-result-${uid}"></div>
+              </div>
             </td>
           </tr>
         `;
@@ -314,23 +320,38 @@
       // 1 dòng để không còn để trống số cũ (VD xoá dòng 3 thì dòng 4 trở đi phải lùi lên thành 3, 4...
       // chứ không nhảy cóc 1,2,4,5).
       function renumberRows() {
-        $$('#studentRosterBody tr', assignedBody).forEach((tr, idx) => {
+        $$('#studentRosterBody tr.roster-row', assignedBody).forEach((tr, idx) => {
           const cell = tr.querySelector('.stt-cell');
           if (cell) cell.textContent = idx + 1;
         });
       }
 
       function wireRowButtons() {
+        // Bấm vào tên -> ẩn/hiện khung thông tin + nút hành động của ĐÚNG học sinh đó (khung này là
+        // dòng <tr> liền ngay sau, xem buildRowHtml) — chỉ 1 khung mở tại 1 thời điểm cho gọn.
+        $$('.roster-name-toggle', assignedBody).forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const detailRow = btn.closest('tr').nextElementSibling;
+            if (!detailRow || !detailRow.classList.contains('roster-detail-row')) return;
+            const open = detailRow.style.display !== 'none';
+            $$('.roster-detail-row', assignedBody).forEach((r) => { r.style.display = 'none'; });
+            $$('.roster-name-toggle', assignedBody).forEach((b) => { b.textContent = b.textContent.replace(/^▾/, '▸'); });
+            if (!open) {
+              detailRow.style.display = 'table-row';
+              btn.textContent = btn.textContent.replace(/^▸/, '▾');
+            }
+          });
+        });
         $$('.assign-group-toggle-btn', assignedBody).forEach((btn) => {
           btn.addEventListener('click', () => {
-            const form = btn.nextElementSibling;
+            const form = btn.closest('.roster-detail-panel').querySelector('.assign-group-form');
             if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
           });
         });
         $$('.assign-group-confirm-btn', assignedBody).forEach((confirmBtn) => {
           confirmBtn.addEventListener('click', async () => {
             const form = confirmBtn.closest('.assign-group-form');
-            const toggleBtn = form.previousElementSibling;
+            const toggleBtn = confirmBtn.closest('.roster-detail-panel').querySelector('.assign-group-toggle-btn');
             const docId = toggleBtn.dataset.docId;
             const uid = toggleBtn.dataset.uid;
             const groupCode = form.querySelector('.assign-group-select-inline').value;
@@ -358,9 +379,13 @@
               // Chỉ xoá ĐÚNG dòng vừa bấm khỏi bảng — trước đây vẽ lại TOÀN BỘ danh sách
               // (renderRosterPanel(panel)) sau mỗi lần xoá, làm mất vị trí đang cuộn tới (nhảy về đầu
               // trang) và không có xác nhận rõ ràng đã xoá xong, khiến giáo viên tưởng bấm không có
-              // tác dụng khi đang xoá nhiều học sinh liên tiếp trong danh sách dài.
-              const row = btn.closest('tr');
-              if (row) row.remove();
+              // tác dụng khi đang xoá nhiều học sinh liên tiếp trong danh sách dài. Nút này nằm trong
+              // khung chi tiết (roster-detail-row) — phải xoá CẢ dòng tên chính (nằm ngay trước) lẫn
+              // dòng chi tiết này, không thì dòng tên vẫn còn trơ lại không có tác dụng gì.
+              const detailRow = btn.closest('tr');
+              const mainRow = detailRow.previousElementSibling;
+              detailRow.remove();
+              if (mainRow) mainRow.remove();
               renumberRows();
               showToast(`Đã xoá "${name}".`, false);
             } catch (e) {
@@ -442,11 +467,11 @@
           <button class="btn" id="rosterHelpToggleBtn" type="button">❓ Hướng dẫn dùng bảng</button>
           <button class="btn" id="cleanupDuplicatesBtn" type="button">🧹 Dọn bản ghi trùng do lỗi cũ (1 lần)</button>
         </div>
-        <p class="hint" id="rosterHelpText" style="display:none;">👉 Kéo ngang bảng để xem đủ các cột. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang). "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
+        <p class="hint" id="rosterHelpText" style="display:none;">👉 Bấm vào TÊN học sinh để xem thông tin (email, trường, lớp, địa chỉ, SĐT) và các nút thao tác. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã MỚI khi các em quên mật khẩu, KHÔNG khôi phục được tài khoản cũ (tiến độ/gói ở tài khoản cũ không tự chuyển sang). "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
         <div class="roster-table-wrap">
           <table class="roster-table">
             <thead>
-              <tr><th>STT</th><th>Trạng thái</th><th>Mã HS</th><th>Họ tên</th><th>Email</th><th>Trường</th><th>Lớp</th><th>Địa chỉ</th><th>SĐT</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th><th></th></tr>
+              <tr><th>STT</th><th>Trạng thái</th><th>Mã HS</th><th>Họ tên</th><th>Nhóm đang học</th><th>Vào nhóm gần nhất</th></tr>
             </thead>
             <tbody id="studentRosterBody"></tbody>
           </table>
@@ -489,11 +514,19 @@
       const searchCount = $('#studentSearchCount', assignedBody);
       searchInput.addEventListener('input', () => {
         const q = normalizeSearchText(searchInput.value.trim());
-        const rosterTrs = $$('#studentRosterBody tr', assignedBody);
+        const rosterTrs = $$('#studentRosterBody tr.roster-row', assignedBody);
         let shown = 0;
         rosterTrs.forEach((tr) => {
           const match = !q || (tr.dataset.search || '').includes(q);
           tr.style.display = match ? '' : 'none';
+          // Đang gõ tìm kiếm -> đóng luôn khung chi tiết (nếu đang mở) để không còn dòng chi tiết
+          // trơ trọi hiện ra trong khi dòng tên của nó đã bị lọc ẩn đi.
+          const detailRow = tr.nextElementSibling;
+          if (detailRow && detailRow.classList.contains('roster-detail-row')) {
+            detailRow.style.display = 'none';
+          }
+          const toggleBtn = tr.querySelector('.roster-name-toggle');
+          if (toggleBtn) toggleBtn.textContent = toggleBtn.textContent.replace(/^▾/, '▸');
           if (match) shown++;
         });
         searchCount.textContent = q ? `Tìm thấy ${shown}/${rosterTrs.length} học sinh.` : '';

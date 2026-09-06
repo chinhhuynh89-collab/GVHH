@@ -1080,6 +1080,16 @@ sub { font-size: 0.72em; }
 .presence-online, .presence-offline { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
 .presence-online { color: var(--ok); }
 .presence-offline { color: var(--text-faint); }
+/* Bấm vào TÊN (học sinh/giáo viên) trong bảng danh sách mới mở ra thông tin + nút hành động — trước
+   đây các nút (Zalo, Cấp mã, Xếp vào nhóm, Xoá,...) hiện SẴN hết trong 1 ô, cộng với nhiều cột thông
+   tin (Email/Trường/Lớp/Địa chỉ/SĐT) khiến bảng rất rộng, phải cuộn ngang mới thấy hết ("tràn ra
+   ngoài"). Gộp các cột đó + nút hành động vào 1 khung ẩn/hiện theo tên, bảng chính chỉ còn vài cột
+   cốt lõi. */
+.roster-name-toggle { background: none; border: none; padding: 0; margin: 0; font: inherit; font-weight: 700; color: var(--brand); cursor: pointer; text-align: left; white-space: normal; }
+.roster-name-toggle:hover { text-decoration: underline; }
+.roster-detail-row > td { background: var(--surface-2); white-space: normal; }
+.roster-detail-panel { max-width: 640px; }
+.roster-detail-panel .hint { margin: 0 0 6px; }
 /* Khung "Xếp vào nhóm này" (chọn nhóm + xác nhận) — XẾP DỌC (không phải ngang) để ô chọn nhóm tự co
    giãn vừa TÊN NHÓM (bỏ width:100% cũ khiến ô kéo dài hết cột, đẩy nút xác nhận ra ngoài màn hình,
    phải cuộn ngang mới bấm được) và nút xác nhận luôn nằm ngay dưới, gần các nút khác trong cùng ô
