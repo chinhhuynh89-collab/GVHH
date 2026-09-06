@@ -173,6 +173,7 @@
 
     <div class="section-label">Dành cho giáo viên</div>
     <div class="card" id="teacherQuickStatsCard" style="display:none;"></div>
+    <div class="card" id="teacherActiveCard" style="display:none;"></div>
     <div class="icon-grid">
       <a class="icon-tile is-active" href="pages/hoc-theo-chuong.html">
         <div class="icon-tile-icon">🎓</div>
@@ -992,6 +993,103 @@
       <p class="hint" style="margin:0;">🧑‍🎓 Có tổng <strong>${uids.length}</strong> học sinh (${proCount} pro, ${uids.length - proCount} miễn phí), <strong>${onlineCount}</strong> online</p>
     `;
   } catch (e) { /* lỗi mạng thoáng qua -> ẩn khối thống kê, không chặn phần còn lại của trang chủ */ }
+})();
+</script>
+<script>
+(async function () {
+  // Nhóm/học sinh tích cực trong 7 ngày qua — để giáo viên biết ngay ai/nhóm nào đáng biểu dương mà
+  // không phải tự dò từng nhóm. "Tích cực" = có hoạt động THẬT (đã xem bài giảng/flashcard, làm trắc
+  // nghiệm trong chương — progress.chapters[].updatedAt, HOẶC đã nộp bài kiểm tra — submissions) —
+  // đếm số LẦN hoạt động, không phải điểm số, nên học sinh chăm ôn tập vẫn được ghi nhận dù điểm
+  // chưa cao. Chỉ tính 2 tên/nhóm đứng đầu (đúng yêu cầu), không xếp hạng đầy đủ cả lớp.
+  if (!isFirebaseConfigured() || getRole() !== 'teacher') return;
+  const teacher = await waitForAuthReady();
+  if (!teacher) return;
+  const card = document.getElementById('teacherActiveCard');
+  if (!card) return;
+  try {
+    const { db } = ensureFirebase();
+    const students = typeof getAllStudentsForCurrentTeacher === 'function' ? await getAllStudentsForCurrentTeacher() : [];
+    if (!students.length) return;
+    const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+
+    const perStudent = await Promise.all(students.map(async (s) => {
+      // docId -> nhóm (1 học sinh có thể có NHIỀU docId nếu được xếp vào nhiều nhóm của CÙNG giáo
+      // viên này — xem mergeStudentsAcrossGroups, groups-data.js) — dùng để biết 1 lượt hoạt động
+      // thuộc về nhóm nào.
+      const groupByDocId = new Map();
+      s.groups.forEach((g) => { if (g.docId) groupByDocId.set(g.docId, g); });
+
+      const activeGroupCodes = new Set();
+      let activityCount = 0;
+
+      const progressDocs = await Promise.all(
+        s.docIds.map((docId) => db.collection('progress').doc(docId).get().catch(() => null))
+      );
+      progressDocs.forEach((doc, i) => {
+        if (!doc || !doc.exists) return;
+        const chapters = doc.data().chapters || {};
+        let touchedHere = false;
+        Object.values(chapters).forEach((p) => {
+          if (p && p.updatedAt && new Date(p.updatedAt) >= since) { activityCount++; touchedHere = true; }
+        });
+        if (touchedHere) {
+          const g = groupByDocId.get(s.docIds[i]);
+          if (g && g.groupCode) activeGroupCodes.add(g.groupCode);
+        }
+      });
+
+      // Khớp ĐÚNG bài nộp của HỌC SINH NÀY dưới GIÁO VIÊN NÀY — submission.studentId phải nằm trong
+      // s.docIds (docId "students" của riêng giáo viên này), tránh tính nhầm bài nộp ở nhóm của MỘT
+      // giáo viên KHÁC nếu học sinh này còn học chung với giáo viên khác nữa.
+      const subsSnap = await db.collection('submissions').where('studentUid', '==', s.studentUid).get().catch(() => null);
+      (subsSnap ? subsSnap.docs : []).forEach((d) => {
+        const data = d.data();
+        if (!s.docIds.includes(data.studentId)) return;
+        if (data.submittedAt && new Date(data.submittedAt) >= since) {
+          activityCount++;
+          const g = groupByDocId.get(data.studentId);
+          if (g && g.groupCode) activeGroupCodes.add(g.groupCode);
+        }
+      });
+
+      return { studentName: s.studentName || '(chưa rõ tên)', activityCount, activeGroupCodes };
+    }));
+
+    const groupNameByCode = new Map();
+    students.forEach((s) => s.groups.forEach((g) => { if (g.groupCode && g.groupName) groupNameByCode.set(g.groupCode, g.groupName); }));
+
+    const groupStats = new Map(); // groupCode -> { activeStudents, totalActivity }
+    perStudent.forEach((p) => {
+      p.activeGroupCodes.forEach((code) => {
+        const cur = groupStats.get(code) || { activeStudents: 0, totalActivity: 0 };
+        cur.activeStudents++;
+        cur.totalActivity += p.activityCount;
+        groupStats.set(code, cur);
+      });
+    });
+
+    const topGroups = Array.from(groupStats.entries())
+      .sort((a, b) => (b[1].activeStudents - a[1].activeStudents) || (b[1].totalActivity - a[1].totalActivity))
+      .slice(0, 2)
+      .map(([code, stat]) => `${escapeHtml(groupNameByCode.get(code) || code)} (${stat.activeStudents} học sinh hoạt động)`);
+
+    const topStudents = perStudent.filter((p) => p.activityCount > 0)
+      .sort((a, b) => b.activityCount - a.activityCount)
+      .slice(0, 2)
+      .map((p) => {
+        const groupLabel = Array.from(p.activeGroupCodes).map((c) => groupNameByCode.get(c) || c).join(', ');
+        return `${escapeHtml(p.studentName)}${groupLabel ? ` (${escapeHtml(groupLabel)})` : ''}`;
+      });
+
+    card.style.display = 'block';
+    card.innerHTML = `
+      <h2 style="margin-top:0;"><span class="icon">🏆</span>Tích cực trong 7 ngày qua</h2>
+      ${topGroups.length ? `<p class="hint" style="margin:0 0 4px;">🏅 Nhóm tích cực nhất: <strong>${topGroups.join('</strong>, <strong>')}</strong></p>` : ''}
+      ${topStudents.length ? `<p class="hint" style="margin:0;">🌟 Học sinh tích cực nhất: <strong>${topStudents.join('</strong>, <strong>')}</strong></p>` : ''}
+      ${!topGroups.length && !topStudents.length ? '<p class="hint" style="margin:0;">Chưa có hoạt động nào trong 7 ngày qua.</p>' : ''}
+    `;
+  } catch (e) { /* lỗi mạng thoáng qua -> ẩn khối này, không chặn phần còn lại của trang chủ */ }
 })();
 </script>
 <script>
