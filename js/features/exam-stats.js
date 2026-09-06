@@ -6,6 +6,8 @@
     const params = new URLSearchParams(location.search);
     const preselectGroup = params.get('group') || '';
     let groups = [];
+    let currentResults = null;
+    let currentExamTitle = '';
 
     async function loadGroups() {
       groups = await listGroupsForCurrentTeacher();
@@ -34,6 +36,7 @@
     async function loadResults() {
       const examId = $('#statsExam').value;
       const box = $('#statsResults');
+      currentResults = null;
       if (!examId) { box.innerHTML = ''; return; }
       box.innerHTML = '<p class="hint">⏳ Đang tải kết quả...</p>';
       try {
@@ -57,6 +60,8 @@
           .sort((a, b) => b.score - a.score);
 
         if (!results.length) { box.innerHTML = '<p class="hint">Chưa có học sinh nào nộp bài.</p>'; return; }
+        currentResults = results;
+        currentExamTitle = (examDoc.exists && examDoc.data().examTitle) || '';
 
         const toScore10 = (percent) => Math.round(percent) / 10;
         const scores = results.map((r) => r.score);
@@ -74,6 +79,7 @@
             <div class="info-item"><div class="k">Cao nhất</div><div class="v">${stats.max.toFixed(1)}</div></div>
             <div class="info-item"><div class="k">Thấp nhất</div><div class="v">${stats.min.toFixed(1)}</div></div>
           </div>
+          <button class="btn block" id="statsExportCsvBtn" type="button" style="margin-bottom:14px;">📊 Xuất điểm (Excel/CSV)</button>
           ${results.map((r, i) => `
             <div class="quiz-review-item ${r.score >= 70 ? 'ok' : 'bad'}" style="text-align:left;">
               <div class="qi-q">${i + 1}. ${escapeHtml(r.studentName)} — ${toScore10(r.score).toFixed(1)} điểm</div>
@@ -86,6 +92,7 @@
             </div>
           `).join('')}
         `;
+        $('#statsExportCsvBtn', box).addEventListener('click', exportResultsToCsv);
         if (reviewItems) {
           $$('.stats-review-toggle', box).forEach((btn) => {
             btn.addEventListener('click', () => {
@@ -103,6 +110,42 @@
       } catch (e) {
         box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
       }
+    }
+
+    // Xuất bảng điểm đang hiển thị ra file .csv (mở trực tiếp bằng Excel/Google Sheets) — dùng lại
+    // đúng dữ liệu đã tải (currentResults), không gọi lại Firestore. Chỉ chép lại phần escape CSV nhỏ
+    // từ quiz-excel.js thay vì nạp cả file đó vào trang này (file đó còn kèm logic đọc .xlsx không
+    // liên quan tới trang thống kê).
+    function csvEscapeField(value) {
+      const s = String(value == null ? '' : value);
+      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    function exportResultsToCsv() {
+      if (!currentResults || !currentResults.length) return;
+      const toScore10 = (percent) => Math.round(percent) / 10;
+      const rows = [
+        ['STT', 'Họ và tên', 'Điểm (thang 10)', 'Số câu đúng', 'Tổng số câu', '% điểm', 'Giờ bắt đầu', 'Giờ nộp bài']
+      ];
+      currentResults.forEach((r, i) => {
+        rows.push([
+          i + 1, r.studentName, toScore10(r.score).toFixed(1), r.correctCount, r.total, r.score,
+          r.startedAt ? new Date(r.startedAt).toLocaleString('vi-VN') : '',
+          new Date(r.submittedAt).toLocaleString('vi-VN')
+        ]);
+      });
+      const csv = rows.map((row) => row.map(csvEscapeField).join(',')).join('\r\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const fileNamePart = String(currentExamTitle || 'de-kiem-tra').replace(/[^\p{L}\p{N}\- ]/gu, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-') || 'de-kiem-tra';
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `diem-${fileNamePart}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     $('#statsGroup').addEventListener('change', loadExams);

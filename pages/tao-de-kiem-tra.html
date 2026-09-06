@@ -57,6 +57,20 @@
     <div class="result-box" id="examCreateResult"></div>
   </div>
 
+  <div class="card">
+    <h2><span class="icon">🖨️</span>Xuất đề in giấy</h2>
+    <p class="hint" style="margin-top:-4px;">Dùng đúng nhóm/chương/số câu đã chọn ở trên — xuất ra file để in, không tạo đợt kiểm tra online.</p>
+    <div class="field">
+      <label for="examVariantCount">Số mã đề</label>
+      <input type="number" id="examVariantCount" value="1" min="1" max="8" />
+    </div>
+    <div class="btn-row">
+      <button class="btn" id="examExportWordBtn" type="button">📄 Xuất đề (Word)</button>
+      <button class="btn" id="examExportPdfBtn" type="button">🖨️ Xuất đề (Xem &amp; Lưu PDF)</button>
+    </div>
+    <div class="result-box" id="examExportResult"></div>
+  </div>
+
   <p class="footer-note">Đề kiểm tra rút ngẫu nhiên từ kho câu hỏi có sẵn của (các) chương đã chọn (bao gồm câu hỏi bạn đã tự thêm/nạp). Mỗi học sinh làm cùng 1 bộ câu hỏi nhưng thứ tự câu hỏi và thứ tự đáp án được xáo riêng trên máy từng em, hạn chế chép bài lẫn nhau. Thời gian làm bài được tính chung từ giờ bắt đầu đợt kiểm tra — học sinh vào muộn sẽ còn ít thời gian hơn học sinh vào đúng giờ, và không vào làm bài được nữa sau khi hết giờ.</p>
 </main>
 

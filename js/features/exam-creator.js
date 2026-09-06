@@ -18,6 +18,119 @@ function shuffleArray(arr) {
   return a;
 }
 
+// Rút ngẫu nhiên ĐÚNG số lượng mỗi loại rồi gộp + xáo lại 1 lần nữa (tránh xếp thành từng cụm theo
+// loại) — dùng chung cho cả "Tạo đề kiểm tra" (online) và "Xuất đề in giấy" (offline) bên dưới.
+function drawQuestionsForExport(poolByType, counts) {
+  return shuffleArray(
+    QUIZ_TYPE_OPTIONS.flatMap((t) => shuffleArray(poolByType[t.value]).slice(0, counts[t.value]))
+  );
+}
+
+// ---------- Xuất đề in giấy (Word/PDF) — KHÔNG ghi Firestore, xử lý hoàn toàn phía trình duyệt ----------
+// Chỉ xáo đáp án cho câu "abcd" — câu "Đúng/Sai" giữ nguyên thứ tự Đúng trước/Sai sau (quy ước quen
+// thuộc trên đề giấy), câu "Nhập đáp án" không có gì để xáo.
+function shuffleOptionsForPrint(question) {
+  if (getQuestionType(question) !== 'abcd') return question;
+  const order = shuffleArray(question.options.map((_, i) => i));
+  return Object.assign({}, question, {
+    options: order.map((i) => question.options[i]),
+    correct: order.indexOf(question.correct)
+  });
+}
+
+// Rút 1 lần bộ câu hỏi CHUNG cho mọi mã đề (đảm bảo các mã đề cùng độ khó), mỗi mã đề chỉ khác nhau ở
+// thứ tự câu hỏi + thứ tự đáp án.
+function buildExamVariants(questions, numVariants) {
+  const variants = [];
+  for (let i = 0; i < numVariants; i++) {
+    variants.push({
+      label: 'ĐỀ ' + String(i + 1).padStart(2, '0'),
+      questions: shuffleArray(questions).map(shuffleOptionsForPrint)
+    });
+  }
+  return variants;
+}
+
+function answerKeyLabel(question) {
+  if (getQuestionType(question) === 'text') return formatCorrectAnswerDisplay(question);
+  return ['A', 'B', 'C', 'D'][question.correct] || '?';
+}
+
+function renderQuestionBlockHtml(question, idx) {
+  const type = getQuestionType(question);
+  let optsHtml;
+  if (type === 'abcd') {
+    const letters = ['A', 'B', 'C', 'D'];
+    optsHtml = `<div class="opts">${question.options.map((opt, i) => `<div>${letters[i]}. ${escapeHtml(opt)}</div>`).join('')}</div>`;
+  } else if (type === 'truefalse') {
+    optsHtml = '<div class="opts"><div>A. Đúng</div><div>B. Sai</div></div>';
+  } else {
+    optsHtml = '<div class="opts blank-line">Trả lời: ....................................................................</div>';
+  }
+  return `<div class="q"><p><strong>Câu ${idx + 1}:</strong> ${escapeHtml(question.q)}</p>${optsHtml}</div>`;
+}
+
+function buildExamPrintHtml(variants, examTitle, durationMinutes) {
+  const title = examTitle || 'ĐỀ KIỂM TRA';
+  const variantsHtml = variants.map((v, vi) => `
+    <div class="variant"${vi > 0 ? ' style="page-break-before:always;"' : ''}>
+      <div class="head">
+        <p>Trường: ..................................................... &nbsp;&nbsp;&nbsp; Lớp: ..............</p>
+        <p>Họ và tên học sinh: .............................................................................</p>
+        <h2>${escapeHtml(title)}</h2>
+        <p>Thời gian làm bài: ${durationMinutes} phút &nbsp;&nbsp;&nbsp; <strong>Mã đề: ${escapeHtml(v.label)}</strong></p>
+      </div>
+      ${v.questions.map((q, qi) => renderQuestionBlockHtml(q, qi)).join('')}
+    </div>
+  `).join('');
+  const answerKeyHtml = `
+    <div class="variant" style="page-break-before:always;">
+      <h2>BẢNG ĐÁP ÁN</h2>
+      ${variants.map((v) => `<p><strong>${escapeHtml(v.label)}:</strong> ${v.questions.map((q, qi) => `Câu ${qi + 1}: ${escapeHtml(answerKeyLabel(q))}`).join(' — ')}</p>`).join('')}
+    </div>
+  `;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<style>
+  body { font-family: 'Times New Roman', Times, serif; font-size: 13pt; color: #000; background: #fff; margin: 24px; }
+  h2 { text-align: center; margin: 8px 0 14px; }
+  .head p { margin: 2px 0; }
+  .q { margin: 10px 0; }
+  .opts { margin-left: 18px; }
+  .opts div { margin: 2px 0; }
+  .blank-line { margin-top: 6px; }
+</style>
+</head><body>${variantsHtml}${answerKeyHtml}</body></html>`;
+}
+
+function exportExamAsWord(html, filename) {
+  const wordHtml = '﻿<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">'
+    + html.replace(/^<!DOCTYPE html>/, '') + '</html>';
+  const blob = new Blob([wordHtml], { type: 'application/msword' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportExamAsPdf(html) {
+  const win = window.open('', '_blank');
+  if (!win) throw new Error('Trình duyệt đã chặn cửa sổ mới — cho phép popup rồi thử lại.');
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  // window.print() cần đợi trình duyệt dựng xong nội dung vừa ghi — onload không đảm bảo chạy trên
+  // mọi trình duyệt với document.write() nên dùng setTimeout ngắn thay vì phụ thuộc sự kiện đó.
+  setTimeout(() => { try { win.focus(); win.print(); } catch (e) { /* người dùng có thể tự bấm Ctrl+P */ } }, 500);
+}
+
+function sanitizeFileNamePart(s) {
+  return String(s || '').replace(/[^\p{L}\p{N}\- ]/gu, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-') || 'de-kiem-tra';
+}
+
 // Câu "Nhập đáp án" không có "options" (không có gì để chọn) — chỉ ghi field phù hợp với từng loại,
 // tránh lưu options:undefined (Firestore không chấp nhận field undefined).
 function publicQuestionFields(q) {
@@ -206,11 +319,7 @@ async function createExamForCurrentTeacher(examInput) {
       if (!pool.length) { showResult(box, '(Các) chương đã chọn chưa có câu hỏi trắc nghiệm nào.', true); return; }
       const poolByType = splitPoolByType(pool);
 
-      // Rút ngẫu nhiên ĐÚNG số lượng mỗi loại giáo viên đã chọn, gộp lại rồi xáo thêm 1 lần nữa để
-      // thứ tự câu hỏi trong đề không bị xếp thành từng cụm theo loại.
-      const questions = shuffleArray(
-        QUIZ_TYPE_OPTIONS.flatMap((t) => shuffleArray(poolByType[t.value]).slice(0, counts[t.value]))
-      );
+      const questions = drawQuestionsForExport(poolByType, counts);
       const chapterInfos = await Promise.all(chapterIds.map(resolveChapterInfo));
       const chapterTitles = chapterInfos.filter(Boolean).map((f) => f.chapter.title);
 
@@ -243,6 +352,55 @@ async function createExamForCurrentTeacher(examInput) {
 
     $('#examStartMode').addEventListener('change', () => {
       $('#examStartAtField').style.display = $('#examStartMode').value === 'now' ? 'none' : 'block';
+    });
+
+    // ---------- Xuất đề in giấy (Word/PDF) — dùng lại đúng nhóm/chương/số câu đã chọn ở trên, KHÔNG
+    // ghi Firestore (tách biệt hoàn toàn khỏi đề online "Tạo đề kiểm tra" ở nút bên trên). ----------
+    async function prepareExportVariants(box) {
+      const chapterIds = selectedChapterIds();
+      const counts = readExamCounts();
+      const count = QUIZ_TYPE_OPTIONS.reduce((sum, t) => sum + counts[t.value], 0);
+      if (!chapterIds.length) { showResult(box, 'Chọn ít nhất 1 chương.', true); return null; }
+      if (!count || count < 1) { showResult(box, 'Chọn ít nhất 1 câu (ở 1 trong các loại).', true); return null; }
+
+      const pool = await getQuestionPool(chapterIds);
+      if (!pool.length) { showResult(box, '(Các) chương đã chọn chưa có câu hỏi trắc nghiệm nào.', true); return null; }
+      const poolByType = splitPoolByType(pool);
+      const questions = drawQuestionsForExport(poolByType, counts);
+      const numVariants = Math.max(1, Math.min(parseInt($('#examVariantCount').value, 10) || 1, 8));
+      return {
+        variants: buildExamVariants(questions, numVariants),
+        examTitle: $('#examTitle').value.trim(),
+        duration: parseInt($('#examDuration').value, 10) || 0
+      };
+    }
+
+    $('#examExportWordBtn').addEventListener('click', async () => {
+      const box = $('#examExportResult');
+      showResult(box, '⏳ Đang tạo file...');
+      try {
+        const prep = await prepareExportVariants(box);
+        if (!prep) return;
+        const html = buildExamPrintHtml(prep.variants, prep.examTitle, prep.duration);
+        exportExamAsWord(html, sanitizeFileNamePart(prep.examTitle) + '.doc');
+        showResult(box, `✓ Đã tải file Word — ${prep.variants.length} mã đề.`);
+      } catch (e) {
+        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+      }
+    });
+
+    $('#examExportPdfBtn').addEventListener('click', async () => {
+      const box = $('#examExportResult');
+      showResult(box, '⏳ Đang mở bản xem trước...');
+      try {
+        const prep = await prepareExportVariants(box);
+        if (!prep) return;
+        const html = buildExamPrintHtml(prep.variants, prep.examTitle, prep.duration);
+        exportExamAsPdf(html);
+        showResult(box, `✓ Đã mở bản xem trước — ${prep.variants.length} mã đề. Trong hộp thoại In, chọn đích đến "Lưu thành PDF" (Save as PDF) để lưu file.`);
+      } catch (e) {
+        showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+      }
     });
 
     loadGroups();
