@@ -172,8 +172,14 @@
     <div class="card" id="teacherStudentsNotifyCard" style="display:none;"></div>
 
     <div class="section-label">Dành cho giáo viên</div>
-    <div class="card" id="teacherQuickStatsCard" style="display:none;"></div>
-    <div class="card" id="teacherActiveCard" style="display:none;"></div>
+    <!-- Gộp chung 1 thẻ cho 2 khối thống kê (đổ vào 2 khung con riêng, không đụng nhau) — trước đây
+         2 thẻ .card riêng, mỗi thẻ tự có padding/border/margin-bottom, tốn diện tích trang hơn cần
+         thiết. Thẻ ngoài chỉ cần MỘT trong hai khối có dữ liệu là hiện (script nào chạy xong trước
+         cũng tự hiện thẻ, không phải chờ nhau). -->
+    <div class="card" id="teacherStatsCard" style="display:none;">
+      <div id="teacherQuickStatsBody"></div>
+      <div id="teacherActiveBody"></div>
+    </div>
     <div class="icon-grid">
       <a class="icon-tile is-active" href="pages/hoc-theo-chuong.html">
         <div class="icon-tile-icon">🎓</div>
@@ -960,8 +966,9 @@
   if (!isFirebaseConfigured() || getRole() !== 'teacher') return;
   const teacher = await waitForAuthReady();
   if (!teacher) return;
-  const card = document.getElementById('teacherQuickStatsCard');
-  if (!card) return;
+  const outerCard = document.getElementById('teacherStatsCard');
+  const card = document.getElementById('teacherQuickStatsBody');
+  if (!card || !outerCard) return;
   try {
     const { db } = ensureFirebase();
     const col = db.collection('teachers').doc(teacher.uid);
@@ -1002,7 +1009,7 @@
     const proCount = subs.filter((s) => s.tier === 'premium').length;
     const onlineCount = uids.filter((uid) => presence.get(uid)).length;
 
-    card.style.display = 'block';
+    outerCard.style.display = 'block';
     card.innerHTML = `
       <div class="stat-tiles">
         <div class="stat-tile"><div class="stat-tile-icon hue-teal">📘</div><div class="stat-tile-text"><strong>${grades.size}</strong> lớp, <strong>${chapterIds.size}</strong> chương đã soạn</div></div>
@@ -1023,8 +1030,9 @@
   if (!isFirebaseConfigured() || getRole() !== 'teacher') return;
   const teacher = await waitForAuthReady();
   if (!teacher) return;
-  const card = document.getElementById('teacherActiveCard');
-  if (!card) return;
+  const outerCard = document.getElementById('teacherStatsCard');
+  const card = document.getElementById('teacherActiveBody');
+  if (!card || !outerCard) return;
   try {
     const { db } = ensureFirebase();
     const students = typeof getAllStudentsForCurrentTeacher === 'function' ? await getAllStudentsForCurrentTeacher() : [];
@@ -1104,9 +1112,15 @@
     // nửa bên cạnh — chỉ khi CẢ 2 loại đều có mới xếp cạnh nhau đúng 2 cột.
     const bothPresent = topGroups.length && topStudents.length;
     const soloClass = bothPresent ? '' : ' span-2';
-    card.style.display = 'block';
+    outerCard.style.display = 'block';
+    // Chung 1 thẻ với khối thống kê nhanh phía trên (#teacherQuickStatsBody) — thêm viền ngăn cách
+    // + margin-top RIÊNG cho khối này (khối kia có thể chưa kịp hiện, hoặc không hiện được nếu lỗi
+    // mạng) thay vì margin cứng trên cả 2, tránh dính sát/thừa khoảng trắng tuỳ trường hợp.
+    card.style.marginTop = '12px';
+    card.style.paddingTop = '12px';
+    card.style.borderTop = '1px solid var(--border)';
     card.innerHTML = `
-      <h2 style="margin-top:0;"><span class="icon">🏆</span>Tích cực trong 7 ngày qua</h2>
+      <h2 style="margin-top:0;font-size:14px;"><span class="icon">🏆</span>Tích cực trong 7 ngày qua</h2>
       <div class="stat-tiles">
         ${topGroups.length ? `<div class="stat-tile${soloClass}"><div class="stat-tile-icon hue-violet">🏅</div><div class="stat-tile-text">Nhóm tích cực nhất: <strong>${topGroups.join('</strong>, <strong>')}</strong></div></div>` : ''}
         ${topStudents.length ? `<div class="stat-tile${soloClass}"><div class="stat-tile-icon hue-amber">🌟</div><div class="stat-tile-text">Học sinh tích cực nhất: <strong>${topStudents.join('</strong>, <strong>')}</strong></div></div>` : ''}
