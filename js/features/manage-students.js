@@ -339,7 +339,7 @@
                   ${zaloDigits ? `<a class="btn" href="https://zalo.me/${escapeHtml(zaloDigits)}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
                   ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${uid}">🔑 Cấp mã thay thế</button>` : ''}
                   ${unassignedGroup && groups.length ? `<button class="btn assign-group-toggle-btn" type="button" data-doc-id="${escapeHtml(unassignedGroup.docId)}" data-uid="${uid}">📥 Xếp vào nhóm</button>` : ''}
-                  <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" style="color:#dc2626;">🗑️ Xoá học sinh</button>
+                  <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" data-uid="${uid}" style="color:#dc2626;">🗑️ Xoá học sinh</button>
                 </div>
                 ${unassignedGroup && groups.length ? `
                   <div class="assign-group-form" style="display:none;">
@@ -410,8 +410,26 @@
           btn.addEventListener('click', async () => {
             const docIds = btn.dataset.docIds ? btn.dataset.docIds.split(',') : [];
             const name = btn.dataset.name;
-            if (!confirm(`Xoá HẲN học sinh "${name}" khỏi mọi nhóm? Không thể hoàn tác — tiến độ học/gói đã mua của tài khoản này vẫn còn (không mất) nhưng sẽ không còn hiện trong bất kỳ nhóm nào của bạn nữa.`)) return;
+            const s = students.find((x) => x.studentUid === btn.dataset.uid);
+            // Bảo vệ học sinh đã mua gói Premium còn hạn — giáo viên không được xoá để tránh mất quyền
+            // lợi đã trả tiền (VD bị xoá khỏi nhóm là mất luôn quyền vào học/làm bài dù gói vẫn còn
+            // hạn). Chỉ xoá được khi gói đã hết hạn (getStudentSubscription tự trả về 'free' lúc đó)
+            // hoặc tài khoản đang ở gói miễn phí. Kiểm tra TRƯỚC confirm() để khỏi tốn 1 lượt xác nhận
+            // vô ích nếu chắc chắn sẽ bị chặn.
             btn.disabled = true;
+            try {
+              const canonicalUid = s ? canonicalStudentUid(s) : null;
+              const sub = canonicalUid ? await getStudentSubscription(canonicalUid) : { tier: 'free' };
+              if (sub.tier && sub.tier !== 'free') {
+                showToast(`Không thể xoá "${name}" — học sinh này đang có gói Premium còn hạn (đến ${sub.expiresAt ? new Date(sub.expiresAt).toLocaleDateString('vi-VN') : '?'}). Chỉ xoá được sau khi gói hết hạn hoặc học sinh dùng tài khoản miễn phí.`);
+                btn.disabled = false;
+                return;
+              }
+            } catch (e) {
+              // Lỗi tra cứu gói (VD mất mạng) — không chặn hẳn, để deleteStudentEverywhere tự xử lý
+              // tiếp, tránh giáo viên bị kẹt không xoá được chỉ vì 1 lượt đọc phụ bị lỗi thoáng qua.
+            }
+            if (!confirm(`Xoá HẲN học sinh "${name}" khỏi mọi nhóm? Không thể hoàn tác — tiến độ học của tài khoản này vẫn còn (không mất) nhưng sẽ không còn hiện trong bất kỳ nhóm nào của bạn nữa.`)) { btn.disabled = false; return; }
             try {
               await deleteStudentEverywhere(docIds);
               // Chỉ xoá ĐÚNG dòng vừa bấm khỏi bảng — trước đây vẽ lại TOÀN BỘ danh sách
