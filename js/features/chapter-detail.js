@@ -1064,8 +1064,9 @@
     const items = getAllQuizItems();
     box.innerHTML = items.length ? items.map((item) => `
       <div class="quiz-review-item" style="text-align:left;">
+        ${item.qImage ? `<img src="${item.qImage}" alt="${escapeHtml(item.q)}" style="max-width:100%;display:block;border-radius:8px;margin-bottom:6px;">` : ''}
         <div class="qi-q">${escapeHtml(item.q)}</div>
-        <div class="hint">[${QUIZ_TYPE_LABELS[getQuestionType(item)]}] Đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>
+        <div class="hint">[${QUIZ_TYPE_LABELS[getQuestionType(item)]}] Đúng: ${formatCorrectAnswerDisplay(item) ? escapeHtml(formatCorrectAnswerDisplay(item)) : '⚠️ chưa có đáp án đúng'}</div>
         <div class="hint" style="margin-top:4px;">
           ${item.kind === 'builtin' ? (item.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
           · <a href="#" class="quiz-edit" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">Sửa</a>
@@ -1257,14 +1258,37 @@
       const box = $('#quizPdfResult');
       box.innerHTML = `<div class="result-box show">⏳ Đang cắt ảnh từng câu trong "${escapeHtml(file.name)}"...</div>`;
       try {
-        const questions = await extractQuizFromPdf(await file.arrayBuffer());
+        const { questions, warnings } = await extractQuizFromPdf(await file.arrayBuffer());
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
-        box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi — nhớ vào "Sửa câu hỏi trắc nghiệm" để chọn đáp án đúng cho từng câu.</div>`;
+        // Báo NGAY mọi cảnh báo gặp phải lúc nạp (thiếu/trùng số câu, trang lỗi...) — giáo viên cần biết
+        // ngay chỗ nào phải tự kiểm tra lại, không im lặng bỏ qua rồi chỉ phát hiện đề bị thiếu khi đã trễ.
+        const warningHtml = warnings.length
+          ? `<div class="result-box show error" style="margin-bottom:8px;"><strong>⚠️ Có ${warnings.length} vấn đề cần kiểm tra lại:</strong><ul style="margin:6px 0 0;padding-left:20px;">${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`
+          : '';
+        box.innerHTML = `
+          ${warningHtml}
+          <div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi — nhớ vào "Sửa câu hỏi trắc nghiệm" để chọn đáp án đúng cho từng câu.</div>
+          <button class="btn block" id="quizPdfViewAllBtn" style="margin-top:8px;">👁️ Xem toàn bộ đề vừa nạp</button>
+          <div id="quizPdfPreviewList" style="display:none;margin-top:10px;"></div>
+        `;
+        $('#quizPdfViewAllBtn').addEventListener('click', () => {
+          const list = $('#quizPdfPreviewList');
+          const show = list.style.display === 'none';
+          list.style.display = show ? 'block' : 'none';
+          if (show && !list.dataset.rendered) {
+            list.dataset.rendered = '1';
+            list.innerHTML = questions.map((q) => `
+              <div class="lesson-block" style="margin-bottom:10px;">
+                <h3 style="margin-bottom:8px;">${escapeHtml(q.q)}</h3>
+                ${q.qImage ? `<img src="${q.qImage}" alt="${escapeHtml(q.q)}" style="max-width:100%;display:block;">` : ''}
+              </div>
+            `).join('');
+          }
+        });
         rebuildEffectiveQuiz();
         renderQuizManager();
         renderQuiz();
-        $('#quizManagerBody').scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (err) {
         box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(err.message)}</div>`;
       }

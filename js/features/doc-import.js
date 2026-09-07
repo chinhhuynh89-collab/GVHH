@@ -456,82 +456,118 @@ function groupTextItemsIntoLines(items, viewportHeight, scale) {
   return lines;
 }
 
+// Trả về { questions, warnings } thay vì mảng trần — "warnings" liệt kê MỌI vấn đề gặp phải lúc nạp
+// (trang lỗi, câu không cắt được ảnh, số câu bị nhảy cóc/trùng...) để báo NGAY cho giáo viên biết chỗ
+// nào cần tự kiểm tra lại, thay vì im lặng bỏ qua rồi giáo viên chỉ phát hiện ra khi đã trễ (đề thiếu
+// câu mà không biết thiếu đúng câu nào).
 async function extractQuizFromPdf(arrayBuffer) {
   const pdfjsLib = await ensurePdfJs();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const questions = [];
+  const foundNums = [];
+  const warnings = [];
   let openQuestion = null; // { num, canvases: [...], hasOptions }
 
   function flushQuestion() {
     if (!openQuestion) return;
-    const canvas = stackCanvasesVertically(openQuestion.canvases);
-    const dataUri = canvasToBudgetedJpeg(canvas);
-    const qLabel = `Câu ${openQuestion.num} (xem ảnh)`;
-    if (openQuestion.hasOptions) {
-      questions.push({ q: qLabel, qImage: dataUri, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null, noShuffle: true });
-    } else {
-      questions.push({ q: qLabel, qImage: dataUri, type: 'text', acceptedAnswers: '', noShuffle: true });
+    try {
+      const canvas = stackCanvasesVertically(openQuestion.canvases);
+      const dataUri = canvasToBudgetedJpeg(canvas);
+      const qLabel = `Câu ${openQuestion.num} (xem ảnh)`;
+      if (openQuestion.hasOptions) {
+        questions.push({ q: qLabel, qImage: dataUri, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null, noShuffle: true });
+      } else {
+        questions.push({ q: qLabel, qImage: dataUri, type: 'text', acceptedAnswers: '', noShuffle: true });
+      }
+      foundNums.push(parseInt(openQuestion.num, 10));
+    } catch (e) {
+      warnings.push(`Câu ${openQuestion.num}: lỗi khi dựng ảnh (${e.message}) — câu này bị bỏ qua, cần bổ sung thủ công.`);
     }
     openQuestion = null;
   }
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    const baseViewport = page.getViewport({ scale: 1 });
-    const scale = QUIZ_PAGE_RENDER_WIDTH / baseViewport.width;
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(viewport.width));
-    canvas.height = Math.max(1, Math.round(viewport.height));
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    try {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = QUIZ_PAGE_RENDER_WIDTH / baseViewport.width;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(viewport.width));
+      canvas.height = Math.max(1, Math.round(viewport.height));
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
 
-    const lines = groupTextItemsIntoLines(content.items, baseViewport.height, scale);
-    const markers = [];
-    lines.forEach((line) => {
-      const m = line.text.trim().match(QUIZ_QUESTION_MARKER_RE);
-      if (m) markers.push({ y: line.y, num: m[1] });
-    });
-    const hasOptionsBetween = (top, bottom) => lines.some((line) => {
-      if (line.y < top || line.y >= bottom) return false;
-      return QUIZ_OPTION_MARKER_RE.test(line.text.trim());
-    });
+      const lines = groupTextItemsIntoLines(content.items, baseViewport.height, scale);
+      const markers = [];
+      lines.forEach((line) => {
+        const m = line.text.trim().match(QUIZ_QUESTION_MARKER_RE);
+        if (m) markers.push({ y: line.y, num: m[1] });
+      });
+      const hasOptionsBetween = (top, bottom) => lines.some((line) => {
+        if (line.y < top || line.y >= bottom) return false;
+        return QUIZ_OPTION_MARKER_RE.test(line.text.trim());
+      });
 
-    if (!markers.length) {
-      // Cả trang không có "Câu N." nào mới — toàn trang là phần TIẾP THEO của câu đang mở (tràn trang).
-      if (openQuestion) {
-        const cropped = cropPageCanvasVertical(canvas, 0, canvas.height);
+      if (!markers.length) {
+        // Cả trang không có "Câu N." nào mới — toàn trang là phần TIẾP THEO của câu đang mở (tràn trang).
+        if (openQuestion) {
+          const cropped = cropPageCanvasVertical(canvas, 0, canvas.height);
+          if (cropped) {
+            openQuestion.canvases.push(cropped);
+            openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, canvas.height);
+          }
+        }
+        continue;
+      }
+
+      // Phần TRƯỚC mốc "Câu" đầu tiên trên trang (nếu có) là phần cuối của câu đang mở từ trang trước.
+      if (openQuestion && markers[0].y > 4) {
+        const cutoff = Math.max(0, markers[0].y - QUIZ_MARKER_BOTTOM_PAD);
+        const cropped = cropPageCanvasVertical(canvas, 0, cutoff);
         if (cropped) {
           openQuestion.canvases.push(cropped);
-          openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, canvas.height);
+          openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, cutoff);
         }
       }
-      continue;
-    }
+      flushQuestion();
 
-    // Phần TRƯỚC mốc "Câu" đầu tiên trên trang (nếu có) là phần cuối của câu đang mở từ trang trước.
-    if (openQuestion && markers[0].y > 4) {
-      const cutoff = Math.max(0, markers[0].y - QUIZ_MARKER_BOTTOM_PAD);
-      const cropped = cropPageCanvasVertical(canvas, 0, cutoff);
-      if (cropped) {
-        openQuestion.canvases.push(cropped);
-        openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, cutoff);
+      for (let i = 0; i < markers.length; i++) {
+        const top = markers[i].y;
+        const bottom = i + 1 < markers.length ? Math.max(top, markers[i + 1].y - QUIZ_MARKER_BOTTOM_PAD) : canvas.height;
+        const cropped = cropPageCanvasVertical(canvas, top, bottom);
+        if (!cropped) {
+          warnings.push(`Câu ${markers[i].num} (trang ${pageNum}): không cắt được ảnh — có thể trang này bị lỗi hiển thị, cần bổ sung thủ công.`);
+          continue;
+        }
+        openQuestion = { num: markers[i].num, canvases: [cropped], hasOptions: hasOptionsBetween(top, bottom) };
+        if (i < markers.length - 1) flushQuestion(); // còn câu sau trên cùng trang -> câu này chắc chắn đã khép
       }
-    }
-    flushQuestion();
-
-    for (let i = 0; i < markers.length; i++) {
-      const top = markers[i].y;
-      const bottom = i + 1 < markers.length ? Math.max(top, markers[i + 1].y - QUIZ_MARKER_BOTTOM_PAD) : canvas.height;
-      const cropped = cropPageCanvasVertical(canvas, top, bottom);
-      if (!cropped) continue;
-      openQuestion = { num: markers[i].num, canvases: [cropped], hasOptions: hasOptionsBetween(top, bottom) };
-      if (i < markers.length - 1) flushQuestion(); // còn câu sau trên cùng trang -> câu này chắc chắn đã khép
+    } catch (e) {
+      warnings.push(`Trang ${pageNum}: lỗi khi xử lý (${e.message}) — cả trang này bị bỏ qua, cần kiểm tra lại.`);
     }
   }
   flushQuestion(); // câu cuối cùng của cả file
   if (!questions.length) throw new Error('Không tìm thấy câu hỏi nào dạng "Câu 1.", "Câu 2."... trong file PDF.');
-  return questions;
+
+  // Đề thi thường đánh số liên tục — số bị nhảy cóc/trùng gần như chắc chắn là dấu hiệu bỏ sót/lỗi
+  // nhận diện, báo rõ ĐÚNG SỐ nào để giáo viên biết chỗ cần kiểm tra lại trong file gốc.
+  const sortedNums = foundNums.slice().sort((a, b) => a - b);
+  const seen = new Set();
+  const duplicates = new Set();
+  sortedNums.forEach((n) => { if (seen.has(n)) duplicates.add(n); seen.add(n); });
+  if (duplicates.size) {
+    warnings.unshift(`⚠️ Trùng số thứ tự: Câu ${Array.from(duplicates).join(', Câu ')} — kiểm tra lại các câu này, có thể 1 câu bị cắt thành 2 ảnh.`);
+  }
+  const missing = [];
+  for (let n = sortedNums[0]; n <= sortedNums[sortedNums.length - 1]; n++) {
+    if (!seen.has(n)) missing.push(n);
+  }
+  if (missing.length) {
+    warnings.unshift(`⚠️ Thiếu số thứ tự: Câu ${missing.join(', Câu ')} — kiểm tra lại các câu này trong file gốc rồi bổ sung thủ công nếu cần.`);
+  }
+
+  return { questions, warnings };
 }
 
 // Chỉ nhận .pdf — thông báo rõ cách khắc phục khi giáo viên trót chọn nhầm file khác (Word, ảnh...)
