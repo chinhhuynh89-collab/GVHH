@@ -69,3 +69,22 @@ async function deleteCustomLesson(id) {
   const { db } = ensureFirebase();
   await db.collection('teachers').doc(teacher.uid).collection('customLessons').doc(id).delete();
 }
+
+// Xoá TOÀN BỘ bài giảng tự thêm/nạp từ file trong 1 chương — cần khi 1 lần nạp file cũ đã lưu sai
+// (thiếu định dạng/sai thứ tự do lỗi đã sửa) và giáo viên muốn nạp lại từ đầu thay vì xoá tay từng
+// mục một (có thể tới hàng trăm mục với file lớn). KHÔNG đụng tới bài giảng có sẵn trong app (builtin).
+// Firestore giới hạn 500 thao tác/batch — chia nhỏ 400/lần cho an toàn.
+async function deleteAllCustomLessons(chapterId) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  const col = db.collection('teachers').doc(teacher.uid).collection('customLessons');
+  const snap = await col.where('chapterId', '==', chapterId).get();
+  const docs = snap.docs;
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = db.batch();
+    docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+  return docs.length;
+}

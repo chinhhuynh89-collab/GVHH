@@ -352,6 +352,7 @@
     setChapterProgress(chapter.id, { lessonViewed: true });
     refreshDots();
     if (owner.isOwner) { wireLessonActions(box); wireBankShareLinks(box, 'lesson', customLessonsCache, renderAllLessons); }
+    refreshLessonDeleteAllRow();
   }
 
   function wireLessonActions(box) {
@@ -496,6 +497,12 @@
     });
   }
 
+  function refreshLessonDeleteAllRow() {
+    const row = $('#lessonDeleteAllRow');
+    if (!row) return;
+    row.style.display = (owner.isOwner && customLessonsCache.length) ? 'flex' : 'none';
+  }
+
   function initUploadControl() {
     if (!owner.isOwner) return;
     $('#docUploadBtn').addEventListener('click', () => $('#docFileInput').click());
@@ -510,6 +517,24 @@
         renderImportPreview(sections, file.name);
       } catch (err) {
         box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(err.message)}</div>`;
+      }
+    });
+    $('#lessonDeleteAllBtn').addEventListener('click', async () => {
+      if (!customLessonsCache.length) return;
+      if (!confirm(`Xoá toàn bộ ${customLessonsCache.length} bài giảng tự thêm/nạp từ file của chương này? Không thể hoàn tác. Bài giảng có sẵn trong app KHÔNG bị ảnh hưởng.`)) return;
+      const btn = $('#lessonDeleteAllBtn');
+      btn.disabled = true;
+      btn.textContent = 'Đang xoá...';
+      try {
+        await deleteAllCustomLessons(chapter.id);
+        customLessonsCache = [];
+        renderAllLessons();
+        showToast('Đã xoá toàn bộ bài giảng tự thêm — nạp lại file để cập nhật bản mới.', false);
+      } catch (err) {
+        showToast('Không xoá được: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🗑️ Xoá tất cả bài giảng tự thêm';
       }
     });
   }
