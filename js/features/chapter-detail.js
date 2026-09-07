@@ -349,7 +349,10 @@
       }
       flushList();
       if (pt.type === 'image') {
-        html += `<img src="${pt.dataUri}" alt="${escapeHtml(pt.alt || '')}" style="max-width:100%;border-radius:8px;margin:10px 0;display:block;" />`;
+        // Ảnh giờ luôn là 1 TRANG PDF nguyên vẹn (xem doc-import.js) — nhiều trang của cùng 1 "Bài" xếp
+        // liên tiếp nhau, bỏ khoảng cách/bo góc giữa các trang để đọc liền mạch như lật trang giấy thật,
+        // thay vì để trắng 1 khoảng lớn giữa từng trang trông như các ảnh minh hoạ rời rạc.
+        html += `<img src="${pt.dataUri}" alt="${escapeHtml(pt.alt || '')}" style="max-width:100%;display:block;margin:0;" />`;
       } else if (pt.type === 'table') {
         html += `<div class="lesson-table-wrap"><table class="lesson-table">${pt.rows.map((row) => `<tr>${row.cells.map((cell) => {
           if (typeof cell === 'string') return `<td>${escapeHtml(cell)}</td>`;
