@@ -939,8 +939,13 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
 .lesson-block { margin-bottom: 14px; }
 .lesson-block h3 { font-size: calc(16.5px * var(--font-scale)); font-weight: 700; margin: 0 0 10px; color: var(--brand); }
-.lesson-block ul { margin: 0; padding-left: 20px; }
+.lesson-block ul { margin: 0 0 10px; padding-left: 20px; }
 .lesson-block li { font-size: calc(15.5px * var(--font-scale)); line-height: 1.7; color: var(--text); margin-bottom: 9px; }
+/* Bảng nạp từ Word (xem doc-import.js: extractDocxTableRows) — cuộn ngang trên màn hẹp thay vì để chữ
+   bị ép nhỏ xíu vừa khung, giống đúng cách .roster-table-wrap đã làm cho bảng danh sách học sinh. */
+.lesson-table-wrap { overflow-x: auto; margin-bottom: 10px; }
+.lesson-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: calc(14px * var(--font-scale)); }
+.lesson-table td { padding: 8px 12px; border: 1px solid var(--border); background: var(--surface-2); }
 
 .custom-lesson-block {
   padding: 14px;

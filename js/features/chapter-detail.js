@@ -280,6 +280,33 @@
   }
 
   // ---------- Bài giảng (mặc định + tự thêm, gộp chung 1 danh sách) ----------
+  // Điểm bài giảng có thể là chuỗi thường (đa số, kể cả mọi bài giảng lưu TRƯỚC bản cập nhật này) HOẶC
+  // 1 object {type:'table'|'image'|'warning', ...} (nạp từ Word, xem doc-import.js) — gộp các điểm
+  // dạng chuỗi liên tiếp vào 1 <ul>, nhưng ngắt danh sách và vẽ khối riêng khi gặp bảng/ảnh/cảnh báo.
+  function renderLessonPointsHtml(points) {
+    let html = '';
+    let listBuf = [];
+    function flushList() {
+      if (listBuf.length) { html += `<ul>${listBuf.join('')}</ul>`; listBuf = []; }
+    }
+    points.forEach((pt) => {
+      if (typeof pt === 'string') {
+        listBuf.push(`<li>${escapeHtml(pt)}</li>`);
+        return;
+      }
+      flushList();
+      if (pt.type === 'image') {
+        html += `<img src="${pt.dataUri}" alt="${escapeHtml(pt.alt || '')}" style="max-width:100%;border-radius:8px;margin:10px 0;display:block;" />`;
+      } else if (pt.type === 'table') {
+        html += `<div class="lesson-table-wrap"><table class="lesson-table">${pt.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+      } else if (pt.type === 'warning') {
+        html += `<p class="hint" style="color:var(--danger);">⚠️ ${escapeHtml(pt.message)}</p>`;
+      }
+    });
+    flushList();
+    return html;
+  }
+
   function renderAllLessons() {
     const box = $('#lessonContent');
     const items = getAllLessons();
@@ -293,7 +320,7 @@
       box.innerHTML = items.map((l) => `
         <div class="lesson-block">
           <h3>${escapeHtml(l.title)}</h3>
-          <ul>${l.points.map((pt) => `<li>${escapeHtml(pt)}</li>`).join('')}</ul>
+          ${renderLessonPointsHtml(l.points)}
           ${owner.isOwner ? `
             <div class="hint" style="margin-top:8px;">
               ${l.kind === 'builtin' ? (l.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
@@ -360,11 +387,21 @@
     });
   }
 
+  // Điểm dạng object (bảng/ảnh/cảnh báo, nạp từ Word) không sửa được trong khung textarea đơn giản
+  // này — giữ nguyên riêng (rememberedRichPoints), chỉ phần chữ mới đưa vào textarea để sửa. Lúc lưu,
+  // ghép lại: [các dòng chữ mới từ textarea] + [toàn bộ điểm object, giữ nguyên thứ tự cũ] — chấp nhận
+  // đánh đổi mất đúng vị trí xen kẽ gốc (bảng/ảnh dồn xuống cuối) để khỏi mất dữ liệu, không cần xây
+  // hẳn 1 trình soạn thảo rich-text riêng chỉ để sửa nhanh vài dòng.
+  let rememberedRichPoints = [];
+
   function openLessonForm(existing) {
     const box = $('#manualLessonForm');
     box.style.display = 'block';
     $('#manualLessonTitle').value = existing ? existing.title : '';
-    $('#manualLessonPoints').value = existing ? existing.points.join('\n') : '';
+    const points = existing ? existing.points : [];
+    rememberedRichPoints = points.filter((p) => typeof p !== 'string');
+    $('#manualLessonPoints').value = points.filter((p) => typeof p === 'string').join('\n');
+    $('#manualLessonRichNotice').style.display = rememberedRichPoints.length ? 'block' : 'none';
     box.dataset.kind = existing ? existing.kind : 'custom';
     box.dataset.id = (existing && existing.kind === 'custom') ? existing.id : '';
     box.dataset.index = (existing && existing.kind === 'builtin') ? String(existing.index) : '';
@@ -377,7 +414,8 @@
     $('#manualLessonCancel').addEventListener('click', () => { $('#manualLessonForm').style.display = 'none'; });
     $('#manualLessonSave').addEventListener('click', async () => {
       const title = $('#manualLessonTitle').value.trim();
-      const points = $('#manualLessonPoints').value.split('\n').map((s) => s.trim()).filter(Boolean);
+      const textPoints = $('#manualLessonPoints').value.split('\n').map((s) => s.trim()).filter(Boolean);
+      const points = textPoints.concat(rememberedRichPoints);
       if (!title || !points.length) return;
       const box = $('#manualLessonForm');
       const kind = box.dataset.kind;

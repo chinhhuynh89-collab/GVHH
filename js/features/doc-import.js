@@ -240,36 +240,174 @@ async function extractDocxPlainText(arrayBuffer) {
   return paragraphs.map((p) => Array.from(p.getElementsByTagName('w:t')).map((t) => t.textContent).join('')).join('\n');
 }
 
-function groupDocxParagraphs(xmlText) {
+// ---------- Nhận diện tiêu đề đánh số thủ công (I., 1., a)...) ----------
+// Nhiều giáo án KHÔNG dùng kiểu "Heading" có sẵn của Word mà tự đánh số thủ công (I. MỤC LỚN / 1. Mục
+// con / a) Mục nhỏ hơn). Chỉ coi là tiêu đề nếu NGẮN (dưới 100 ký tự) để tránh nhầm 1 câu văn dài tình
+// cờ bắt đầu bằng số/chữ cái + dấu chấm/ngoặc (VD "1. Một số ví dụ cho thấy...").
+const NUMBERED_HEADING_RE = /^([IVXLCDM]+\.|[0-9]+\.|[a-zđ]\))\s+\S/i;
+function looksLikeNumberedHeading(text) {
+  return text.length <= 100 && NUMBERED_HEADING_RE.test(text);
+}
+
+// ---------- Ảnh nhúng trong .docx (word/_rels/document.xml.rels: rId -> đường dẫn media) ----------
+// Không throw nếu thiếu/lỗi — tài liệu không có ảnh nào (hoặc rels đọc lỗi) vẫn nạp được bình thường
+// phần chữ, chỉ là không có ảnh nào để nhúng.
+async function readDocxRelationships(arrayBuffer) {
+  let relsXml;
+  try { relsXml = await readZipEntryText(arrayBuffer, 'word/_rels/document.xml.rels'); }
+  catch (e) { return {}; }
+  const map = {};
+  const re = /Id="(rId\d+)"[^>]*Target="([^"]+)"/g;
+  let m;
+  while ((m = re.exec(relsXml))) map[m[1]] = m[2];
+  return map;
+}
+
+// Biến thể của readZipEntryText nhưng trả về BYTES thô (ảnh là dữ liệu nhị phân — TextDecoder ở
+// readZipEntryText sẽ làm hỏng dữ liệu) — trả null nếu không tìm thấy/lỗi thay vì throw, để 1 ảnh
+// thiếu/hỏng không chặn việc nạp cả file.
+async function readZipEntryBytes(arrayBuffer, entryName) {
+  try {
+    const bytes = new Uint8Array(arrayBuffer);
+    const view = new DataView(arrayBuffer);
+    const entry = zipFindCentralEntry(view, bytes, entryName);
+    if (!entry) return null;
+    const loc = entry.localHeaderOffset;
+    if (view.getUint32(loc, true) !== ZIP_LOC_SIG) return null;
+    const nameLen = view.getUint16(loc + 26, true);
+    const extraLen = view.getUint16(loc + 28, true);
+    const dataStart = loc + 30 + nameLen + extraLen;
+    const compressed = bytes.subarray(dataStart, dataStart + entry.compSize);
+    return entry.compMethod === 0 ? compressed : await inflateRawBytes(compressed);
+  } catch (e) { return null; }
+}
+
+// Chỉ 2 định dạng ảnh này trình duyệt hiển thị được trực tiếp — các định dạng cũ (.wmf/.emf/.wdp, hay
+// gặp ở công thức dán từ Equation Editor/MathType) không có cách đọc được, phải báo cảnh báo thay vì
+// nhúng (xem findEmbeddedImageRid + nhánh xử lý trong groupDocxParagraphs).
+const DOCX_IMAGE_MIME_BY_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+
+// Thu nhỏ + nén ảnh về cỡ vừa đủ hiển thị trên điện thoại rồi nhúng thẳng vào tài liệu Firestore dạng
+// base64 — không cần giữ nguyên độ phân giải gốc (thường lớn hơn nhiều lần mức cần thiết), và không
+// cần bật thêm dịch vụ lưu file riêng (Firebase Storage) chỉ để hiển thị vài chục ảnh nhỏ mỗi bài.
+async function resizeImageToDataUri(bytes, mimeType, maxWidth) {
+  const blob = new Blob([bytes], { type: mimeType });
+  const bitmap = await createImageBitmap(blob);
+  const scale = Math.min(1, maxWidth / bitmap.width);
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+  if (typeof bitmap.close === 'function') bitmap.close();
+  return canvas.toDataURL('image/jpeg', 0.72);
+}
+
+// Tìm rId ảnh nhúng trong 1 đoạn văn (nếu có) — chỉ soi bên trong đúng <w:drawing>/<w:pict> (không soi
+// cả đoạn văn) để tránh nhầm với "r:id" ở chỗ khác không liên quan (VD <w:hyperlink r:id="...">).
+function findEmbeddedImageRid(pEl) {
+  const holder = pEl.getElementsByTagName('w:drawing')[0] || pEl.getElementsByTagName('w:pict')[0];
+  if (!holder) return null;
+  const xml = new XMLSerializer().serializeToString(holder);
+  const m = xml.match(/r:embed="(rId\d+)"/) || xml.match(/r:id="(rId\d+)"/);
+  return m ? m[1] : null;
+}
+
+// ---------- Bảng thật (<w:tbl>) — giữ đúng cấu trúc hàng/cột thay vì băm thành các dòng rời rạc ----------
+// Ô bảng có thể chứa ảnh (VD các ô "Ví dụ N" kèm hình/công thức minh hoạ) — không thể nhúng thật 1 ảnh
+// base64 vào giữa 1 ô kiểu chuỗi, nên chỉ chèn 1 dòng đánh dấu NGẮN NGAY TRONG Ô đó — vẫn hơn hẳn việc
+// im lặng bỏ qua hoàn toàn như trước (giáo viên biết đúng ô nào có ảnh cần xem lại file gốc).
+function extractDocxTableRows(tblEl) {
+  return Array.from(tblEl.getElementsByTagName('w:tr')).map((tr) =>
+    Array.from(tr.getElementsByTagName('w:tc')).map((tc) => {
+      const paraTexts = Array.from(tc.getElementsByTagName('w:p')).map((p) => {
+        const text = Array.from(p.getElementsByTagName('w:t')).map((t) => t.textContent).join('');
+        return findEmbeddedImageRid(p) ? (text + ' [Hình ảnh/công thức — xem file gốc]').trim() : text;
+      });
+      return paraTexts.join('\n').trim();
+    })
+  );
+}
+
+// Ngân sách dung lượng ảnh nhúng cho MỖI PHẦN (mỗi phần = 1 tài liệu Firestore riêng khi lưu, xem
+// addCustomLessonBatch trong custom-lessons.js) — tính theo độ dài chuỗi base64, chừa chỗ cho phần chữ
+// trong hạn mức 1MiB/tài liệu của Firestore. Vượt ngưỡng thì các ảnh còn lại trong phần đó chuyển
+// thành cảnh báo thay vì nhúng tiếp, để không làm hỏng cả việc lưu.
+const LESSON_IMAGE_BUDGET_PER_SECTION = 700000;
+
+async function groupDocxParagraphs(xmlText, arrayBuffer, relMap) {
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) {
     throw new Error('Không đọc được nội dung XML bên trong file .docx.');
   }
-  const paragraphs = Array.from(doc.getElementsByTagName('w:p'));
+  // Duyệt trực tiếp con của <w:body> theo ĐÚNG THỨ TỰ xuất hiện (thay vì getElementsByTagName('w:p')
+  // phẳng như trước — cách đó lấy luôn các đoạn văn NẰM TRONG Ô BẢNG như đoạn văn thường, băm mất cấu
+  // trúc hàng/cột) — nhờ vậy tách đúng nhánh xử lý theo từng loại thẻ con (w:p thường / w:tbl).
+  const bodyEl = doc.getElementsByTagName('w:body')[0];
+  const children = bodyEl ? Array.from(bodyEl.children) : [];
   const sections = [];
   let current = { title: null, points: [] };
+  let imageBudgetUsed = 0;
 
-  paragraphs.forEach((p) => {
-    const styleEl = p.getElementsByTagName('w:pStyle')[0];
-    const styleVal = styleEl ? (styleEl.getAttribute('w:val') || '') : '';
-    const isHeading = /^(Heading|Title)/i.test(styleVal);
-    const text = Array.from(p.getElementsByTagName('w:t')).map((t) => t.textContent).join('').trim();
-    if (!text) return;
+  function startNewSection(title) {
+    if (current.title || current.points.length) sections.push(current);
+    current = { title, points: [] };
+    imageBudgetUsed = 0;
+  }
 
-    if (isHeading) {
-      if (current.title || current.points.length) sections.push(current);
-      current = { title: text, points: [] };
-    } else {
-      current.points.push(text);
+  for (const el of children) {
+    const tag = el.tagName;
+    if (tag === 'w:tbl') {
+      const rows = extractDocxTableRows(el);
+      if (rows.length) current.points.push({ type: 'table', rows });
+      continue;
     }
-  });
+    if (tag !== 'w:p') continue; // bỏ qua w:sectPr và các thẻ hiếm gặp khác ở cấp thân tài liệu
+
+    const styleEl = el.getElementsByTagName('w:pStyle')[0];
+    const styleVal = styleEl ? (styleEl.getAttribute('w:val') || '') : '';
+    const text = Array.from(el.getElementsByTagName('w:t')).map((t) => t.textContent).join('').trim();
+    const isHeading = /^(Heading|Title)/i.test(styleVal) || (!!text && looksLikeNumberedHeading(text));
+
+    if (isHeading) { startNewSection(text); continue; }
+
+    const rid = findEmbeddedImageRid(el);
+    if (rid && relMap[rid]) {
+      const target = relMap[rid].replace(/^\.\.\//, '');
+      const ext = (target.split('.').pop() || '').toLowerCase();
+      const mime = DOCX_IMAGE_MIME_BY_EXT[ext];
+      let handled = false;
+      if (mime) {
+        const bytes = await readZipEntryBytes(arrayBuffer, 'word/' + target);
+        if (bytes) {
+          if (imageBudgetUsed < LESSON_IMAGE_BUDGET_PER_SECTION) {
+            try {
+              const dataUri = await resizeImageToDataUri(bytes, mime, 640);
+              imageBudgetUsed += dataUri.length;
+              current.points.push({ type: 'image', dataUri, alt: 'Hình minh hoạ' });
+              handled = true;
+            } catch (e) { /* rơi xuống nhánh cảnh báo bên dưới nếu giải mã ảnh lỗi */ }
+          } else {
+            current.points.push({ type: 'warning', message: 'Ảnh minh hoạ tại đây đã vượt giới hạn dung lượng của bài giảng — không nhúng được, cần bổ sung thủ công.' });
+            handled = true;
+          }
+        }
+      }
+      if (!handled) {
+        current.points.push({ type: 'warning', message: 'Có hình ảnh/công thức tại đây trong bản gốc (định dạng ảnh cũ, trình duyệt không đọc được) — cần bổ sung thủ công.' });
+      }
+    }
+
+    if (text) current.points.push(text);
+  }
   if (current.title || current.points.length) sections.push(current);
   return sections;
 }
 
 async function extractDocx(arrayBuffer, fileName) {
   const xmlText = await readZipEntryText(arrayBuffer, 'word/document.xml');
-  const sections = groupDocxParagraphs(xmlText);
+  const relMap = await readDocxRelationships(arrayBuffer);
+  const sections = await groupDocxParagraphs(xmlText, arrayBuffer, relMap);
   if (!sections.length) throw new Error('Không tìm thấy nội dung văn bản nào trong file .docx.');
   if (sections.length === 1 && !sections[0].title) sections[0].title = fileName;
   return sections;
