@@ -463,9 +463,15 @@
       box.innerHTML = `<div class="result-box show error">⚠️ Không tìm thấy nội dung văn bản nào trong file này.</div>`;
       return;
     }
+    // Đặt sẵn 1 cặp nút Lưu/Huỷ ở TRÊN ĐẦU (trước danh sách trang tích chọn) — file PDF nhiều trang thì
+    // danh sách rất dài, giáo viên không phải cuộn hết xuống cuối mới bấm được Lưu hoặc Huỷ.
     box.innerHTML = `
       <div class="result-box show">
         <div style="font-weight:700;margin-bottom:10px;">Đã trích xuất từ "${escapeHtml(fileName)}" — chọn phần muốn lưu vào chương:</div>
+        <div class="btn-row" style="margin-bottom:12px;">
+          <button class="btn primary" id="docSaveBtnTop" style="flex:1;">Lưu vào chương</button>
+          <button class="btn" id="docCancelBtnTop" style="flex:1;">Huỷ</button>
+        </div>
         ${sections.map((s, i) => `
           <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;cursor:pointer;">
             <input type="checkbox" class="import-check" data-idx="${i}" checked style="margin-top:3px;flex-shrink:0;" />
@@ -478,12 +484,12 @@
         <button class="btn primary block" id="docSaveBtn">Lưu vào chương</button>
       </div>
     `;
-    $('#docSaveBtn').addEventListener('click', async () => {
+    const saveBtns = [$('#docSaveBtnTop'), $('#docSaveBtn')];
+    async function doSave() {
       const checks = $$('.import-check', box);
       const chosen = checks.filter((c) => c.checked).map((c) => sections[parseInt(c.dataset.idx, 10)]);
       if (!chosen.length) return;
-      $('#docSaveBtn').disabled = true;
-      $('#docSaveBtn').textContent = 'Đang lưu...';
+      saveBtns.forEach((b) => { b.disabled = true; b.textContent = 'Đang lưu...'; });
       try {
         await addCustomLessonBatch(chapter.id, chosen.map((sec) =>
           ({ title: sec.title, points: sec.points, sourceFileName: fileName })
@@ -494,7 +500,9 @@
       } catch (e) {
         box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(e.message)}</div>`;
       }
-    });
+    }
+    saveBtns.forEach((b) => b.addEventListener('click', doSave));
+    $('#docCancelBtnTop').addEventListener('click', () => { box.innerHTML = ''; });
   }
 
   function refreshLessonDeleteAllRow() {
