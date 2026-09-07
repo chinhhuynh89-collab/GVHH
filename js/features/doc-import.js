@@ -283,6 +283,40 @@ function ensurePdfJs() {
 // đọc được chữ/công thức bình thường, chỉ hơi mờ hơn khi phóng to hết cỡ.
 const PDF_PAGE_TARGET_WIDTH = 800;
 const PDF_PAGE_MIN_WIDTH = 420;
+// Chừa lại 1 chút lề khi cắt (không cắt sát nét chữ đầu/cuối trang cho đỡ chật).
+const PDF_PAGE_TRIM_MARGIN = 14;
+
+// Trang PDF luôn có lề trắng riêng (thường 2-2.5cm mỗi cạnh, theo chuẩn Word) — xếp nhiều trang liền
+// nhau (xem chapter-detail.js: đã bỏ khoảng cách CSS giữa các trang) vẫn còn hở khoảng trắng LỚN ở mối
+// nối vì CỘNG DỒN lề dưới của trang trước + lề trên của trang sau. Quét pixel để cắt bớt phần lề trắng
+// THỪA trên/dưới mỗi trang (không đụng lề trái/phải, tránh lệch khung ảnh) trước khi nén — vừa đọc liền
+// mạch hơn, vừa nhẹ hơn 1 chút vì ảnh nhỏ đi.
+function trimCanvasWhitespace(canvas) {
+  const { width, height } = canvas;
+  const ctx = canvas.getContext('2d');
+  const data = ctx.getImageData(0, 0, width, height).data;
+  const isRowBlank = (y) => {
+    for (let x = 0; x < width; x += 3) {
+      const i = (y * width + x) * 4;
+      if (data[i] < 248 || data[i + 1] < 248 || data[i + 2] < 248) return false;
+    }
+    return true;
+  };
+  let top = 0;
+  while (top < height && isRowBlank(top)) top++;
+  let bottom = height - 1;
+  while (bottom > top && isRowBlank(bottom)) bottom--;
+  top = Math.max(0, top - PDF_PAGE_TRIM_MARGIN);
+  bottom = Math.min(height - 1, bottom + PDF_PAGE_TRIM_MARGIN);
+  if (top <= 0 && bottom >= height - 1) return canvas; // không có gì để cắt
+  const trimmedHeight = bottom - top + 1;
+  if (trimmedHeight <= 0) return canvas; // phòng hờ trang trắng hoàn toàn — giữ nguyên, không cắt lố
+  const trimmed = document.createElement('canvas');
+  trimmed.width = width;
+  trimmed.height = trimmedHeight;
+  trimmed.getContext('2d').drawImage(canvas, 0, -top);
+  return trimmed;
+}
 
 async function renderPdfPageToDataUri(page) {
   const baseViewport = page.getViewport({ scale: 1 });
@@ -295,7 +329,8 @@ async function renderPdfPageToDataUri(page) {
     canvas.width = Math.max(1, Math.round(viewport.width));
     canvas.height = Math.max(1, Math.round(viewport.height));
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-    const dataUri = canvas.toDataURL('image/jpeg', quality);
+    const trimmedCanvas = trimCanvasWhitespace(canvas);
+    const dataUri = trimmedCanvas.toDataURL('image/jpeg', quality);
     if (dataUri.length <= LESSON_IMAGE_BUDGET_PER_SECTION || targetWidth <= PDF_PAGE_MIN_WIDTH) {
       return dataUri;
     }
