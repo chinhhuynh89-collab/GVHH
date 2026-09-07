@@ -376,17 +376,44 @@ const QUIZ_QUESTION_MARKER_RE = /^C[aâ]u\s*(\d+)\s*[\.\):]/i;
 // PHẦN II (đúng/sai kiểu mới, chữ thường a) b) c) d)) và PHẦN III (tự luận, không nhãn) không khớp mẫu
 // A-D này nên tự rơi vào nhánh "không có lựa chọn" (type: 'text', giáo viên tự bổ sung đáp án sau).
 const QUIZ_OPTION_MARKER_RE = /^[A-D]\s*[\.\):]/;
-// Toạ độ 1 mốc "Câu N." là VỊ TRÍ DÒNG CHỮ ĐÓ — dùng làm ranh giới TRÊN (đầu câu) thì đúng luôn, nhưng
-// dùng làm ranh giới DƯỚI (cuối câu TRƯỚC nó) sẽ dính 1 chút nét chữ phía trên của chính dòng "Câu N."
-// kế tiếp (chữ có nét vươn lên trên dòng cơ sở) — trừ bớt vài px khi dùng làm ranh giới dưới cho gọn.
-const QUIZ_MARKER_BOTTOM_PAD = 6;
-
+// Toạ độ 1 mốc "Câu N." là VỊ TRÍ DÒNG CƠ SỞ (baseline) của dòng chữ đó — dấu tiếng Việt (ệ, ẫ, ỡ...)
+// và các nét chữ vươn lên đều nằm PHÍA TRÊN baseline, cao thấp KHÁC NHAU tuỳ cỡ chữ/kiểu chữ từng câu.
+// Từng thử trừ lùi 1 khoảng PIXEL CỐ ĐỊNH cho ranh giới — không ổn: đoán thiếu thì vẫn cắt cụt/dính
+// chữ, đoán dư thì lại lấn sang đúng câu bên cạnh (đã kiểm chứng cả 2 kiểu lỗi này bằng file giả lập).
+// Cách ĐÚNG hơn: tìm NGAY khoảng trắng thật giữa 2 câu (quét pixel thật, không đoán cỡ chữ) rồi cắt
+// đúng GIỮA khoảng trắng đó — luôn đúng bất kể cỡ chữ/dấu cao thấp thế nào, vì dựa vào pixel thật.
 function quizRowBlank(data, width, y) {
   for (let x = 0; x < width; x += 3) {
     const i = (y * width + x) * 4;
     if (data[i] < 248 || data[i + 1] < 248 || data[i + 2] < 248) return false;
   }
   return true;
+}
+
+// Tìm khoảng TRẮNG LIÊN TỤC dài nhất trong dải [fromY, toY) của trang — đó chính là khoảng cách thật
+// giữa cuối câu này và đầu câu sau. Trả về điểm GIỮA khoảng trắng đó để cắt, hoặc null nếu không tìm
+// thấy khoảng trắng nào đủ dài (bố cục quá sát, hiếm gặp) — khi đó nơi gọi sẽ tự có phương án dự phòng.
+function findBlankGapSplitY(pageCanvas, fromY, toY) {
+  const width = pageCanvas.width;
+  fromY = Math.max(0, Math.round(fromY));
+  toY = Math.min(pageCanvas.height, Math.round(toY));
+  if (toY <= fromY) return null;
+  const data = pageCanvas.getContext('2d').getImageData(0, fromY, width, toY - fromY).data;
+  const bandHeight = toY - fromY;
+  let bestStart = -1;
+  let bestLen = 0;
+  let curStart = -1;
+  for (let y = 0; y <= bandHeight; y++) {
+    const blank = y < bandHeight && quizRowBlank(data, width, y);
+    if (blank && curStart === -1) curStart = y;
+    if (!blank && curStart !== -1) {
+      const len = y - curStart;
+      if (len > bestLen) { bestLen = len; bestStart = curStart; }
+      curStart = -1;
+    }
+  }
+  if (bestStart === -1) return null;
+  return fromY + bestStart + Math.floor(bestLen / 2);
 }
 
 // Cắt vùng dọc [top, bottom) của canvas trang thành 1 canvas riêng, tự bỏ lề trắng thừa 2 đầu (giống
@@ -521,20 +548,33 @@ async function extractQuizFromPdf(arrayBuffer) {
         continue;
       }
 
+      // Tính sẵn MỌI ranh giới giữa các câu trên trang bằng cách tìm khoảng trắng thật (không đoán cỡ
+      // chữ) — mỗi ranh giới tính ĐÚNG 1 LẦN rồi dùng chung làm "cuối câu trước" VÀ "đầu câu sau", nên
+      // không bao giờ hở (mất chữ) hay chồng (dính chữ câu bên cạnh) giữa 2 câu liền nhau.
+      const leadingSplit = openQuestion
+        ? (findBlankGapSplitY(canvas, 0, markers[0].y) ?? Math.max(0, markers[0].y - QUIZ_MARKER_VERTICAL_PAD))
+        : 0;
+      const boundaries = new Array(markers.length + 1);
+      boundaries[0] = leadingSplit;
+      for (let i = 1; i < markers.length; i++) {
+        const gap = findBlankGapSplitY(canvas, markers[i - 1].y, markers[i].y);
+        boundaries[i] = gap !== null ? gap : Math.max(boundaries[i - 1], markers[i].y - QUIZ_MARKER_VERTICAL_PAD);
+      }
+      boundaries[markers.length] = canvas.height;
+
       // Phần TRƯỚC mốc "Câu" đầu tiên trên trang (nếu có) là phần cuối của câu đang mở từ trang trước.
       if (openQuestion && markers[0].y > 4) {
-        const cutoff = Math.max(0, markers[0].y - QUIZ_MARKER_BOTTOM_PAD);
-        const cropped = cropPageCanvasVertical(canvas, 0, cutoff);
+        const cropped = cropPageCanvasVertical(canvas, 0, leadingSplit);
         if (cropped) {
           openQuestion.canvases.push(cropped);
-          openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, cutoff);
+          openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, leadingSplit);
         }
       }
       flushQuestion();
 
       for (let i = 0; i < markers.length; i++) {
-        const top = markers[i].y;
-        const bottom = i + 1 < markers.length ? Math.max(top, markers[i + 1].y - QUIZ_MARKER_BOTTOM_PAD) : canvas.height;
+        const top = boundaries[i];
+        const bottom = boundaries[i + 1];
         const cropped = cropPageCanvasVertical(canvas, top, bottom);
         if (!cropped) {
           warnings.push(`Câu ${markers[i].num} (trang ${pageNum}): không cắt được ảnh — có thể trang này bị lỗi hiển thị, cần bổ sung thủ công.`);
