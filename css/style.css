@@ -937,15 +937,29 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 }
 .step-status .dot.done { background: var(--ok); }
 
-.lesson-block { margin-bottom: 14px; }
+/* Nền TRẮNG như trang giấy giáo án — thay vì nền tối mặc định của app. Lý do: màu chữ/tô sáng/màu nền
+   ô-đoạn văn lấy nguyên từ file Word (xem doc-import.js) đều được người soạn chọn để nhìn TRÊN NỀN
+   TRẮNG (VD chữ trắng trên băng xanh, chữ đen thường...) — đặt lên nền tối của app sẽ sai màu/khó đọc.
+   Vì vậy toàn khối bài giảng override lại thành "trang giấy trắng chữ đen" bất kể giao diện app đang
+   sáng hay tối, và mọi màu chữ mặc định bên trong đổi từ var(--text) (sáng, dành cho nền tối) sang màu
+   tối phù hợp nền trắng. */
+.lesson-block {
+  margin-bottom: 14px;
+  background: #ffffff;
+  color: #1f2530;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid #dde2ea;
+}
 .lesson-block h3 { font-size: calc(16.5px * var(--font-scale)); font-weight: 700; margin: 0 0 10px; color: var(--brand); }
 .lesson-block ul { margin: 0 0 10px; padding-left: 20px; }
-.lesson-block li { font-size: calc(15.5px * var(--font-scale)); line-height: 1.7; color: var(--text); margin-bottom: 9px; }
+.lesson-block li { font-size: calc(15.5px * var(--font-scale)); line-height: 1.7; color: #1f2530; margin-bottom: 9px; }
+.lesson-block > .hint { color: var(--text-faint); }
 /* Bảng nạp từ Word (xem doc-import.js: extractDocxTableRows) — cuộn ngang trên màn hẹp thay vì để chữ
    bị ép nhỏ xíu vừa khung, giống đúng cách .roster-table-wrap đã làm cho bảng danh sách học sinh. */
 .lesson-table-wrap { overflow-x: auto; margin-bottom: 10px; }
 .lesson-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: calc(14px * var(--font-scale)); }
-.lesson-table td { padding: 8px 12px; border: 1px solid var(--border); background: var(--surface-2); }
+.lesson-table td { padding: 8px 12px; border: 1px solid #dde2ea; background: #ffffff; color: #1f2530; }
 
 .custom-lesson-block {
   padding: 14px;
