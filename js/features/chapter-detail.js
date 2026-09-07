@@ -67,9 +67,50 @@
     return result;
   }
 
+  // Nạp PDF: 1 file = 1 "Bài" theo đúng cấu trúc chương thật (Bài 1, Bài 2...), nhưng lưu Firestore vẫn
+  // TÁCH RIÊNG mỗi trang thành 1 tài liệu (để không vượt hạn mức 1MiB/tài liệu — xem doc-import.js) —
+  // các trang cùng 1 lần nạp đều mang chung "sourceFileName". Gộp lại ở đây thành 1 mục hiển thị DUY
+  // NHẤT (tên = tên file, bỏ đuôi), nội dung là toàn bộ ảnh các trang nối theo đúng thứ tự đã lưu.
+  function groupCustomLessonsByFile(items) {
+    const groups = new Map();
+    const singles = [];
+    items.forEach((it) => {
+      if (it.sourceFileName) {
+        if (!groups.has(it.sourceFileName)) groups.set(it.sourceFileName, []);
+        groups.get(it.sourceFileName).push(it);
+      } else {
+        singles.push(it);
+      }
+    });
+    const result = singles.slice();
+    groups.forEach((group, fileName) => {
+      // Luôn đặt tên theo tên file (bỏ đuôi) dù chỉ 1 trang — nhất quán "1 file = 1 Bài" bất kể file đó
+      // có bao nhiêu trang. Chỉ đánh dấu isGroup (ẩn "Sửa", khoá chia sẻ kho chung) khi THẬT SỰ gồm
+      // NHIỀU tài liệu Firestore gộp lại — sửa/chia sẻ 1 trang duy nhất vẫn hoạt động bình thường vì
+      // đó là đúng 1 tài liệu, không có rủi ro chỉ động tới 1 phần của "bài" mà tưởng là cả bài.
+      result.push({
+        kind: 'custom',
+        isGroup: group.length > 1,
+        id: group[0].id,
+        groupIds: group.map((g) => g.id),
+        title: fileName.replace(/\.[^.]+$/, ''),
+        points: group.reduce((acc, g) => acc.concat(g.points), []),
+        order: group[0].order,
+        addedAt: group[0].addedAt
+      });
+    });
+    result.sort((a, b) => {
+      const ao = typeof a.order === 'number' ? a.order : Infinity;
+      const bo = typeof b.order === 'number' ? b.order : Infinity;
+      if (ao !== bo) return ao - bo;
+      return (a.addedAt || '').localeCompare(b.addedAt || '');
+    });
+    return result;
+  }
+
   function getAllLessons() {
     return mergeBuiltinWithOverrides(chapter.lessons, chapterMeta.lessonOverrides)
-      .concat(customLessonsCache.map((it) => Object.assign({ kind: 'custom' }, it)));
+      .concat(groupCustomLessonsByFile(customLessonsCache.map((it) => Object.assign({ kind: 'custom' }, it))));
   }
   function getAllFlashcards() {
     return mergeBuiltinWithOverrides(chapter.flashcards, chapterMeta.flashcardOverrides)
@@ -323,6 +364,12 @@
     return html;
   }
 
+  // Chương có nhiều "Bài" — mặc định chỉ hiện TIÊU ĐỀ, bấm vào mới xổ nội dung ra (đỡ rối khi 1 chương
+  // có nhiều bài, mỗi bài lại nhiều trang). Nhớ theo "key" riêng từng bài nên bấm mở/đóng 1 bài không
+  // ảnh hưởng các bài khác đang mở, kể cả sau khi renderAllLessons() vẽ lại (VD sau khi sửa/xoá 1 bài).
+  const expandedLessonKeys = new Set();
+  function lessonKey(l) { return l.kind === 'builtin' ? `b${l.index}` : `c${l.id}`; }
+
   function renderAllLessons() {
     const box = $('#lessonContent');
     const items = getAllLessons();
@@ -333,26 +380,43 @@
         </div>
       `;
     } else {
-      box.innerHTML = items.map((l) => `
+      box.innerHTML = items.map((l) => {
+        const key = lessonKey(l);
+        const expanded = expandedLessonKeys.has(key);
+        return `
         <div class="lesson-block">
-          <h3>${escapeHtml(l.title)}</h3>
-          ${renderLessonPointsHtml(l.points)}
+          <h3 class="lesson-toggle" data-key="${key}">
+            <span class="lesson-toggle-arrow">${expanded ? '▾' : '▸'}</span> ${escapeHtml(l.title)}
+          </h3>
+          ${expanded ? renderLessonPointsHtml(l.points) : ''}
           ${owner.isOwner ? `
             <div class="hint" style="margin-top:8px;">
-              ${l.kind === 'builtin' ? (l.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
-              · <a href="#" class="lesson-edit" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">Sửa</a>
-              · <a href="#" class="lesson-delete" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">${l.kind === 'builtin' ? 'Ẩn' : 'Xoá'}</a>
+              ${l.kind === 'builtin' ? (l.edited ? 'Đã sửa' : 'Có sẵn trong app') : (l.isGroup ? `Tự thêm (${l.groupIds.length} phần)` : 'Tự thêm')}
+              ${(l.kind === 'custom' && l.isGroup) ? '' : `· <a href="#" class="lesson-edit" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">Sửa</a>`}
+              · <a href="#" class="lesson-delete" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">${l.kind === 'builtin' ? 'Ẩn' : (l.isGroup ? 'Xoá cả bài' : 'Xoá')}</a>
               ${l.kind === 'builtin' && l.edited ? ` · <a href="#" class="lesson-restore" data-key="${l.index}">Khôi phục mặc định</a>` : ''}
-              ${bankShareLinkHtml('lesson', l)}
+              ${l.isGroup ? '' : bankShareLinkHtml('lesson', l)}
             </div>
           ` : ''}
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
     setChapterProgress(chapter.id, { lessonViewed: true });
     refreshDots();
+    wireLessonToggles(box);
     if (owner.isOwner) { wireLessonActions(box); wireBankShareLinks(box, 'lesson', customLessonsCache, renderAllLessons); }
     refreshLessonDeleteAllRow();
+  }
+
+  function wireLessonToggles(box) {
+    $$('.lesson-toggle', box).forEach((h) => {
+      h.addEventListener('click', () => {
+        const key = h.dataset.key;
+        if (expandedLessonKeys.has(key)) expandedLessonKeys.delete(key); else expandedLessonKeys.add(key);
+        renderAllLessons();
+      });
+    });
   }
 
   function wireLessonActions(box) {
@@ -375,9 +439,13 @@
         const kind = a.dataset.kind, key = a.dataset.key;
         try {
           if (kind === 'custom') {
-            if (!confirm('Xoá bài giảng này?')) return;
-            await deleteCustomLesson(key);
-            customLessonsCache = customLessonsCache.filter((it) => it.id !== key);
+            // "Bài" gộp từ nhiều trang (xem groupCustomLessonsByFile) lưu thành nhiều tài liệu Firestore
+            // riêng — xoá phải xoá HẾT các id trong nhóm, không chỉ 1 tài liệu đại diện.
+            const item = getAllLessons().find((it) => it.kind === 'custom' && it.id === key);
+            const ids = (item && item.groupIds) || [key];
+            if (!confirm(ids.length > 1 ? `Xoá cả bài này (gồm ${ids.length} phần)? Không thể hoàn tác.` : 'Xoá bài giảng này?')) return;
+            await Promise.all(ids.map((id) => deleteCustomLesson(id)));
+            customLessonsCache = customLessonsCache.filter((it) => !ids.includes(it.id));
           } else {
             if (!confirm('Ẩn bài giảng mặc định này khỏi chương? (có thể khôi phục lại sau)')) return;
             await setChapterMeta(chapter.id, { ['lessonOverrides.' + key]: null });

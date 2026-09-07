@@ -952,6 +952,8 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   border: 1px solid #dde2ea;
 }
 .lesson-block h3 { font-size: calc(16.5px * var(--font-scale)); font-weight: 700; margin: 0 0 10px; color: var(--brand); }
+.lesson-block h3.lesson-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.lesson-toggle-arrow { display: inline-block; width: 0.8em; flex-shrink: 0; }
 .lesson-block ul { margin: 0 0 10px; padding-left: 20px; }
 .lesson-block li { font-size: calc(15.5px * var(--font-scale)); line-height: 1.7; color: #1f2530; margin-bottom: 9px; }
 .lesson-block > .hint { color: var(--text-faint); }
