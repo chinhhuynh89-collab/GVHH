@@ -303,6 +303,63 @@ async function resizeImageToDataUri(bytes, mimeType, maxWidth) {
   return canvas.toDataURL('image/jpeg', 0.72);
 }
 
+// ---------- Giữ định dạng chữ (đậm/nghiêng/gạch chân/màu/tô sáng/chỉ số trên-dưới) khi nạp bài giảng ----------
+// Giáo viên yêu cầu giữ đúng "hình dạng, màu sắc" như trong giáo án gốc — quan trọng nhất với Hoá học là
+// chỉ số dưới/trên trong công thức (H₂O, Fe²⁺...), và màu/tô sáng giáo viên dùng để nhấn mạnh ý chính.
+// KHÔNG giữ font chữ/cỡ chữ (không đáng kể so với nội dung, và không phải máy nào cũng có đúng font đó).
+const WORD_HIGHLIGHT_COLOR = {
+  yellow: '#ffff00', green: '#00ff00', cyan: '#00ffff', magenta: '#ff00ff', blue: '#0000ff',
+  red: '#ff0000', darkBlue: '#00008b', darkCyan: '#008b8b', darkGreen: '#006400',
+  darkMagenta: '#8b008b', darkRed: '#8b0000', darkYellow: '#808000', darkGray: '#a9a9a9',
+  lightGray: '#d3d3d3', black: '#000000', white: '#ffffff'
+};
+
+// true nếu thẻ bật (có mặt và KHÔNG bị tắt tường minh bằng w:val="false"/"0") — theo đúng quy ước OOXML:
+// 1 thẻ bật (VD <w:b/>) mà không có w:val nghĩa là BẬT, chỉ TẮT khi ghi rõ w:val="false"/"0"/"none".
+function ooxmlFlagOn(rPr, tag) {
+  const el = rPr.getElementsByTagName(tag)[0];
+  if (!el) return false;
+  const val = el.getAttribute('w:val');
+  return val !== 'false' && val !== '0' && val !== 'none';
+}
+
+// Dựng HTML AN TOÀN (đã escape phần chữ) cho 1 run — dùng escapeHtml (js/app.js) rồi mới bọc thẻ định
+// dạng, tuyệt đối không escape SAU khi đã có thẻ (sẽ biến thẻ thật thành chữ "<b>" hiển thị trên màn hình).
+function runToHtml(rEl) {
+  let text = '';
+  Array.from(rEl.children).forEach((child) => {
+    const tag = child.tagName;
+    if (tag === 'w:t') text += child.textContent;
+    else if (tag === 'w:br' || tag === 'w:cr') text += '\n';
+    else if (tag === 'w:tab') text += '\t';
+  });
+  if (!text) return '';
+  let html = escapeHtml(text).replace(/\n/g, '<br>').replace(/\t/g, '&emsp;');
+  const rPr = rEl.getElementsByTagName('w:rPr')[0];
+  if (!rPr) return html;
+  const vertAlign = rPr.getElementsByTagName('w:vertAlign')[0];
+  const vertVal = vertAlign ? vertAlign.getAttribute('w:val') : null;
+  if (vertVal === 'subscript') html = `<sub>${html}</sub>`;
+  else if (vertVal === 'superscript') html = `<sup>${html}</sup>`;
+  if (ooxmlFlagOn(rPr, 'w:b')) html = `<b>${html}</b>`;
+  if (ooxmlFlagOn(rPr, 'w:i')) html = `<i>${html}</i>`;
+  if (ooxmlFlagOn(rPr, 'w:u')) html = `<u>${html}</u>`;
+  if (ooxmlFlagOn(rPr, 'w:strike')) html = `<s>${html}</s>`;
+  const colorEl = rPr.getElementsByTagName('w:color')[0];
+  const colorVal = colorEl ? colorEl.getAttribute('w:val') : null;
+  const highlightEl = rPr.getElementsByTagName('w:highlight')[0];
+  const highlightVal = highlightEl ? highlightEl.getAttribute('w:val') : null;
+  const styles = [];
+  if (colorVal && /^[0-9a-fA-F]{6}$/.test(colorVal)) styles.push(`color:#${colorVal}`);
+  if (highlightVal && WORD_HIGHLIGHT_COLOR[highlightVal]) styles.push(`background:${WORD_HIGHLIGHT_COLOR[highlightVal]}`);
+  if (styles.length) html = `<span style="${styles.join(';')}">${html}</span>`;
+  return html;
+}
+
+function paragraphRunsToHtml(pEl) {
+  return Array.from(pEl.getElementsByTagName('w:r')).map(runToHtml).join('');
+}
+
 // Tìm rId ảnh nhúng trong 1 đoạn văn (nếu có) — soi bên trong <w:drawing>/<w:pict>/<w:object> (không soi
 // cả đoạn văn) để tránh nhầm với "r:id" ở chỗ khác không liên quan (VD <w:hyperlink r:id="...">).
 // <w:object> là công thức chèn qua Equation Editor/MathType (OLE) — Word lưu kèm 1 ảnh xem trước
@@ -327,14 +384,37 @@ function findEmbeddedImageRid(pEl) {
 // Firestore KHÔNG cho phép mảng lồng mảng trực tiếp (chỉ mảng chứa map/chuỗi/số) — mỗi hàng phải bọc
 // thành 1 object { cells: [...] } thay vì mảng trần, nếu không WriteBatch.set() sẽ báo lỗi "Nested
 // arrays are not supported" (đã gặp thực tế khi giáo viên nạp thử).
+// Mỗi ô giữ { html, bg? } — html đã escape/định dạng sẵn (xem runToHtml), bg là màu tô nền ô (nếu giáo
+// án có tô màu ô, VD bảng so sánh) lấy từ <w:tcPr><w:shd w:fill="RRGGBB"/></w:tcPr>.
+// fill="FFFFFF" (trắng) không tính là tô màu — hầu hết template Word để mặc định thế, coi là "không tô"
+// để tránh vẽ nhầm khối trắng trên nền tối của app.
+function readShdFillColor(propsEl) {
+  const shd = propsEl ? propsEl.getElementsByTagName('w:shd')[0] : null;
+  const fill = shd ? shd.getAttribute('w:fill') : null;
+  return (fill && /^[0-9a-fA-F]{6}$/.test(fill) && fill.toLowerCase() !== 'ffffff') ? '#' + fill : null;
+}
+
+function extractDocxTableCellShading(tc) {
+  return readShdFillColor(tc.getElementsByTagName('w:tcPr')[0]);
+}
+
+// Nhiều giáo án tô màu NGUYÊN 1 ĐOẠN VĂN làm khối nhấn mạnh (VD băng "Dạng 1: ..." nền xanh chữ trắng)
+// qua <w:pPr><w:shd fill="RRGGBB"/></w:pPr> — khác với màu CHỮ (<w:color>, đã xử lý ở runToHtml). Không
+// giữ lại thì chữ trắng/sáng mất nền sẽ khó đọc hoặc biến mất trên nền app.
+function extractParagraphShading(pEl) {
+  return readShdFillColor(pEl.getElementsByTagName('w:pPr')[0]);
+}
+
 function extractDocxTableRows(tblEl) {
   return Array.from(tblEl.getElementsByTagName('w:tr')).map((tr) => ({
     cells: Array.from(tr.getElementsByTagName('w:tc')).map((tc) => {
-      const paraTexts = Array.from(tc.getElementsByTagName('w:p')).map((p) => {
-        const text = Array.from(p.getElementsByTagName('w:t')).map((t) => t.textContent).join('');
-        return findEmbeddedImageRid(p) ? (text + ' [Hình ảnh/công thức — xem file gốc]').trim() : text;
+      const paraHtml = Array.from(tc.getElementsByTagName('w:p')).map((p) => {
+        const runHtml = paragraphRunsToHtml(p);
+        return findEmbeddedImageRid(p) ? (runHtml + ' [Hình ảnh/công thức — xem file gốc]').trim() : runHtml;
       });
-      return paraTexts.join('\n').trim();
+      const html = paraHtml.join('<br>');
+      const bg = extractDocxTableCellShading(tc);
+      return bg ? { html, bg } : { html };
     })
   }));
 }
@@ -408,7 +488,10 @@ async function groupDocxParagraphs(xmlText, arrayBuffer, relMap) {
       }
     }
 
-    if (text) current.points.push(text);
+    if (text) {
+      const bg = extractParagraphShading(el);
+      current.points.push(bg ? { type: 'text', html: paragraphRunsToHtml(el), bg } : { type: 'text', html: paragraphRunsToHtml(el) });
+    }
   }
   if (current.title || current.points.length) sections.push(current);
   return sections;

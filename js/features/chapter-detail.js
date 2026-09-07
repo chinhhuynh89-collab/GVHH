@@ -280,9 +280,12 @@
   }
 
   // ---------- Bài giảng (mặc định + tự thêm, gộp chung 1 danh sách) ----------
-  // Điểm bài giảng có thể là chuỗi thường (đa số, kể cả mọi bài giảng lưu TRƯỚC bản cập nhật này) HOẶC
-  // 1 object {type:'table'|'image'|'warning', ...} (nạp từ Word, xem doc-import.js) — gộp các điểm
-  // dạng chuỗi liên tiếp vào 1 <ul>, nhưng ngắt danh sách và vẽ khối riêng khi gặp bảng/ảnh/cảnh báo.
+  // Điểm bài giảng có thể là chuỗi thường (mọi bài giảng lưu TRƯỚC bản giữ định dạng, và mọi lesson tự
+  // viết tay) HOẶC 1 object {type:'text'|'table'|'image'|'warning', ...} (nạp từ Word, xem doc-import.js).
+  // {type:'text', html} đã được doc-import.js escape + bọc sẵn thẻ đậm/nghiêng/màu/chỉ số trên-dưới —
+  // chèn THẲNG (không escapeHtml lại) để giữ định dạng; escapeHtml lần 2 sẽ biến thẻ thật thành chữ hiển
+  // thị "<b>" trên màn hình. Gộp các điểm dạng chuỗi/text liên tiếp vào 1 <ul>, ngắt danh sách và vẽ
+  // khối riêng khi gặp bảng/ảnh/cảnh báo.
   function renderLessonPointsHtml(points) {
     let html = '';
     let listBuf = [];
@@ -294,11 +297,24 @@
         listBuf.push(`<li>${escapeHtml(pt)}</li>`);
         return;
       }
+      if (pt.type === 'text') {
+        if (pt.bg) {
+          flushList();
+          html += `<p style="background:${escapeHtml(pt.bg)};padding:8px 12px;border-radius:6px;margin:0 0 10px;">${pt.html}</p>`;
+          return;
+        }
+        listBuf.push(`<li>${pt.html}</li>`);
+        return;
+      }
       flushList();
       if (pt.type === 'image') {
         html += `<img src="${pt.dataUri}" alt="${escapeHtml(pt.alt || '')}" style="max-width:100%;border-radius:8px;margin:10px 0;display:block;" />`;
       } else if (pt.type === 'table') {
-        html += `<div class="lesson-table-wrap"><table class="lesson-table">${pt.rows.map((row) => `<tr>${row.cells.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+        html += `<div class="lesson-table-wrap"><table class="lesson-table">${pt.rows.map((row) => `<tr>${row.cells.map((cell) => {
+          if (typeof cell === 'string') return `<td>${escapeHtml(cell)}</td>`;
+          const style = cell.bg ? ` style="background:${escapeHtml(cell.bg)};"` : '';
+          return `<td${style}>${cell.html}</td>`;
+        }).join('')}</tr>`).join('')}</table></div>`;
       } else if (pt.type === 'warning') {
         html += `<p class="hint" style="color:var(--danger);">⚠️ ${escapeHtml(pt.message)}</p>`;
       }
