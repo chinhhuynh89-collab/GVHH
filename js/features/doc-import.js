@@ -434,6 +434,28 @@ function canvasToBudgetedJpeg(canvas) {
   return dataUri;
 }
 
+// Câu hỏi cắt ra chỉ cao vài dòng (không phải cả trang) nên vẫn nhẹ dù render trang gốc ở độ phân giải
+// CAO HƠN hẳn mức dùng cho bài giảng (800px, ưu tiên nhẹ vì hiện NGUYÊN TRANG dài) — ở đây ưu tiên
+// ĐỌC RÕ TỪNG CHỮ trong 1 câu hỏi ngắn, nên dùng riêng 1 mức phân giải cao hơn.
+const QUIZ_PAGE_RENDER_WIDTH = 1500;
+
+// pdf.js trả về chữ theo TỪNG MẢNH nhỏ (VD "Câu ", "5", ". " tách riêng nếu khác định dạng trong file
+// Word gốc — đã gặp thực tế) — so khớp mẫu "Câu N." trên TỪNG MẢNH riêng lẻ dễ BỎ SÓT câu hỏi vì không
+// mảnh nào có đủ cả cụm. Ghép các mảnh THEO ĐÚNG VỊ TRÍ thành từng DÒNG hoàn chỉnh trước khi so khớp.
+function groupTextItemsIntoLines(items, viewportHeight, scale) {
+  const positioned = items
+    .filter((it) => it.str.length)
+    .map((it) => ({ str: it.str, x: it.transform[4], y: (viewportHeight - it.transform[5]) * scale }));
+  positioned.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  const lines = [];
+  positioned.forEach((it) => {
+    const last = lines[lines.length - 1];
+    if (last && Math.abs(it.y - last.y) <= 3) last.text += it.str;
+    else lines.push({ y: it.y, text: it.str });
+  });
+  return lines;
+}
+
 async function extractQuizFromPdf(arrayBuffer) {
   const pdfjsLib = await ensurePdfJs();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -457,25 +479,22 @@ async function extractQuizFromPdf(arrayBuffer) {
     const page = await pdf.getPage(pageNum);
     const content = await page.getTextContent();
     const baseViewport = page.getViewport({ scale: 1 });
-    const scale = PDF_PAGE_TARGET_WIDTH / baseViewport.width;
+    const scale = QUIZ_PAGE_RENDER_WIDTH / baseViewport.width;
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(viewport.width));
     canvas.height = Math.max(1, Math.round(viewport.height));
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
 
+    const lines = groupTextItemsIntoLines(content.items, baseViewport.height, scale);
     const markers = [];
-    content.items.forEach((it) => {
-      const text = it.str.trim();
-      if (!text) return;
-      const m = text.match(QUIZ_QUESTION_MARKER_RE);
-      if (m) markers.push({ y: (baseViewport.height - it.transform[5]) * scale, num: m[1] });
+    lines.forEach((line) => {
+      const m = line.text.trim().match(QUIZ_QUESTION_MARKER_RE);
+      if (m) markers.push({ y: line.y, num: m[1] });
     });
-    const hasOptionsBetween = (top, bottom) => content.items.some((it) => {
-      const text = it.str.trim();
-      if (!QUIZ_OPTION_MARKER_RE.test(text)) return false;
-      const y = (baseViewport.height - it.transform[5]) * scale;
-      return y >= top && y < bottom;
+    const hasOptionsBetween = (top, bottom) => lines.some((line) => {
+      if (line.y < top || line.y >= bottom) return false;
+      return QUIZ_OPTION_MARKER_RE.test(line.text.trim());
     });
 
     if (!markers.length) {
