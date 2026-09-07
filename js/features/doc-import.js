@@ -531,13 +531,15 @@ function ensurePdfJs() {
 // KHÔNG còn rủi ro mất/sai định dạng nữa, đánh đổi là ảnh (không bôi đen/copy chữ được, không tự co
 // giãn theo nút cỡ chữ của app). Mỗi trang lưu thành 1 bài giảng riêng ("Trang N"), batch lưu kèm field
 // "order" (xem custom-lessons.js) nên hiện đúng thứ tự dù Firestore không tự giữ thứ tự chèn.
-const PDF_PAGE_TARGET_WIDTH = 1000;
-const PDF_PAGE_MIN_WIDTH = 500;
+// Giáo viên phản hồi bản đầu (1000px/chất lượng 0.75) nặng — hạ xuống mức vừa (~40-50% nhẹ hơn), vẫn
+// đọc được chữ/công thức bình thường, chỉ hơi mờ hơn khi phóng to hết cỡ.
+const PDF_PAGE_TARGET_WIDTH = 800;
+const PDF_PAGE_MIN_WIDTH = 420;
 
 async function renderPdfPageToDataUri(page) {
   const baseViewport = page.getViewport({ scale: 1 });
   let targetWidth = PDF_PAGE_TARGET_WIDTH;
-  let quality = 0.75;
+  let quality = 0.55;
   for (let attempt = 0; attempt < 8; attempt++) {
     const scale = targetWidth / baseViewport.width;
     const viewport = page.getViewport({ scale });
