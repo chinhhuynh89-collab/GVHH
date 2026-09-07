@@ -283,8 +283,8 @@ function ensurePdfJs() {
 // đọc được chữ/công thức bình thường, chỉ hơi mờ hơn khi phóng to hết cỡ.
 const PDF_PAGE_TARGET_WIDTH = 800;
 const PDF_PAGE_MIN_WIDTH = 420;
-// Chừa lại 1 chút lề khi cắt (không cắt sát nét chữ đầu/cuối trang cho đỡ chật).
-const PDF_PAGE_TRIM_MARGIN = 14;
+// Giáo viên yêu cầu 2 trang dính liền hẳn, không còn khoảng trắng nào — cắt sát luôn, không chừa lề.
+const PDF_PAGE_TRIM_MARGIN = 0;
 
 // Trang PDF luôn có lề trắng riêng (thường 2-2.5cm mỗi cạnh, theo chuẩn Word) — xếp nhiều trang liền
 // nhau (xem chapter-detail.js: đã bỏ khoảng cách CSS giữa các trang) vẫn còn hở khoảng trắng LỚN ở mối
