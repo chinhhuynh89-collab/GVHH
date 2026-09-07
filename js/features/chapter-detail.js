@@ -471,7 +471,7 @@
             <input type="checkbox" class="import-check" data-idx="${i}" checked style="margin-top:3px;flex-shrink:0;" />
             <span>
               <strong>${escapeHtml(s.title || '(Không có tiêu đề)')}</strong><br>
-              <span style="font-size:12.5px;color:var(--text-dim);">${s.points.length} đoạn văn bản</span>
+              <span style="font-size:12.5px;color:var(--text-dim);">${s.points.length === 1 && s.points[0].type === 'image' ? 'Ảnh nguyên trang' : `${s.points.length} đoạn văn bản`}</span>
             </span>
           </label>
         `).join('')}

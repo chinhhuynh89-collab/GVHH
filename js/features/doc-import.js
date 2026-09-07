@@ -524,31 +524,50 @@ function ensurePdfJs() {
   return _pdfjsReady;
 }
 
+// Vẽ MỖI TRANG PDF thành 1 ẢNH (giữ đúng pixel-by-pixel — mũi tên, công thức, bảng, màu... y hệt bản
+// in) thay vì trích văn bản như trước. Trích văn bản từng làm mất/lẫn lộn hoàn toàn định dạng phức tạp
+// (công thức Equation Editor, mũi tên phản ứng, bảng, màu...) vì PDF không có cấu trúc "đoạn/bảng" rõ
+// ràng như .docx (chỉ là vị trí từng chữ trên trang) — nên đổi hẳn sang cách vẽ nguyên trang ra ảnh:
+// KHÔNG còn rủi ro mất/sai định dạng nữa, đánh đổi là ảnh (không bôi đen/copy chữ được, không tự co
+// giãn theo nút cỡ chữ của app). Mỗi trang lưu thành 1 bài giảng riêng ("Trang N"), batch lưu kèm field
+// "order" (xem custom-lessons.js) nên hiện đúng thứ tự dù Firestore không tự giữ thứ tự chèn.
+const PDF_PAGE_TARGET_WIDTH = 1000;
+const PDF_PAGE_MIN_WIDTH = 500;
+
+async function renderPdfPageToDataUri(page) {
+  const baseViewport = page.getViewport({ scale: 1 });
+  let targetWidth = PDF_PAGE_TARGET_WIDTH;
+  let quality = 0.75;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const scale = targetWidth / baseViewport.width;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(viewport.width));
+    canvas.height = Math.max(1, Math.round(viewport.height));
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const dataUri = canvas.toDataURL('image/jpeg', quality);
+    if (dataUri.length <= LESSON_IMAGE_BUDGET_PER_SECTION || targetWidth <= PDF_PAGE_MIN_WIDTH) {
+      return dataUri;
+    }
+    // Vẫn quá lớn so với hạn mức 1 tài liệu Firestore — giảm dần chất lượng nén, hết mức thì giảm tiếp
+    // độ phân giải, để cố nhét vừa mà chữ vẫn đọc được nhiều nhất có thể.
+    if (quality > 0.45) quality -= 0.15;
+    else targetWidth = Math.round(targetWidth * 0.8);
+  }
+  throw new Error('Không nén được 1 trang PDF về đủ nhỏ để lưu.');
+}
+
 async function extractPdf(arrayBuffer, fileName) {
   const pdfjsLib = await ensurePdfJs();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const lines = [];
+  const sections = [];
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    let lastY = null;
-    let currentLine = '';
-    content.items.forEach((item) => {
-      const y = item.transform[5];
-      if (lastY !== null && Math.abs(y - lastY) > 2) {
-        if (currentLine.trim()) lines.push(currentLine.trim());
-        currentLine = item.str;
-      } else {
-        currentLine += item.str;
-      }
-      lastY = y;
-    });
-    if (currentLine.trim()) lines.push(currentLine.trim());
+    const dataUri = await renderPdfPageToDataUri(page);
+    sections.push({ title: `Trang ${pageNum}`, points: [{ type: 'image', dataUri, alt: `Trang ${pageNum}` }] });
   }
-  if (!lines.length) {
-    throw new Error('Không trích xuất được văn bản từ file PDF (có thể là bản scan ảnh — cần OCR, chưa hỗ trợ).');
-  }
-  return [{ title: fileName.replace(/\.pdf$/i, ''), points: lines }];
+  if (!sections.length) throw new Error('Không đọc được trang nào trong file PDF.');
+  return sections;
 }
 
 async function extractFileToLessons(file) {
