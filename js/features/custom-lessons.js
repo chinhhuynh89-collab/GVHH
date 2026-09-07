@@ -24,19 +24,43 @@ async function addCustomLesson(chapterId, lesson) {
 // CHỈ 1 round-trip mạng cho toàn bộ, thay vì 1 round-trip riêng cho mỗi phần. "order" cộng thêm chỉ số
 // trong mảng (base + index) để chắc chắn TĂNG DẦN ĐÚNG THEO THỨ TỰ TRONG FILE GỐC dù Date.now() có thể
 // trả về cùng 1 mốc mili-giây cho nhiều phần tử liền nhau khi vòng lặp chạy quá nhanh.
+//
+// Mỗi bài giảng luôn dưới 1MiB (giới hạn 1 TÀI LIỆU của Firestore, xem LESSON_IMAGE_BUDGET_PER_SECTION
+// ở doc-import.js) NHƯNG cả 1 lượt batch.commit() còn bị giới hạn RIÊNG về tổng dung lượng CẢ YÊU CẦU
+// (~10MB) — nạp file có nhiều trang ảnh (VD PDF nhiều trang, mỗi trang gần 1MB) rất dễ vượt dù từng
+// bài giảng vẫn hợp lệ, Firestore báo "Request payload size exceeds the limit". Vì vậy chia thành
+// NHIỀU LƯỢT commit nhỏ hơn theo cả số lượng LẪN tổng dung lượng ước tính, không dồn hết vào 1 lượt.
 async function addCustomLessonBatch(chapterId, lessons) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên để thêm bài giảng.');
   if (typeof enforceCustomChapterLimit === 'function') await enforceCustomChapterLimit(teacher.uid, chapterId);
   const { db } = ensureFirebase();
-  const batch = db.batch();
   const col = db.collection('teachers').doc(teacher.uid).collection('customLessons');
   const base = Date.now();
-  lessons.forEach((lesson, index) => {
-    const ref = col.doc();
-    batch.set(ref, Object.assign({ chapterId, addedAt: new Date().toISOString(), order: base + index }, lesson));
+  const docs = lessons.map((lesson, index) =>
+    Object.assign({ chapterId, addedAt: new Date().toISOString(), order: base + index }, lesson)
+  );
+
+  const MAX_BATCH_OPS = 400; // Firestore giới hạn cứng 500 thao tác/batch — chừa dư cho an toàn.
+  const MAX_BATCH_BYTES = 8 * 1024 * 1024; // chừa dư so với hạn mức thực tế ~10-11MB/lượt ghi.
+  let batch = db.batch();
+  let opCount = 0;
+  let byteCount = 0;
+  const commits = [];
+  docs.forEach((doc) => {
+    const size = JSON.stringify(doc).length;
+    if (opCount > 0 && (opCount >= MAX_BATCH_OPS || byteCount + size > MAX_BATCH_BYTES)) {
+      commits.push(batch.commit());
+      batch = db.batch();
+      opCount = 0;
+      byteCount = 0;
+    }
+    batch.set(col.doc(), doc);
+    opCount++;
+    byteCount += size;
   });
-  await batch.commit();
+  if (opCount > 0) commits.push(batch.commit());
+  await Promise.all(commits);
 }
 
 async function updateCustomLesson(id, patch) {
