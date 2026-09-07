@@ -303,10 +303,17 @@ async function resizeImageToDataUri(bytes, mimeType, maxWidth) {
   return canvas.toDataURL('image/jpeg', 0.72);
 }
 
-// Tìm rId ảnh nhúng trong 1 đoạn văn (nếu có) — chỉ soi bên trong đúng <w:drawing>/<w:pict> (không soi
+// Tìm rId ảnh nhúng trong 1 đoạn văn (nếu có) — soi bên trong <w:drawing>/<w:pict>/<w:object> (không soi
 // cả đoạn văn) để tránh nhầm với "r:id" ở chỗ khác không liên quan (VD <w:hyperlink r:id="...">).
+// <w:object> là công thức chèn qua Equation Editor/MathType (OLE) — Word lưu kèm 1 ảnh xem trước
+// (thường .wmf, qua <v:imagedata r:id="...">) NGAY TRƯỚC phần OLE nhị phân thật trong cùng thẻ, nên
+// regex bên dưới luôn khớp đúng ảnh xem trước trước tiên. Thiếu nhánh này khiến toàn bộ công thức/mũi
+// tên phản ứng chèn bằng Equation Editor (rất phổ biến trong tài liệu Hoá học) biến mất im lặng, kể cả
+// khi nằm giữa 1 câu chữ bình thường (VD "CH3COOH ⇌ CH3COO⁻" mất mũi tên) hoặc chiếm trọn 1 ô bảng.
 function findEmbeddedImageRid(pEl) {
-  const holder = pEl.getElementsByTagName('w:drawing')[0] || pEl.getElementsByTagName('w:pict')[0];
+  const holder = pEl.getElementsByTagName('w:drawing')[0]
+    || pEl.getElementsByTagName('w:pict')[0]
+    || pEl.getElementsByTagName('w:object')[0];
   if (!holder) return null;
   const xml = new XMLSerializer().serializeToString(holder);
   const m = xml.match(/r:embed="(rId\d+)"/) || xml.match(/r:id="(rId\d+)"/);
