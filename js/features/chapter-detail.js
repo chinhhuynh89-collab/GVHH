@@ -298,7 +298,7 @@
       if (pt.type === 'image') {
         html += `<img src="${pt.dataUri}" alt="${escapeHtml(pt.alt || '')}" style="max-width:100%;border-radius:8px;margin:10px 0;display:block;" />`;
       } else if (pt.type === 'table') {
-        html += `<div class="lesson-table-wrap"><table class="lesson-table">${pt.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+        html += `<div class="lesson-table-wrap"><table class="lesson-table">${pt.rows.map((row) => `<tr>${row.cells.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</table></div>`;
       } else if (pt.type === 'warning') {
         html += `<p class="hint" style="color:var(--danger);">⚠️ ${escapeHtml(pt.message)}</p>`;
       }

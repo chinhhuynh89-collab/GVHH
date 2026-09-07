@@ -317,16 +317,19 @@ function findEmbeddedImageRid(pEl) {
 // Ô bảng có thể chứa ảnh (VD các ô "Ví dụ N" kèm hình/công thức minh hoạ) — không thể nhúng thật 1 ảnh
 // base64 vào giữa 1 ô kiểu chuỗi, nên chỉ chèn 1 dòng đánh dấu NGẮN NGAY TRONG Ô đó — vẫn hơn hẳn việc
 // im lặng bỏ qua hoàn toàn như trước (giáo viên biết đúng ô nào có ảnh cần xem lại file gốc).
+// Firestore KHÔNG cho phép mảng lồng mảng trực tiếp (chỉ mảng chứa map/chuỗi/số) — mỗi hàng phải bọc
+// thành 1 object { cells: [...] } thay vì mảng trần, nếu không WriteBatch.set() sẽ báo lỗi "Nested
+// arrays are not supported" (đã gặp thực tế khi giáo viên nạp thử).
 function extractDocxTableRows(tblEl) {
-  return Array.from(tblEl.getElementsByTagName('w:tr')).map((tr) =>
-    Array.from(tr.getElementsByTagName('w:tc')).map((tc) => {
+  return Array.from(tblEl.getElementsByTagName('w:tr')).map((tr) => ({
+    cells: Array.from(tr.getElementsByTagName('w:tc')).map((tc) => {
       const paraTexts = Array.from(tc.getElementsByTagName('w:p')).map((p) => {
         const text = Array.from(p.getElementsByTagName('w:t')).map((t) => t.textContent).join('');
         return findEmbeddedImageRid(p) ? (text + ' [Hình ảnh/công thức — xem file gốc]').trim() : text;
       });
       return paraTexts.join('\n').trim();
     })
-  );
+  }));
 }
 
 // Ngân sách dung lượng ảnh nhúng cho MỖI PHẦN (mỗi phần = 1 tài liệu Firestore riêng khi lưu, xem
