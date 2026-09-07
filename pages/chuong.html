@@ -141,6 +141,7 @@
         <button class="btn" id="quizMenuEditBtn">📋 Sửa câu hỏi trắc nghiệm</button>
         <button class="btn" id="quizMenuManualBtn">✍️ Tạo câu hỏi thủ công</button>
         <button class="btn" id="quizMenuTxtBtn">📄 Nạp file txt/Word</button>
+        <button class="btn" id="quizMenuPdfBtn">🖼️ Nạp đề thi PDF (cắt ảnh)</button>
         <button class="btn" id="quizMenuExcelBtn">📊 Nạp file Excel/CSV</button>
         <button class="btn" id="quizMenuBankBtn">🌐 Từ kho chung</button>
         <button class="btn" id="quizTemplateBtn">⬇️ Tải mẫu Excel</button>
@@ -153,6 +154,7 @@
       <h2><span class="icon">📋</span>Sửa câu hỏi trắc nghiệm</h2>
       <button class="btn block" id="quizFormAddBtn" style="margin:10px 0;">+ Thêm câu hỏi</button>
       <div id="quizForm" style="display:none;margin-bottom:14px;">
+        <div id="quizFormImagePreview" style="display:none;background:#fff;border-radius:8px;overflow:hidden;margin-bottom:10px;"></div>
         <div class="field">
           <label for="quizFormQ">Câu hỏi</label>
           <input type="text" id="quizFormQ" />
@@ -218,6 +220,23 @@ Câu hỏi Nhập đáp án ở đây?
       <input type="file" id="quizBulkFileInput" accept=".txt,.docx" style="display:none;" />
       <button class="btn primary block" id="quizBulkBtn" style="margin-top:10px;">+ Chọn file .txt hoặc .docx</button>
       <div id="quizBulkResult"></div>
+    </div>
+
+    <div class="card" id="quizPdfCard" style="display:none;">
+      <h2><span class="icon">🖼️</span>Nạp đề thi từ PDF (cắt ảnh từng câu)</h2>
+      <div class="hint">
+        Dùng cho đề thi THẬT (không cần gõ đúng mẫu) — app tự nhận diện từng câu theo số thứ tự
+        "Câu 1.", "Câu 2."... rồi <strong>cắt nguyên ảnh câu đó</strong> (giữ đúng 100% hình vẽ/đồ thị/
+        công thức như file gốc), không cần đọc hiểu nội dung.
+      </div>
+      <div class="hint">
+        <strong>Lưu ý bắt buộc:</strong> file không kèm sẵn đáp án đúng nào cả — sau khi nạp, mỗi câu
+        cần vào <strong>"📋 Sửa câu hỏi trắc nghiệm"</strong> để tự chọn đáp án đúng thì học sinh mới
+        chấm điểm được. Câu hỏi kiểu này cũng KHÔNG bị xáo thứ tự A/B/C/D khi thi thật (để khớp đúng ảnh).
+      </div>
+      <input type="file" id="quizPdfFileInput" accept=".pdf" style="display:none;" />
+      <button class="btn primary block" id="quizPdfBtn" style="margin-top:10px;">+ Chọn file .pdf</button>
+      <div id="quizPdfResult"></div>
     </div>
 
     <div class="card" id="quizBankSection" style="display:none;">

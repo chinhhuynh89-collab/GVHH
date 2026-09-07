@@ -963,6 +963,7 @@
     const answered = qAnswers[qIndex] !== null && qAnswers[qIndex] !== undefined;
     $('#quizWrap').innerHTML = `
       <div class="quiz-progress">Câu ${qIndex + 1}/${total}</div>
+      ${item.qImage ? `<div class="quiz-question-image"><img src="${item.qImage}" alt="Ảnh câu hỏi"></div>` : ''}
       <div class="quiz-question">${escapeHtml(item.q)}</div>
       <div class="quiz-options" id="quizOptions"></div>
       ${type === 'text' && answered ? `<div class="hint" style="margin:-6px 0 10px;">Đáp án đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>` : ''}
@@ -1146,6 +1147,14 @@
   function openQuizForm(existing) {
     const box = $('#quizForm');
     box.style.display = 'block';
+    const imgBox = $('#quizFormImagePreview');
+    if (existing && existing.qImage) {
+      imgBox.style.display = 'block';
+      imgBox.innerHTML = `<img src="${existing.qImage}" style="width:100%;display:block;" alt="Ảnh câu hỏi gốc">`;
+    } else {
+      imgBox.style.display = 'none';
+      imgBox.innerHTML = '';
+    }
     $('#quizFormQ').value = existing ? existing.q : '';
     const type = existing ? getQuestionType(existing) : 'abcd';
     $('#quizFormType').value = type;
@@ -1240,6 +1249,27 @@
       }
     });
 
+    $('#quizPdfBtn').addEventListener('click', () => $('#quizPdfFileInput').click());
+    $('#quizPdfFileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      const box = $('#quizPdfResult');
+      box.innerHTML = `<div class="result-box show">⏳ Đang cắt ảnh từng câu trong "${escapeHtml(file.name)}"...</div>`;
+      try {
+        const questions = await extractQuizFromPdf(await file.arrayBuffer());
+        await addCustomQuizBatch(chapter.id, questions);
+        customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
+        box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi — nhớ vào "Sửa câu hỏi trắc nghiệm" để chọn đáp án đúng cho từng câu.</div>`;
+        rebuildEffectiveQuiz();
+        renderQuizManager();
+        renderQuiz();
+        $('#quizManagerBody').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (err) {
+        box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(err.message)}</div>`;
+      }
+    });
+
     $('#quizTemplateBtn').addEventListener('click', () => downloadQuizTemplateCSV());
     $('#quizExcelBtn').addEventListener('click', () => $('#quizExcelFileInput').click());
     $('#quizExcelFileInput').addEventListener('change', async (e) => {
@@ -1266,7 +1296,7 @@
 
   // ---------- Menu tab Trắc nghiệm: bấm vào mới hiện đúng 1 khung tương ứng, có nút "Quay lại" ----------
   // Học sinh thấy 2 lối vào (Ôn tập / Kiểm tra thử); giáo viên thấy 5 thao tác quản lý câu hỏi.
-  const QUIZ_SECTION_IDS = ['quizEditSection', 'quizTxtCard', 'quizExcelCard', 'quizBankSection', 'selfTestCard', 'quizReviewSection'];
+  const QUIZ_SECTION_IDS = ['quizEditSection', 'quizTxtCard', 'quizPdfCard', 'quizExcelCard', 'quizBankSection', 'selfTestCard', 'quizReviewSection'];
 
   function showQuizSection(sectionId) {
     $('#quizStudentMenu').style.display = 'none';
@@ -1304,6 +1334,7 @@
       $('#quizMenuEditBtn').addEventListener('click', () => showQuizSection('quizEditSection'));
       $('#quizMenuManualBtn').addEventListener('click', () => { showQuizSection('quizEditSection'); openQuizForm(null); });
       $('#quizMenuTxtBtn').addEventListener('click', () => showQuizSection('quizTxtCard'));
+      $('#quizMenuPdfBtn').addEventListener('click', () => showQuizSection('quizPdfCard'));
       $('#quizMenuExcelBtn').addEventListener('click', () => showQuizSection('quizExcelCard'));
     }
     $('#quizBackToMenuBtn').addEventListener('click', showQuizMenu);

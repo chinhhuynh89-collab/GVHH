@@ -28,9 +28,10 @@ function drawQuestionsForExport(poolByType, counts) {
 
 // ---------- Xuất đề in giấy (Word/PDF) — KHÔNG ghi Firestore, xử lý hoàn toàn phía trình duyệt ----------
 // Chỉ xáo đáp án cho câu "abcd" — câu "Đúng/Sai" giữ nguyên thứ tự Đúng trước/Sai sau (quy ước quen
-// thuộc trên đề giấy), câu "Nhập đáp án" không có gì để xáo.
+// thuộc trên đề giấy), câu "Nhập đáp án" không có gì để xáo. Câu cắt ảnh từ PDF (question.noShuffle,
+// xem doc-import.js) dùng nhãn A/B/C/D chung chung khớp với ảnh gốc — xáo sẽ làm sai lệch, giữ nguyên.
 function shuffleOptionsForPrint(question) {
-  if (getQuestionType(question) !== 'abcd') return question;
+  if (getQuestionType(question) !== 'abcd' || question.noShuffle) return question;
   const order = shuffleArray(question.options.map((_, i) => i));
   return Object.assign({}, question, {
     options: order.map((i) => question.options[i]),

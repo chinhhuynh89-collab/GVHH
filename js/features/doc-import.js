@@ -355,6 +355,166 @@ async function extractPdf(arrayBuffer, fileName) {
   return sections;
 }
 
+// ---------- Nạp câu hỏi trắc nghiệm từ PDF: cắt ẢNH nguyên từng câu theo mốc "Câu N." ----------
+// Vì sao cắt ảnh thay vì trích chữ: câu hỏi thật thường kèm đồ thị/hình minh hoạ (chính là nội dung câu
+// hỏi, không thể thay bằng chữ) và đáp án dạng công thức chèn qua Equation Editor (không đọc/giải mã
+// được — đã thử 2 thư viện WMF/EMF thật, cả 2 đều thất bại vì MathType nhúng dữ liệu vẽ theo định dạng
+// riêng độc quyền bên trong record "Escape" của WMF). Cắt ảnh giữ đúng 100% pixel như file gốc, không
+// cần "hiểu" nội dung công thức nữa.
+// Đánh đổi PHẢI CHẤP NHẬN:
+//  - KHÔNG đọc được đáp án đúng — không có tín hiệu nào trong file để đọc (đã kiểm tra tận gốc XML thật,
+//    không tô màu/đậm/tô sáng khác biệt, không có bảng đáp án). Giáo viên BẮT BUỘC tự chọn đáp án đúng
+//    sau khi nạp (sửa câu hỏi như bình thường).
+//  - Câu ABCD dùng nhãn A/B/C/D CHUNG CHUNG (nội dung thật nằm trong ảnh) — vì vậy các câu này phải gắn
+//    "noShuffle: true" để lúc thi thật (exam-taker.js) KHÔNG xáo thứ tự nút bấm, nếu không nút "A" hiện
+//    ra có thể không khớp với chữ "A." trong ảnh nữa, học sinh chọn sai vì bối rối chứ không phải sai
+//    kiến thức.
+//  - Câu hỏi tràn từ cuối trang này sang đầu trang sau (rất hay gặp) được ghép lại làm 1 ảnh liền (xem
+//    stackCanvasesVertically) — nhưng chỉ ghép được 2 phần LIỀN KỀ NHAU, không xử lý được câu tràn quá
+//    2 trang (hiếm khi xảy ra với 1 câu hỏi thi thông thường).
+const QUIZ_QUESTION_MARKER_RE = /^C[aâ]u\s*(\d+)\s*[\.\):]/i;
+// PHẦN II (đúng/sai kiểu mới, chữ thường a) b) c) d)) và PHẦN III (tự luận, không nhãn) không khớp mẫu
+// A-D này nên tự rơi vào nhánh "không có lựa chọn" (type: 'text', giáo viên tự bổ sung đáp án sau).
+const QUIZ_OPTION_MARKER_RE = /^[A-D]\s*[\.\):]/;
+// Toạ độ 1 mốc "Câu N." là VỊ TRÍ DÒNG CHỮ ĐÓ — dùng làm ranh giới TRÊN (đầu câu) thì đúng luôn, nhưng
+// dùng làm ranh giới DƯỚI (cuối câu TRƯỚC nó) sẽ dính 1 chút nét chữ phía trên của chính dòng "Câu N."
+// kế tiếp (chữ có nét vươn lên trên dòng cơ sở) — trừ bớt vài px khi dùng làm ranh giới dưới cho gọn.
+const QUIZ_MARKER_BOTTOM_PAD = 6;
+
+function quizRowBlank(data, width, y) {
+  for (let x = 0; x < width; x += 3) {
+    const i = (y * width + x) * 4;
+    if (data[i] < 248 || data[i + 1] < 248 || data[i + 2] < 248) return false;
+  }
+  return true;
+}
+
+// Cắt vùng dọc [top, bottom) của canvas trang thành 1 canvas riêng, tự bỏ lề trắng thừa 2 đầu (giống
+// trimCanvasWhitespace ở phần PDF bài giảng) để không dư khoảng trắng quanh câu hỏi.
+function cropPageCanvasVertical(pageCanvas, top, bottom) {
+  const width = pageCanvas.width;
+  top = Math.max(0, Math.round(top));
+  bottom = Math.min(pageCanvas.height, Math.round(bottom));
+  if (bottom <= top) return null;
+  const data = pageCanvas.getContext('2d').getImageData(0, top, width, bottom - top).data;
+  const bandHeight = bottom - top;
+  let innerTop = 0;
+  while (innerTop < bandHeight && quizRowBlank(data, width, innerTop)) innerTop++;
+  let innerBottom = bandHeight - 1;
+  while (innerBottom > innerTop && quizRowBlank(data, width, innerBottom)) innerBottom--;
+  const h = innerBottom - innerTop + 1;
+  if (h <= 0) return null;
+  const out = document.createElement('canvas');
+  out.width = width;
+  out.height = h;
+  out.getContext('2d').drawImage(pageCanvas, 0, top + innerTop, width, h, 0, 0, width, h);
+  return out;
+}
+
+function stackCanvasesVertically(canvases) {
+  if (canvases.length === 1) return canvases[0];
+  const width = Math.max(...canvases.map((c) => c.width));
+  const totalHeight = canvases.reduce((s, c) => s + c.height, 0);
+  const out = document.createElement('canvas');
+  out.width = width;
+  out.height = totalHeight;
+  const ctx = out.getContext('2d');
+  let y = 0;
+  canvases.forEach((c) => { ctx.drawImage(c, 0, y); y += c.height; });
+  return out;
+}
+
+function canvasToBudgetedJpeg(canvas) {
+  let quality = 0.7;
+  let dataUri = canvas.toDataURL('image/jpeg', quality);
+  while (dataUri.length > LESSON_IMAGE_BUDGET_PER_SECTION && quality > 0.35) {
+    quality -= 0.15;
+    dataUri = canvas.toDataURL('image/jpeg', quality);
+  }
+  return dataUri;
+}
+
+async function extractQuizFromPdf(arrayBuffer) {
+  const pdfjsLib = await ensurePdfJs();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const questions = [];
+  let openQuestion = null; // { num, canvases: [...], hasOptions }
+
+  function flushQuestion() {
+    if (!openQuestion) return;
+    const canvas = stackCanvasesVertically(openQuestion.canvases);
+    const dataUri = canvasToBudgetedJpeg(canvas);
+    const qLabel = `Câu ${openQuestion.num} (xem ảnh)`;
+    if (openQuestion.hasOptions) {
+      questions.push({ q: qLabel, qImage: dataUri, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null, noShuffle: true });
+    } else {
+      questions.push({ q: qLabel, qImage: dataUri, type: 'text', acceptedAnswers: '', noShuffle: true });
+    }
+    openQuestion = null;
+  }
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scale = PDF_PAGE_TARGET_WIDTH / baseViewport.width;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(viewport.width));
+    canvas.height = Math.max(1, Math.round(viewport.height));
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+    const markers = [];
+    content.items.forEach((it) => {
+      const text = it.str.trim();
+      if (!text) return;
+      const m = text.match(QUIZ_QUESTION_MARKER_RE);
+      if (m) markers.push({ y: (baseViewport.height - it.transform[5]) * scale, num: m[1] });
+    });
+    const hasOptionsBetween = (top, bottom) => content.items.some((it) => {
+      const text = it.str.trim();
+      if (!QUIZ_OPTION_MARKER_RE.test(text)) return false;
+      const y = (baseViewport.height - it.transform[5]) * scale;
+      return y >= top && y < bottom;
+    });
+
+    if (!markers.length) {
+      // Cả trang không có "Câu N." nào mới — toàn trang là phần TIẾP THEO của câu đang mở (tràn trang).
+      if (openQuestion) {
+        const cropped = cropPageCanvasVertical(canvas, 0, canvas.height);
+        if (cropped) {
+          openQuestion.canvases.push(cropped);
+          openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, canvas.height);
+        }
+      }
+      continue;
+    }
+
+    // Phần TRƯỚC mốc "Câu" đầu tiên trên trang (nếu có) là phần cuối của câu đang mở từ trang trước.
+    if (openQuestion && markers[0].y > 4) {
+      const cutoff = Math.max(0, markers[0].y - QUIZ_MARKER_BOTTOM_PAD);
+      const cropped = cropPageCanvasVertical(canvas, 0, cutoff);
+      if (cropped) {
+        openQuestion.canvases.push(cropped);
+        openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, cutoff);
+      }
+    }
+    flushQuestion();
+
+    for (let i = 0; i < markers.length; i++) {
+      const top = markers[i].y;
+      const bottom = i + 1 < markers.length ? Math.max(top, markers[i + 1].y - QUIZ_MARKER_BOTTOM_PAD) : canvas.height;
+      const cropped = cropPageCanvasVertical(canvas, top, bottom);
+      if (!cropped) continue;
+      openQuestion = { num: markers[i].num, canvases: [cropped], hasOptions: hasOptionsBetween(top, bottom) };
+      if (i < markers.length - 1) flushQuestion(); // còn câu sau trên cùng trang -> câu này chắc chắn đã khép
+    }
+  }
+  flushQuestion(); // câu cuối cùng của cả file
+  if (!questions.length) throw new Error('Không tìm thấy câu hỏi nào dạng "Câu 1.", "Câu 2."... trong file PDF.');
+  return questions;
+}
+
 // Chỉ nhận .pdf — thông báo rõ cách khắc phục khi giáo viên trót chọn nhầm file khác (Word, ảnh...)
 // thay vì chỉ báo "sai định dạng" chung chung.
 async function extractFileToLessons(file) {

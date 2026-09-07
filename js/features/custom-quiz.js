@@ -1,5 +1,9 @@
-// Câu hỏi trắc nghiệm do giáo viên tự thêm (thủ công / nạp .txt / nạp Excel-CSV) — lưu Firestore
+// Câu hỏi trắc nghiệm do giáo viên tự thêm (thủ công / nạp .txt / nạp .docx / nạp .pdf) — lưu Firestore
 // tại teachers/{uid}/customQuiz/{id}. Ai cũng đọc được, chỉ chính giáo viên mới ghi được.
+//
+// Mỗi câu lưu kèm "order" (số tăng dần) để getCustomQuiz sắp xếp lại ĐÚNG THỨ TỰ đã nạp — giống hệt
+// lý do đã áp dụng cho customLessons (xem custom-lessons.js): Firestore .where() không tự giữ thứ tự
+// chèn, nạp 1 file thành nhiều câu hỏi mà thiếu field này sẽ hiện ra lộn xộn.
 
 async function addCustomQuiz(chapterId, question) {
   const teacher = getCurrentTeacher();
@@ -7,23 +11,46 @@ async function addCustomQuiz(chapterId, question) {
   if (typeof enforceCustomChapterLimit === 'function') await enforceCustomChapterLimit(teacher.uid, chapterId);
   const { db } = ensureFirebase();
   const ref = await db.collection('teachers').doc(teacher.uid).collection('customQuiz').add(
-    Object.assign({ chapterId, addedAt: new Date().toISOString() }, question)
+    Object.assign({ chapterId, addedAt: new Date().toISOString(), order: Date.now() }, question)
   );
   return ref.id;
 }
 
+// Câu hỏi nạp từ PDF có thể kèm ảnh chụp nguyên câu (qImage, xem doc-import.js) — nặng hơn nhiều so
+// với câu hỏi thuần chữ trước đây, nên 1 lượt batch.commit() dồn hết có thể vượt giới hạn ~10MB/lượt
+// ghi của Firestore dù từng câu vẫn dưới 1MB (đã gặp đúng lỗi này với customLessons — xem
+// addCustomLessonBatch). Chia nhỏ theo cả số lượng lẫn dung lượng ước tính, không dồn 1 lượt.
 async function addCustomQuizBatch(chapterId, questions) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên để nạp câu hỏi.');
   if (typeof enforceCustomChapterLimit === 'function') await enforceCustomChapterLimit(teacher.uid, chapterId);
   const { db } = ensureFirebase();
-  const batch = db.batch();
   const col = db.collection('teachers').doc(teacher.uid).collection('customQuiz');
-  questions.forEach((q) => {
-    const ref = col.doc();
-    batch.set(ref, Object.assign({ chapterId, addedAt: new Date().toISOString() }, q));
+  const base = Date.now();
+  const docs = questions.map((q, index) =>
+    Object.assign({ chapterId, addedAt: new Date().toISOString(), order: base + index }, q)
+  );
+
+  const MAX_BATCH_OPS = 400;
+  const MAX_BATCH_BYTES = 8 * 1024 * 1024;
+  let batch = db.batch();
+  let opCount = 0;
+  let byteCount = 0;
+  const commits = [];
+  docs.forEach((doc) => {
+    const size = JSON.stringify(doc).length;
+    if (opCount > 0 && (opCount >= MAX_BATCH_OPS || byteCount + size > MAX_BATCH_BYTES)) {
+      commits.push(batch.commit());
+      batch = db.batch();
+      opCount = 0;
+      byteCount = 0;
+    }
+    batch.set(col.doc(), doc);
+    opCount++;
+    byteCount += size;
   });
-  await batch.commit();
+  if (opCount > 0) commits.push(batch.commit());
+  await Promise.all(commits);
 }
 
 async function updateCustomQuiz(id, patch) {
@@ -38,7 +65,14 @@ async function getCustomQuiz(ownerUid, chapterId) {
   const { db } = ensureFirebase();
   const snap = await db.collection('teachers').doc(ownerUid).collection('customQuiz')
     .where('chapterId', '==', chapterId).get();
-  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+  const items = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+  items.sort((a, b) => {
+    const ao = typeof a.order === 'number' ? a.order : Infinity;
+    const bo = typeof b.order === 'number' ? b.order : Infinity;
+    if (ao !== bo) return ao - bo;
+    return (a.addedAt || '').localeCompare(b.addedAt || '');
+  });
+  return items;
 }
 
 async function deleteCustomQuiz(id) {

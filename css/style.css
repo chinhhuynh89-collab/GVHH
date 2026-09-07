@@ -1005,6 +1005,10 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
 /* Quiz */
 .quiz-progress { font-size: 12px; color: var(--text-faint); margin-bottom: 10px; }
+/* Câu hỏi cắt ảnh từ PDF (xem doc-import.js: extractQuizFromPdf) — nền trắng như trang giấy, giống
+   khối bài giảng, vì màu/chữ trong ảnh vốn được soạn để nhìn trên nền trắng. */
+.quiz-question-image { background: #ffffff; border-radius: var(--radius-md); overflow: hidden; margin-bottom: 12px; border: 1px solid #dde2ea; }
+.quiz-question-image img { width: 100%; display: block; }
 .quiz-question { font-size: calc(16.5px * var(--font-scale)); font-weight: 700; margin-bottom: 14px; line-height: 1.5; }
 .quiz-options { display: flex; flex-direction: column; gap: 9px; margin-bottom: 16px; }
 .quiz-option {

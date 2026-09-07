@@ -101,7 +101,13 @@
     answers = new Array(n).fill(null);
     questionOrder = shuffleIndices(n);
     // Câu "Nhập đáp án" không có options để xáo (mảng rỗng, vô hại — không dùng tới ở renderQuestion).
-    optionOrder = exam.questions.map((q) => shuffleIndices(getQuestionType(q) === 'text' ? 0 : q.options.length));
+    // Câu cắt ảnh từ PDF (q.noShuffle, xem doc-import.js) dùng nhãn A/B/C/D CHUNG CHUNG vì nội dung
+    // thật nằm trong ảnh — xáo thứ tự nút bấm sẽ làm nút "A" không còn khớp chữ "A." trong ảnh nữa,
+    // học sinh chọn sai vì bối rối chứ không phải sai kiến thức, nên giữ nguyên thứ tự cho các câu này.
+    optionOrder = exam.questions.map((q) => {
+      const len = getQuestionType(q) === 'text' ? 0 : q.options.length;
+      return q.noShuffle ? Array.from({ length: len }, (_, i) => i) : shuffleIndices(len);
+    });
     qIndex = 0;
     startedAt = Date.now();
     renderQuestion();
@@ -148,6 +154,7 @@
           <div class="quiz-progress" style="margin:0;">Câu ${qIndex + 1}/${total}</div>
           <div id="examTimer" style="font-weight:800;font-size:16px;color:var(--brand);"></div>
         </div>
+        ${item.qImage ? `<div class="quiz-question-image"><img src="${item.qImage}" alt="Ảnh câu hỏi"></div>` : ''}
         <div class="quiz-question">${escapeHtml(item.q)}</div>
         <div class="quiz-options" id="examOptions"></div>
         <div class="btn-row">
