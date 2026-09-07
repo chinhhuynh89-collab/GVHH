@@ -52,10 +52,11 @@
   <div class="tab-panel active" id="tabLesson">
     <div class="btn-row" id="lessonToolbar" style="display:none;margin-bottom:12px;">
       <button class="btn" id="manualLessonAddBtn" style="flex:1;">✍️ Viết bài giảng</button>
-      <button class="btn" id="docUploadBtn" style="flex:1;" title="File .docx: trích chữ, sửa được. File .pdf: giữ nguyên từng trang dạng ảnh (đúng 100% mũi tên/công thức/màu), không sửa chữ được">📎 Nạp file</button>
+      <button class="btn" id="docUploadBtn" style="flex:1;" title="Chỉ nhận file .pdf — giữ nguyên từng trang dạng ảnh (đúng 100% mũi tên/công thức/màu như bản in). Có file Word? Mở file đó, Save As sang PDF rồi nạp file .pdf">📎 Nạp file PDF</button>
       <button class="btn" id="lessonBankBtn" style="flex:1;" title="Nhập bài giảng đã chia sẻ bởi giáo viên khác">🌐 Kho chung</button>
     </div>
-    <input type="file" id="docFileInput" accept=".docx,.pdf" style="display:none;" />
+    <input type="file" id="docFileInput" accept=".pdf" style="display:none;" />
+    <p class="hint" id="docUploadHint" style="display:none;margin:-6px 0 12px;">📎 Chỉ nạp được file <strong>.pdf</strong>. Đang có file Word? Mở file → <strong>File → Save As / Lưu dưới dạng</strong> → chọn <strong>PDF</strong> → lưu lại rồi nạp file .pdf đó.</p>
     <div class="btn-row" id="lessonDeleteAllRow" style="display:none;margin-bottom:12px;">
       <button class="btn" id="lessonDeleteAllBtn" style="flex:1;" title="Xoá toàn bộ bài giảng tự thêm/nạp từ file của chương này (không đụng bài giảng có sẵn trong app) — dùng khi cần nạp lại file từ đầu">🗑️ Xoá tất cả bài giảng tự thêm</button>
     </div>
@@ -73,7 +74,7 @@
       <div class="field">
         <label for="manualLessonPoints">Nội dung (mỗi ý một dòng)</label>
         <textarea id="manualLessonPoints" rows="6"></textarea>
-        <p class="hint" id="manualLessonRichNotice" style="display:none;margin-top:4px;">ℹ️ Bài giảng này có bảng/hình ảnh (nạp từ Word) — phần đó vẫn được giữ nguyên, chỉ chưa sửa được ở khung này.</p>
+        <p class="hint" id="manualLessonRichNotice" style="display:none;margin-top:4px;">ℹ️ Bài giảng này có bảng/hình ảnh (nạp từ file) — phần đó vẫn được giữ nguyên, chỉ chưa sửa được ở khung này.</p>
       </div>
       <div class="btn-row">
         <button class="btn primary" id="manualLessonSave">Lưu bài giảng</button>

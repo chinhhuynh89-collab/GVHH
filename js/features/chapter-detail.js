@@ -1285,6 +1285,7 @@
 
     if (owner.isOwner) {
       $('#lessonToolbar').style.display = 'flex';
+      $('#docUploadHint').style.display = 'block';
       initManualLessonForm();
       initUploadControl();
       initFlashManager();
