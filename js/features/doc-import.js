@@ -773,13 +773,17 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   for (let i = markerLineIdx + 1; i <= stemLastLineIdx; i++) {
     stemStrips.push({ top: bands[i].top, bottom: bands[i].bottom, left: 0, right: canvas.width });
   }
+  // Đề tràn NHIỀU DÒNG (biết chắc chắn ngay tại đây — bằng đúng số dòng đã nối, không cần đoán qua tỉ
+  // lệ ảnh) cần hiển thị KHÁC với đề 1 dòng (xem CSS .quiz-question-image) — ép theo bề rộng khung như
+  // đề 1 dòng sẽ làm chữ co lại quá nhỏ, vỡ nét trông như bị cắt cụt.
+  const stemMultiline = stemStrips.length > 1;
   padOuterEdges(stemStrips);
   const stemCanvas = cropRegionStrips(canvas, stemStrips);
   if (!stemCanvas) return null;
   analyzeAndStripHighlight(stemCanvas);
 
   if (firstOptionLineIdx === -1) {
-    return { stemCanvas, hasOptions: false, optionCanvases: null, optionsCanvas: null, detectedCorrect: null };
+    return { stemCanvas, hasOptions: false, optionCanvases: null, optionsCanvas: null, detectedCorrect: null, stemMultiline };
   }
 
   const optionLinesIdx = [];
@@ -803,7 +807,7 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   const optionsText = optionLinesIdx.map((i) => lines[i].text).join(' ');
   const expectedLetters = countOptionLetterSequence(optionsText);
   if (expectedLetters.length !== 4 || expectedLetters.join('') !== 'ABCD') {
-    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null };
+    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null, stemMultiline };
   }
 
   const marks = [];
@@ -814,7 +818,7 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   // thuần theo chữ ở trên — lệch nghĩa là có nhãn dính liền nội dung không tách sạch pixel được (dù
   // đếm chữ vẫn thấy đủ 4) — KHÔNG được tin, rơi về Tầng 2 an toàn thay vì cắt liều ra kết quả sai.
   if (marks.length !== 4 || marks.map((m) => m.letter).join('') !== 'ABCD') {
-    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null };
+    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null, stemMultiline };
   }
 
   const optionCanvases = [];
@@ -839,7 +843,7 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
     }
     padOuterEdges(strips);
     const cropped = cropRegionStrips(canvas, strips);
-    if (!cropped) return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null };
+    if (!cropped) return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null, stemMultiline };
     optionCanvases.push(cropped);
   }
 
@@ -847,7 +851,7 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   // màu — cần màu gốc để so sánh, xoá xong sẽ không còn phân biệt được nữa.
   const detectedCorrect = detectAndStripHighlight(optionCanvases);
 
-  return { stemCanvas, hasOptions: true, optionCanvases, optionsCanvas: null, detectedCorrect };
+  return { stemCanvas, hasOptions: true, optionCanvases, optionsCanvas: null, detectedCorrect, stemMultiline };
 }
 
 // Trả về { questions, warnings } thay vì mảng trần — "warnings" liệt kê MỌI vấn đề gặp phải lúc nạp
@@ -883,18 +887,24 @@ async function extractQuizFromPdf(arrayBuffer) {
         // được đáp án giáo viên đã TÔ SẴN màu trong file gốc (xem detectAndStripHighlight), tự
         // điền luôn đáp án đúng — đỡ phải bấm chọn nhanh cho câu này; không chắc thì để trống như cũ.
         const [stemImage, ...optionImages] = canvasesToBudgetedJpegs([tiered.stemCanvas, ...tiered.optionCanvases], QUIZ_IMAGE_BUDGET_PER_QUESTION);
-        questions.push({ q: qLabel, stemImage, optionImages, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: tiered.detectedCorrect });
+        const q1 = { q: qLabel, stemImage, optionImages, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: tiered.detectedCorrect };
+        if (tiered.stemMultiline) q1.stemMultiline = true;
+        questions.push(q1);
       } else if (tiered && tiered.hasOptions && tiered.optionsCanvas) {
         // Tầng 2 — đề tách sạch (trộn được VỊ TRÍ CÂU) nhưng không tách riêng được từng đáp án (VD 2
         // đáp án chung 1 dòng, nhãn dính liền nội dung) — gộp cả 4 đáp án (giữ nguyên nhãn gốc) vào 1
         // ảnh, khoá thứ tự đáp án.
         const [stemImage, optionsImage] = canvasesToBudgetedJpegs([tiered.stemCanvas, tiered.optionsCanvas], QUIZ_IMAGE_BUDGET_PER_QUESTION);
-        questions.push({ q: qLabel, stemImage, optionsImage, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null, optionsLocked: true });
+        const q2 = { q: qLabel, stemImage, optionsImage, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null, optionsLocked: true };
+        if (tiered.stemMultiline) q2.stemMultiline = true;
+        questions.push(q2);
         warnings.push(`Câu ${openQuestion.num}: không tách riêng được từng đáp án (có thể 2 đáp án chung 1 dòng) — vẫn nạp được, đề có thể trộn VỊ TRÍ CÂU nhưng KHÔNG trộn được thứ tự đáp án A/B/C/D của câu này.`);
       } else if (tiered && !tiered.hasOptions) {
         // Câu "Nhập đáp án" — không có lựa chọn A-D, chỉ cần đề (đã tách sạch nhãn "Câu N.").
         const [stemImage] = canvasesToBudgetedJpegs([tiered.stemCanvas], QUIZ_IMAGE_BUDGET_PER_QUESTION);
-        questions.push({ q: qLabel, stemImage, type: 'text', acceptedAnswers: '' });
+        const q3 = { q: qLabel, stemImage, type: 'text', acceptedAnswers: '' };
+        if (tiered.stemMultiline) q3.stemMultiline = true;
+        questions.push(q3);
       } else {
         // Tầng 3 — cách cũ (1 ảnh gộp kèm "Câu N.", không trộn được vị trí câu lẫn đáp án) — dùng khi
         // câu hỏi tràn trang, HOẶC (hiếm) không tách sạch được nhãn "Câu N." khỏi nội dung. Vẫn xoá màu

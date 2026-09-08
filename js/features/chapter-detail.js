@@ -1007,7 +1007,7 @@
     const visual = getQuizVisual(item);
     $('#quizWrap').innerHTML = `
       <div class="quiz-progress">Câu ${qIndex + 1}/${total}</div>
-      ${visual ? `<div class="quiz-question-image"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>` : ''}
+      ${visual ? `<div class="quiz-question-image${visual.stemMultiline ? ' multiline' : ''}"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>` : ''}
       <div class="quiz-question">${escapeHtml(item.q)}</div>
       ${visual && visual.combinedOptionsSrc ? `<div class="quiz-question-image"><img src="${visual.combinedOptionsSrc}" alt="Ảnh đáp án"></div>` : ''}
       <div class="quiz-options" id="quizOptions"></div>
@@ -1135,8 +1135,13 @@
   function renderQuizVisualHtml(item, imgStyle) {
     const visual = getQuizVisual(item);
     if (!visual) return '';
+    // Đề tràn NHIỀU DÒNG ép theo max-width:100% như đề 1 dòng sẽ co chữ quá nhỏ/vỡ nét (ảnh nhiều dòng
+    // nối dọc RẤT RỘNG so với chiều cao) — hiện đúng kích thước gốc, cho cuộn ngang riêng dòng này.
+    const stemHtml = visual.stemMultiline
+      ? `<div style="overflow-x:auto;margin-bottom:6px;"><img src="${visual.stemSrc}" alt="${escapeHtml(item.q)}" style="display:block;border-radius:8px;"></div>`
+      : `<img src="${visual.stemSrc}" alt="${escapeHtml(item.q)}" style="${imgStyle}">`;
     return `
-      <img src="${visual.stemSrc}" alt="${escapeHtml(item.q)}" style="${imgStyle}">
+      ${stemHtml}
       ${visual.combinedOptionsSrc ? `<img src="${visual.combinedOptionsSrc}" alt="Đáp án" style="${imgStyle}">` : ''}
       ${visual.optionSrcs ? visual.optionSrcs.map((src) => `<img src="${src}" alt="Đáp án" style="${imgStyle}">`).join('') : ''}
     `;
@@ -1484,14 +1489,44 @@
         const warningHtml = warnings.length
           ? `<div class="result-box show error" style="margin-bottom:8px;"><strong>⚠️ Có ${warnings.length} vấn đề cần kiểm tra lại:</strong><ul style="margin:6px 0 0;padding-left:20px;">${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`
           : '';
+        // Câu bị "khoá" (optionsLocked/noShuffle — không tách sạch được nhãn/đáp án, xem doc-import.js)
+        // vẫn nạp được nhưng không trộn được đầy đủ — cho xoá gọn CẢ NHÓM này của riêng lượt nạp này
+        // (không đụng câu khác), để giáo viên tự nạp lại/bổ sung thủ công nếu muốn thay vì phải dò tay.
+        const flaggedInBatch = customQuizCache.filter((q) => q.sourceFileName === file.name && (q.optionsLocked || q.noShuffle));
+        const deleteFlaggedHtml = flaggedInBatch.length
+          ? `<button type="button" class="btn quiz-delete-flagged-batch" data-ids="${flaggedInBatch.map((q) => q.id).join(',')}" style="margin-top:8px;">🗑️ Xoá ${flaggedInBatch.length} câu bị cảnh báo (không trộn được đầy đủ)</button>`
+          : '';
         box.innerHTML = `
           ${warningHtml}
           <div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi — nhớ vào "Sửa câu hỏi trắc nghiệm" để chọn đáp án đúng cho từng câu.</div>
           <button class="btn block" id="quizPdfViewAllBtn" style="margin-top:8px;">👁️ Xem toàn bộ đề vừa nạp</button>
           <div id="quizPdfPreviewList" style="display:none;margin-top:10px;"></div>
+          ${deleteFlaggedHtml}
           ${quizImportConfirmBtnHtml()}
         `;
         wireQuizImportConfirmBtn(box);
+        const deleteFlaggedBtn = $('.quiz-delete-flagged-batch', box);
+        if (deleteFlaggedBtn) {
+          deleteFlaggedBtn.addEventListener('click', async () => {
+            const ids = deleteFlaggedBtn.dataset.ids.split(',').filter(Boolean);
+            if (!confirm(`Xoá ${ids.length} câu bị cảnh báo (không trộn được đầy đủ đáp án/vị trí câu) trong lượt nạp này? Không thể hoàn tác.`)) return;
+            deleteFlaggedBtn.disabled = true;
+            deleteFlaggedBtn.textContent = 'Đang xoá...';
+            try {
+              await Promise.all(ids.map((id) => deleteCustomQuiz(id)));
+              customQuizCache = customQuizCache.filter((it) => !ids.includes(it.id));
+              deleteFlaggedBtn.remove();
+              rebuildEffectiveQuiz();
+              renderQuizManager();
+              renderQuiz();
+              showToast(`Đã xoá ${ids.length} câu bị cảnh báo.`, false);
+            } catch (err) {
+              showToast('Không xoá được: ' + err.message);
+              deleteFlaggedBtn.disabled = false;
+              deleteFlaggedBtn.textContent = `🗑️ Xoá ${ids.length} câu bị cảnh báo (không trộn được đầy đủ)`;
+            }
+          });
+        }
         $('#quizPdfViewAllBtn').addEventListener('click', () => {
           const list = $('#quizPdfPreviewList');
           const show = list.style.display === 'none';

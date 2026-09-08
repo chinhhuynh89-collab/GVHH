@@ -78,6 +78,9 @@ function getQuizVisual(item) {
     stemSrc,
     optionSrcs, // 4 ảnh riêng (Tầng 1) hoặc null
     combinedOptionsSrc: item.optionsImage || null, // 1 ảnh gộp giữ nhãn gốc (Tầng 2) hoặc null
+    // Đề tràn NHIỀU DÒNG (biết chắc từ lúc cắt — xem doc-import.js) cần hiển thị khác đề 1 dòng, ép
+    // theo bề rộng khung sẽ làm chữ co lại quá nhỏ/vỡ nét (xem CSS .quiz-question-image).
+    stemMultiline: !!item.stemMultiline,
     // Chỉ ảnh đề MỚI (stemImage, đã cắt bỏ "Câu N.") mới an toàn đổi VỊ TRÍ câu — qImage cũ vẫn còn
     // kẹt số câu gốc trong pixel, đổi vị trí sẽ hiện sai số.
     canShuffleQuestion: !!item.stemImage,

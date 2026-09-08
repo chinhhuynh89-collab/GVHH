@@ -187,7 +187,7 @@
           <div class="quiz-progress" style="margin:0;">Câu ${qIndex + 1}/${total}</div>
           <div id="examTimer" style="font-weight:800;font-size:16px;color:var(--brand);"></div>
         </div>
-        ${visual ? `<div class="quiz-question-image"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>` : ''}
+        ${visual ? `<div class="quiz-question-image${visual.stemMultiline ? ' multiline' : ''}"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>` : ''}
         <div class="quiz-question">${escapeHtml(item.q)}</div>
         ${visual && visual.combinedOptionsSrc ? `<div class="quiz-question-image"><img src="${visual.combinedOptionsSrc}" alt="Ảnh đáp án"></div>` : ''}
         <div class="quiz-options" id="examOptions"></div>
