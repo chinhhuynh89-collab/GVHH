@@ -1354,6 +1354,10 @@
     $('#quizTeacherMenu').style.display = 'none';
     QUIZ_SECTION_IDS.forEach((id) => { $('#' + id).style.display = id === sectionId ? 'block' : 'none'; });
     $('#quizBackToMenuBtn').style.display = 'block';
+    // Danh sách sửa câu hỏi vẽ TỚI KHI giáo viên thật sự mở màn này mới dựng (kèm ảnh câu hỏi nạp từ
+    // PDF, có thể rất nặng nếu đề nhiều câu) — dựng sẵn ngay lúc mở trang sẽ làm cả trang ì ạch dù
+    // giáo viên chỉ định xem bài giảng/flashcard, không đụng gì tới trắc nghiệm.
+    if (sectionId === 'quizEditSection') renderQuizManager();
   }
 
   // Thống kê nhanh kho câu hỏi của chương (tổng + từng loại) — hiện ngay khi giáo viên bấm vào tab
@@ -1393,6 +1397,10 @@
   }
 
   async function init() {
+    // Gắn nút chuyển tab (Bài giảng/Flashcard/Trắc nghiệm) NGAY LẬP TỨC, trước khi chờ bất kỳ dữ liệu
+    // mạng nào — nếu để cuối init() như trước (sau khi tải xong toàn bộ bài giảng/câu hỏi, có thể nặng
+    // nếu chương có nhiều ảnh nạp từ PDF), bấm tab sẽ như "không phản hồi" cho tới khi tải xong hết.
+    initTabs(document);
     // Xác nhận "nhóm đang xem" cache còn khớp tài khoản Google đang đăng nhập TRƯỚC khi đọc/hiện
     // tiến độ (refreshDots bên dưới) — trang này có thể là trang đầu tiên mở (VD theo link đã lưu),
     // không chắc đã qua chapter-overview.js trước đó. Đồng thời tải tiến độ đã đồng bộ từ Firestore
@@ -1451,13 +1459,11 @@
       initUploadControl();
       initFlashManager();
       renderFlashManager();
-      renderQuizManager();
       initQuizManager();
       initBankFeatures();
     }
     initQuizMenu();
     refreshDots();
-    initTabs(document);
   }
 
   init();
