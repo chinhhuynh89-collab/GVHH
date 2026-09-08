@@ -293,7 +293,15 @@
       // Nhảy thẳng vào màn Tự kiểm tra, khỏi qua menu "Ôn tập/Kiểm tra thử" trước cho tiện.
       showQuizSection('selfTestCard');
     } else if (sectionId === 'tabQuiz') {
-      showQuizMenu();
+      if (owner.isOwner) {
+        // Giáo viên bấm "📝 Trắc nghiệm" là muốn XEM/CHỌN ĐÁP ÁN các câu hỏi NGAY — mở thẳng màn "Sửa
+        // câu hỏi trắc nghiệm" (bỏ qua menu trung gian) và tự mở sẵn (các) nhóm câu hỏi của đúng Bài
+        // này, khớp hành vi vừa sửa cho "📖 Bài giảng" (tự mở sẵn nội dung, khỏi bấm thêm lần nữa).
+        getGroupedQuizItems().forEach((item) => { if (item.isGroup) expandedQuizKeys.add(quizGroupKey(item)); });
+        showQuizSection('quizEditSection');
+      } else {
+        showQuizMenu();
+      }
     }
     $('#chTabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
