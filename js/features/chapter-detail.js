@@ -43,12 +43,22 @@
   let customFlashcardsCache = [];
   let effectiveQuiz = [];
   // "Bài" (đơn vị con trong chương, xem chapterMeta.units) — CHỈ áp dụng cho nội dung Tự thêm, không
-  // đụng nội dung có sẵn trong app. null = đang xem phần "Chung" (mặc định + Tự thêm CHƯA gán Bài nào,
-  // đúng hành vi trước khi có tính năng này) — khác null = chỉ xem đúng Tự thêm có unitId trùng, ẩn
-  // hết nội dung có sẵn (builtin) vì builtin chưa được tổ chức theo Bài.
+  // đụng nội dung có sẵn trong app. null = đang xem phần "Chung" (= TOÀN CHƯƠNG, gộp mặc định + Tự
+  // thêm của MỌI Bài lẫn chưa gán Bài nào) — khác null = chỉ xem đúng Tự thêm có unitId trùng, ẩn hết
+  // nội dung có sẵn (builtin) vì builtin chưa được tổ chức theo Bài.
   let activeUnitId = null;
   function filterByActiveUnit(items) {
-    return items.filter((it) => (activeUnitId ? it.unitId === activeUnitId : !it.unitId));
+    return activeUnitId ? items.filter((it) => it.unitId === activeUnitId) : items;
+  }
+  // Ôn tập/Tự kiểm tra ở phần Chung mặc định RÚT TỪ TOÀN CHƯƠNG (mọi Bài + chưa gán Bài nào) — giáo
+  // viên/học sinh có thể BỎ TÍCH bớt vài Bài (renderQuizUnitFilterCard) để thu hẹp phạm vi 1 lượt Ôn
+  // tập/Tự kiểm tra cụ thể, KHÔNG đụng tới "Sửa câu hỏi trắc nghiệm" (vẫn luôn thấy đủ mọi câu hỏi).
+  // Set RỖNG = không loại Bài nào (mặc định) — dùng "danh sách LOẠI TRỪ" thay vì "danh sách chọn" để
+  // Bài MỚI tạo tự động được tính vào ngay, không cần thêm tay vào 1 danh sách chọn riêng.
+  const excludedUnitIds = new Set();
+  function applyQuizUnitFilter(items) {
+    if (activeUnitId || !excludedUnitIds.size) return items;
+    return items.filter((it) => !it.unitId || !excludedUnitIds.has(it.unitId));
   }
   function getUnits() {
     return (chapterMeta.units || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -203,11 +213,13 @@
     rebuildEffectiveQuiz();
     renderQuiz();
     initSelfTest();
+    renderQuizUnitFilterCard();
     if (owner.isOwner) {
       refreshLessonDeleteAllRow();
       refreshQuizDeleteAllRow();
       renderFlashManager();
       renderQuizManager();
+      renderQuizStats();
     }
   }
 
@@ -238,35 +250,67 @@
 
   function renderUnitsList() {
     const section = $('#unitsSection');
-    if (!section) return;
-    const units = getUnits();
-    if (!units.length && !owner.isOwner) { section.style.display = 'none'; return; }
-    section.style.display = 'block';
-    $('#unitsAddBtn').style.display = owner.isOwner ? 'block' : 'none';
-    const list = $('#unitsList');
-    if (!units.length) {
-      list.innerHTML = '<div class="hint">Chưa có Bài nào — bấm "+ Thêm Bài mới" để bắt đầu.</div>';
-      return;
+    if (section) {
+      const units = getUnits();
+      if (!units.length && !owner.isOwner) {
+        section.style.display = 'none';
+      } else {
+        section.style.display = 'block';
+        $('#unitsAddBtn').style.display = owner.isOwner ? 'block' : 'none';
+        const list = $('#unitsList');
+        if (!units.length) {
+          list.innerHTML = '<div class="hint">Chưa có Bài nào — bấm "+ Thêm Bài mới" để bắt đầu.</div>';
+        } else {
+          list.innerHTML = units.map((u, i) => `
+            <div class="unit-row">
+              <div class="unit-title">${escapeHtml(u.title)}</div>
+              ${owner.isOwner ? `
+              <div class="unit-owner-actions hint">
+                <a href="#" class="unit-rename" data-id="${u.id}">Đổi tên</a>
+                ${i > 0 ? `· <a href="#" class="unit-move-up" data-id="${u.id}">↑</a>` : ''}
+                ${i < units.length - 1 ? `· <a href="#" class="unit-move-down" data-id="${u.id}">↓</a>` : ''}
+                · <a href="#" class="unit-delete" data-id="${u.id}">Xoá cả Bài</a>
+              </div>` : ''}
+              <div class="unit-actions">
+                <button type="button" class="btn unit-open" data-id="${u.id}" data-section="tabLesson">📖 Bài giảng</button>
+                <button type="button" class="btn unit-open" data-id="${u.id}" data-section="tabFlash">🗂️ Flashcard</button>
+                <button type="button" class="btn unit-open" data-id="${u.id}" data-section="tabQuiz">📝 Trắc nghiệm</button>
+                <button type="button" class="btn unit-open" data-id="${u.id}" data-section="selfTestCard">🎯 Tự kiểm tra</button>
+              </div>
+            </div>
+          `).join('');
+          wireUnitsList(list);
+        }
+      }
     }
-    list.innerHTML = units.map((u, i) => `
-      <div class="unit-row">
-        <div class="unit-title">${escapeHtml(u.title)}</div>
-        ${owner.isOwner ? `
-        <div class="unit-owner-actions hint">
-          <a href="#" class="unit-rename" data-id="${u.id}">Đổi tên</a>
-          ${i > 0 ? `· <a href="#" class="unit-move-up" data-id="${u.id}">↑</a>` : ''}
-          ${i < units.length - 1 ? `· <a href="#" class="unit-move-down" data-id="${u.id}">↓</a>` : ''}
-          · <a href="#" class="unit-delete" data-id="${u.id}">Xoá cả Bài</a>
-        </div>` : ''}
-        <div class="unit-actions">
-          <button type="button" class="btn unit-open" data-id="${u.id}" data-section="tabLesson">📖 Bài giảng</button>
-          <button type="button" class="btn unit-open" data-id="${u.id}" data-section="tabFlash">🗂️ Flashcard</button>
-          <button type="button" class="btn unit-open" data-id="${u.id}" data-section="tabQuiz">📝 Trắc nghiệm</button>
-          <button type="button" class="btn unit-open" data-id="${u.id}" data-section="selfTestCard">🎯 Tự kiểm tra</button>
-        </div>
-      </div>
+    renderQuizUnitFilterCard();
+  }
+
+  // Checklist Bài đưa vào Ôn tập/Tự kiểm tra ở phần CHUNG (xem excludedUnitIds/applyQuizUnitFilter) —
+  // CHỈ hiện khi đang ở phần Chung (activeUnitId null) VÀ chương có ít nhất 1 Bài, vì đã scope vào 1
+  // Bài cụ thể thì tự nhiên chỉ còn đúng Bài đó, không cần chọn gì thêm.
+  function renderQuizUnitFilterCard() {
+    const card = $('#quizUnitFilterCard');
+    if (!card) return;
+    const units = getUnits();
+    if (activeUnitId || !units.length) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    const list = $('#quizUnitFilterList');
+    list.innerHTML = units.map((u) => `
+      <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" class="quiz-unit-filter-check" data-id="${u.id}" ${excludedUnitIds.has(u.id) ? '' : 'checked'} />
+        <span>${escapeHtml(u.title)}</span>
+      </label>
     `).join('');
-    wireUnitsList(list);
+    $$('.quiz-unit-filter-check', list).forEach((cb) => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) excludedUnitIds.delete(cb.dataset.id);
+        else excludedUnitIds.add(cb.dataset.id);
+        rebuildEffectiveQuiz();
+        renderQuiz();
+        initSelfTest();
+      });
+    });
   }
 
   function wireUnitsList(list) {
@@ -328,9 +372,18 @@
           customLessonsCache = customLessonsCache.filter((it) => it.unitId !== unit.id);
           customQuizCache = customQuizCache.filter((it) => it.unitId !== unit.id);
           customFlashcardsCache = customFlashcardsCache.filter((it) => it.unitId !== unit.id);
+          excludedUnitIds.delete(unit.id);
           const newUnits = units.filter((u) => u.id !== unit.id);
           await saveUnits(newUnits);
-          if (activeUnitId === unit.id) setActiveUnit(null);
+          if (activeUnitId === unit.id) {
+            setActiveUnit(null);
+          } else {
+            rebuildEffectiveQuiz();
+            renderAllLessons();
+            renderFlash();
+            renderQuiz();
+            if (owner.isOwner) { renderQuizManager(); renderFlashManager(); renderQuizStats(); }
+          }
           renderUnitsList();
           showToast(`Đã xoá cả Bài "${unit.title}" (${totalCount} mục).`, false);
         } catch (err) {
@@ -1227,7 +1280,7 @@
   let qFinished = false;
 
   function rebuildEffectiveQuiz() {
-    effectiveQuiz = getAllQuizItems();
+    effectiveQuiz = applyQuizUnitFilter(getAllQuizItems());
     qIndex = 0;
     qAnswers = new Array(effectiveQuiz.length).fill(null);
     qFinished = false;
