@@ -373,9 +373,19 @@ async function extractPdf(arrayBuffer, fileName) {
 //    stackCanvasesVertically) — nhưng chỉ ghép được 2 phần LIỀN KỀ NHAU, không xử lý được câu tràn quá
 //    2 trang (hiếm khi xảy ra với 1 câu hỏi thi thông thường).
 const QUIZ_QUESTION_MARKER_RE = /^C[aâ]u\s*(\d+)\s*[\.\):]/i;
-// PHẦN II (đúng/sai kiểu mới, chữ thường a) b) c) d)) và PHẦN III (tự luận, không nhãn) không khớp mẫu
-// A-D này nên tự rơi vào nhánh "không có lựa chọn" (type: 'text', giáo viên tự bổ sung đáp án sau).
+// PHẦN II (đúng/sai kiểu mới, chữ thường a) b) c) d)) không khớp mẫu A-D này nên tự rơi vào nhánh
+// "không có lựa chọn" (type: 'text', giáo viên tự bổ sung đáp án/sửa lại loại câu sau khi nạp).
 const QUIZ_OPTION_MARKER_RE = /^[A-D]\s*[\.\):]/;
+// Đề thi chuẩn 2025 chia nhiều "PHẦN" (I/II/III/IV...), MỖI PHẦN ĐÁNH SỐ LẠI TỪ "Câu 1" — đã xác nhận
+// qua thực tế (Phần I 1..30, Phần II lại 1.., Phần III/IV cũng vậy). Nếu coi cả file là 1 dãy số liên
+// tục, phần sau sẽ báo "trùng số" giả hàng loạt so với phần trước, che mất cảnh báo thật. Nhận diện
+// mốc "PHẦN" để tính thiếu/trùng số RIÊNG cho từng phần.
+const QUIZ_PART_MARKER_RE = /^PH[ẦA]N\s+([IVXLCDM]+)\s*[.:]?\s*(.*)$/i;
+// PHẦN "tự luận" (câu hỏi mở, không có đáp án A-D/đúng-sai để chấm tự động) — giáo viên đã xác nhận
+// KHÔNG đưa vào kho câu hỏi trắc nghiệm (không phù hợp kiểu "chấm tự động" của kho câu hỏi). Nhận diện
+// qua chữ "tự luận" trong dòng PHẦN đó (không đoán cứng luôn là phần cuối/phần số mấy, để còn đúng cả
+// khi thứ tự các phần trong 1 file khác đổi khác đi).
+const QUIZ_ESSAY_PART_RE = /tự\s*luận/i;
 // Toạ độ 1 mốc "Câu N." là VỊ TRÍ DÒNG CƠ SỞ (baseline) của dòng chữ đó — dấu tiếng Việt (ệ, ẫ, ỡ...)
 // và các nét chữ vươn lên đều nằm PHÍA TRÊN baseline, cao thấp KHÁC NHAU tuỳ cỡ chữ/kiểu chữ từng câu.
 // Từng thử trừ lùi 1 khoảng PIXEL CỐ ĐỊNH cho ranh giới — không ổn: đoán thiếu thì vẫn cắt cụt/dính
@@ -501,9 +511,11 @@ async function extractQuizFromPdf(arrayBuffer) {
   const pdfjsLib = await ensurePdfJs();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const questions = [];
-  const foundNums = [];
+  const foundNums = []; // { num, part } — xem ghi chú QUIZ_PART_MARKER_RE (tính thiếu/trùng RIÊNG từng phần)
   const warnings = [];
-  let openQuestion = null; // { num, canvases: [...], hasOptions }
+  let openQuestion = null; // { num, part, canvases: [...], hasOptions }
+  let partIndex = 0; // tăng mỗi khi gặp 1 mốc "PHẦN" mới — file không chia phần thì luôn = 0, vẫn đúng
+  let essayMode = false; // đang ở phần "tự luận" — bỏ qua hẳn, không đưa vào kho câu hỏi (đã hỏi ý kiến)
 
   function flushQuestion() {
     if (!openQuestion) return;
@@ -516,7 +528,7 @@ async function extractQuizFromPdf(arrayBuffer) {
       } else {
         questions.push({ q: qLabel, qImage: dataUri, type: 'text', acceptedAnswers: '', noShuffle: true });
       }
-      foundNums.push(parseInt(openQuestion.num, 10));
+      foundNums.push({ num: parseInt(openQuestion.num, 10), part: openQuestion.part, partLabel: openQuestion.partLabel });
     } catch (e) {
       warnings.push(`Câu ${openQuestion.num}: lỗi khi dựng ảnh (${e.message}) — câu này bị bỏ qua, cần bổ sung thủ công.`);
     }
@@ -536,19 +548,40 @@ async function extractQuizFromPdf(arrayBuffer) {
       await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
 
       const lines = groupTextItemsIntoLines(content.items, baseViewport.height, scale);
-      const markers = [];
+
+      // Duyệt CẢ mốc "PHẦN" lẫn mốc "Câu" theo ĐÚNG THỨ TỰ xuất hiện trên trang (không chỉ theo mốc
+      // Câu như trước) — để biết chính xác câu nào thuộc phần nào, và BỎ QUA hẳn câu thuộc phần "tự
+      // luận" (giáo viên đã xác nhận không đưa vào kho câu hỏi trắc nghiệm — không có đáp án để chấm).
+      const events = [];
       lines.forEach((line) => {
-        const m = line.text.trim().match(QUIZ_QUESTION_MARKER_RE);
-        if (m) markers.push({ y: line.y, num: m[1] });
+        const text = line.text.trim();
+        const partM = text.match(QUIZ_PART_MARKER_RE);
+        if (partM) { events.push({ y: line.y, kind: 'part', label: partM[1].toUpperCase(), essay: QUIZ_ESSAY_PART_RE.test(partM[2]) }); return; }
+        const qM = text.match(QUIZ_QUESTION_MARKER_RE);
+        if (qM) events.push({ y: line.y, kind: 'question', num: qM[1] });
       });
+      events.sort((a, b) => a.y - b.y);
+
+      const markers = [];
+      let partEventSeenOnPage = false;
+      let currentPartLabel = 'I'; // mặc định khi file không chia phần nào cả (vẫn dùng chung 1 nhãn)
+      events.forEach((ev) => {
+        if (ev.kind === 'part') { partIndex++; essayMode = ev.essay; currentPartLabel = ev.label; partEventSeenOnPage = true; return; }
+        if (essayMode) return; // câu thuộc phần tự luận -> bỏ qua, không cắt ảnh, không đưa vào kho
+        markers.push({ y: ev.y, num: ev.num, part: partIndex, partLabel: currentPartLabel });
+      });
+
       const hasOptionsBetween = (top, bottom) => lines.some((line) => {
         if (line.y < top || line.y >= bottom) return false;
         return QUIZ_OPTION_MARKER_RE.test(line.text.trim());
       });
 
       if (!markers.length) {
-        // Cả trang không có "Câu N." nào mới — toàn trang là phần TIẾP THEO của câu đang mở (tràn trang).
-        if (openQuestion) {
+        // Cả trang không có "Câu N." nào mới (thuộc phần đang nạp) — CHỈ coi là phần TIẾP THEO của câu
+        // đang mở (tràn trang) khi trang này KHÔNG có mốc "PHẦN" nào — nếu có (VD cả trang chỉ là dòng
+        // tiêu đề "PHẦN II. ...") thì không có gì để nối, tránh dính nhầm tiêu đề phần mới vào câu cuối
+        // của phần trước.
+        if (openQuestion && !essayMode && !partEventSeenOnPage) {
           const cropped = cropPageCanvasVertical(canvas, 0, canvas.height);
           if (cropped) {
             openQuestion.canvases.push(cropped);
@@ -561,7 +594,9 @@ async function extractQuizFromPdf(arrayBuffer) {
       // Tính sẵn MỌI ranh giới giữa các câu trên trang bằng cách tìm khoảng trắng thật (không đoán cỡ
       // chữ) — mỗi ranh giới tính ĐÚNG 1 LẦN rồi dùng chung làm "cuối câu trước" VÀ "đầu câu sau", nên
       // không bao giờ hở (mất chữ) hay chồng (dính chữ câu bên cạnh) giữa 2 câu liền nhau.
-      const leadingSplit = openQuestion
+      // Có mốc "PHẦN" trước mốc "Câu" đầu tiên trên trang -> KHÔNG nối câu đang mở với phần mới này.
+      const partBeforeFirstMarker = events.some((e) => e.kind === 'part' && e.y < markers[0].y);
+      const leadingSplit = (openQuestion && !partBeforeFirstMarker)
         ? (findBlankGapSplitY(canvas, 0, markers[0].y) ?? Math.max(0, markers[0].y - QUIZ_MARKER_VERTICAL_PAD))
         : 0;
       const boundaries = new Array(markers.length + 1);
@@ -573,7 +608,7 @@ async function extractQuizFromPdf(arrayBuffer) {
       boundaries[markers.length] = canvas.height;
 
       // Phần TRƯỚC mốc "Câu" đầu tiên trên trang (nếu có) là phần cuối của câu đang mở từ trang trước.
-      if (openQuestion && markers[0].y > 4) {
+      if (openQuestion && !partBeforeFirstMarker && markers[0].y > 4) {
         const cropped = cropPageCanvasVertical(canvas, 0, leadingSplit);
         if (cropped) {
           openQuestion.canvases.push(cropped);
@@ -590,7 +625,7 @@ async function extractQuizFromPdf(arrayBuffer) {
           warnings.push(`Câu ${markers[i].num} (trang ${pageNum}): không cắt được ảnh — có thể trang này bị lỗi hiển thị, cần bổ sung thủ công.`);
           continue;
         }
-        openQuestion = { num: markers[i].num, canvases: [cropped], hasOptions: hasOptionsBetween(top, bottom) };
+        openQuestion = { num: markers[i].num, part: markers[i].part, partLabel: markers[i].partLabel, canvases: [cropped], hasOptions: hasOptionsBetween(top, bottom) };
         if (i < markers.length - 1) flushQuestion(); // còn câu sau trên cùng trang -> câu này chắc chắn đã khép
       }
     } catch (e) {
@@ -602,20 +637,31 @@ async function extractQuizFromPdf(arrayBuffer) {
 
   // Đề thi thường đánh số liên tục — số bị nhảy cóc/trùng gần như chắc chắn là dấu hiệu bỏ sót/lỗi
   // nhận diện, báo rõ ĐÚNG SỐ nào để giáo viên biết chỗ cần kiểm tra lại trong file gốc.
-  const sortedNums = foundNums.slice().sort((a, b) => a - b);
-  const seen = new Set();
-  const duplicates = new Set();
-  sortedNums.forEach((n) => { if (seen.has(n)) duplicates.add(n); seen.add(n); });
-  if (duplicates.size) {
-    warnings.unshift(`⚠️ Trùng số thứ tự: Câu ${Array.from(duplicates).join(', Câu ')} — kiểm tra lại các câu này, có thể 1 câu bị cắt thành 2 ảnh.`);
-  }
-  const missing = [];
-  for (let n = sortedNums[0]; n <= sortedNums[sortedNums.length - 1]; n++) {
-    if (!seen.has(n)) missing.push(n);
-  }
-  if (missing.length) {
-    warnings.unshift(`⚠️ Thiếu số thứ tự: Câu ${missing.join(', Câu ')} — kiểm tra lại các câu này trong file gốc rồi bổ sung thủ công nếu cần.`);
-  }
+  // Đề chuẩn 2025 chia nhiều "PHẦN" và MỖI PHẦN ĐÁNH SỐ LẠI TỪ "Câu 1" — nên phải tính thiếu/trùng
+  // RIÊNG TỪNG PHẦN (gộp theo `part`), nếu không sẽ báo trùng giả hàng loạt giữa các phần khác nhau.
+  const numsByPart = new Map();
+  foundNums.forEach((entry) => {
+    if (!numsByPart.has(entry.part)) numsByPart.set(entry.part, { partLabel: entry.partLabel, nums: [] });
+    numsByPart.get(entry.part).nums.push(entry.num);
+  });
+  const partWarningPrefix = (partLabel) => (partLabel ? `⚠️ Phần ${partLabel}: ` : '⚠️ ');
+  Array.from(numsByPart.keys()).sort((a, b) => a - b).forEach((partKey) => {
+    const { partLabel, nums } = numsByPart.get(partKey);
+    const sortedNums = nums.slice().sort((a, b) => a - b);
+    const seen = new Set();
+    const duplicates = new Set();
+    sortedNums.forEach((n) => { if (seen.has(n)) duplicates.add(n); seen.add(n); });
+    if (duplicates.size) {
+      warnings.unshift(`${partWarningPrefix(partLabel)}Trùng số thứ tự: Câu ${Array.from(duplicates).join(', Câu ')} — kiểm tra lại các câu này, có thể 1 câu bị cắt thành 2 ảnh.`);
+    }
+    const missing = [];
+    for (let n = sortedNums[0]; n <= sortedNums[sortedNums.length - 1]; n++) {
+      if (!seen.has(n)) missing.push(n);
+    }
+    if (missing.length) {
+      warnings.unshift(`${partWarningPrefix(partLabel)}Thiếu số thứ tự: Câu ${missing.join(', Câu ')} — kiểm tra lại các câu này trong file gốc rồi bổ sung thủ công nếu cần.`);
+    }
+  });
 
   return { questions, warnings };
 }
