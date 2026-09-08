@@ -388,10 +388,14 @@ const QUIZ_PART_MARKER_RE = /^PH[ẦA]N\s+([IVXLCDM]+)\s*[.:]?\s*(.*)$/i;
 const QUIZ_ESSAY_PART_RE = /tự\s*luận/i;
 // Toạ độ 1 mốc "Câu N." là VỊ TRÍ DÒNG CƠ SỞ (baseline) của dòng chữ đó — dấu tiếng Việt (ệ, ẫ, ỡ...)
 // và các nét chữ vươn lên đều nằm PHÍA TRÊN baseline, cao thấp KHÁC NHAU tuỳ cỡ chữ/kiểu chữ từng câu.
-// Từng thử trừ lùi 1 khoảng PIXEL CỐ ĐỊNH cho ranh giới — không ổn: đoán thiếu thì vẫn cắt cụt/dính
-// chữ, đoán dư thì lại lấn sang đúng câu bên cạnh (đã kiểm chứng cả 2 kiểu lỗi này bằng file giả lập).
-// Cách ĐÚNG hơn: tìm NGAY khoảng trắng thật giữa 2 câu (quét pixel thật, không đoán cỡ chữ) rồi cắt
-// đúng GIỮA khoảng trắng đó — luôn đúng bất kể cỡ chữ/dấu cao thấp thế nào, vì dựa vào pixel thật.
+// Từng thử trừ lùi 1 khoảng PIXEL CỐ ĐỊNH cho ranh giới — không ổn (đã kiểm chứng bằng file giả lập).
+// Từng thử "tìm khoảng trắng PIXEL lớn nhất" giữa 2 mốc — cũng SAI trên đề thật: nhiều đề canh dòng
+// ĐỀU NHAU tuyệt đối (không có khoảng cách dư giữa các câu so với giữa các dòng CÙNG 1 câu), nên
+// "khoảng trắng lớn nhất" trong cả vùng giữa 2 mốc dễ rơi đúng vào khoảng cách NỘI BỘ của câu trước
+// (VD giữa dòng đề và dòng đáp án của CHÍNH câu đó) thay vì đúng ranh giới giữa 2 câu — đã thấy tận
+// mắt: đáp án câu trước bị dính vào đầu ảnh câu sau, còn đáp án của chính câu đó lại bị đẩy sang ảnh
+// câu kế tiếp. Cách ĐÚNG: dùng luôn TOẠ ĐỘ DÒNG CHỮ THẬT (pdf.js cho biết chính xác, không cần đoán)
+// — cắt đúng GIỮA dòng cuối cùng THẬT SỰ đứng trước mốc và chính dòng mốc đó.
 function quizRowBlank(data, width, y) {
   for (let x = 0; x < width; x += 3) {
     const i = (y * width + x) * 4;
@@ -400,30 +404,32 @@ function quizRowBlank(data, width, y) {
   return true;
 }
 
-// Tìm khoảng TRẮNG LIÊN TỤC dài nhất trong dải [fromY, toY) của trang — đó chính là khoảng cách thật
-// giữa cuối câu này và đầu câu sau. Trả về điểm GIỮA khoảng trắng đó để cắt, hoặc null nếu không tìm
-// thấy khoảng trắng nào đủ dài (bố cục quá sát, hiếm gặp) — khi đó nơi gọi sẽ tự có phương án dự phòng.
-function findBlankGapSplitY(pageCanvas, fromY, toY) {
-  const width = pageCanvas.width;
-  fromY = Math.max(0, Math.round(fromY));
-  toY = Math.min(pageCanvas.height, Math.round(toY));
-  if (toY <= fromY) return null;
-  const data = pageCanvas.getContext('2d').getImageData(0, fromY, width, toY - fromY).data;
-  const bandHeight = toY - fromY;
-  let bestStart = -1;
-  let bestLen = 0;
-  let curStart = -1;
-  for (let y = 0; y <= bandHeight; y++) {
-    const blank = y < bandHeight && quizRowBlank(data, width, y);
-    if (blank && curStart === -1) curStart = y;
-    if (!blank && curStart !== -1) {
-      const len = y - curStart;
-      if (len > bestLen) { bestLen = len; bestStart = curStart; }
-      curStart = -1;
-    }
+// Ước lượng khoảng cách dòng-dòng "bình thường" trên 1 trang bằng số TRUNG VỊ (median) của mọi khoảng
+// cách dòng liền kề — chọn trung vị để không bị lệch bởi vài dòng công thức/kí hiệu trên-dưới dòng
+// (superscript/subscript, VD dấu "+" của ion H+) xen giữa có khoảng cách NHỎ HƠN HẲN dòng thường.
+function estimateLineHeight(lines) {
+  if (lines.length < 2) return null;
+  const deltas = [];
+  for (let i = 1; i < lines.length; i++) {
+    const d = lines[i].y - lines[i - 1].y;
+    if (d > 0) deltas.push(d);
   }
-  if (bestStart === -1) return null;
-  return fromY + bestStart + Math.floor(bestLen / 2);
+  if (!deltas.length) return null;
+  deltas.sort((a, b) => a - b);
+  return deltas[Math.floor(deltas.length / 2)];
+}
+
+// Tìm toạ độ Y của dòng CHỮ THẬT gần nhất đứng trước dòng tại chỉ số `idx` trong mảng `lines` — bỏ qua
+// những "dòng" thật ra chỉ là MẢNH VỠ kí hiệu trên/dưới dòng (superscript/subscript) bị tách nhầm thành
+// dòng riêng vì pdf.js đặt nó lệch Y so với dòng chữ chính (dấu hiệu: khoảng cách xuống dòng kế tiếp
+// nhỏ hơn HẲN 1 dòng thật — dưới nửa khoảng cách dòng bình thường của trang). Trả về null nếu dòng
+// mốc này đã là dòng ĐẦU TIÊN của trang (không có gì đứng trước để cắt ranh giới).
+function findPrevRealLineY(lines, idx, lineHeight) {
+  if (idx <= 0) return null;
+  const minGap = lineHeight ? lineHeight * 0.5 : 6;
+  let j = idx - 1;
+  while (j > 0 && (lines[j + 1].y - lines[j].y) < minGap) j--;
+  return lines[j].y;
 }
 
 // Cắt vùng dọc [top, bottom) của canvas trang thành 1 canvas riêng, tự bỏ lề trắng thừa 2 đầu (giống
@@ -553,12 +559,12 @@ async function extractQuizFromPdf(arrayBuffer) {
       // Câu như trước) — để biết chính xác câu nào thuộc phần nào, và BỎ QUA hẳn câu thuộc phần "tự
       // luận" (giáo viên đã xác nhận không đưa vào kho câu hỏi trắc nghiệm — không có đáp án để chấm).
       const events = [];
-      lines.forEach((line) => {
+      lines.forEach((line, idx) => {
         const text = line.text.trim();
         const partM = text.match(QUIZ_PART_MARKER_RE);
-        if (partM) { events.push({ y: line.y, kind: 'part', label: partM[1].toUpperCase(), essay: QUIZ_ESSAY_PART_RE.test(partM[2]) }); return; }
+        if (partM) { events.push({ y: line.y, idx, kind: 'part', label: partM[1].toUpperCase(), essay: QUIZ_ESSAY_PART_RE.test(partM[2]) }); return; }
         const qM = text.match(QUIZ_QUESTION_MARKER_RE);
-        if (qM) events.push({ y: line.y, kind: 'question', num: qM[1] });
+        if (qM) events.push({ y: line.y, idx, kind: 'question', num: qM[1] });
       });
       events.sort((a, b) => a.y - b.y);
 
@@ -568,7 +574,7 @@ async function extractQuizFromPdf(arrayBuffer) {
       events.forEach((ev) => {
         if (ev.kind === 'part') { partIndex++; essayMode = ev.essay; currentPartLabel = ev.label; partEventSeenOnPage = true; return; }
         if (essayMode) return; // câu thuộc phần tự luận -> bỏ qua, không cắt ảnh, không đưa vào kho
-        markers.push({ y: ev.y, num: ev.num, part: partIndex, partLabel: currentPartLabel });
+        markers.push({ y: ev.y, idx: ev.idx, num: ev.num, part: partIndex, partLabel: currentPartLabel });
       });
 
       const hasOptionsBetween = (top, bottom) => lines.some((line) => {
@@ -591,19 +597,26 @@ async function extractQuizFromPdf(arrayBuffer) {
         continue;
       }
 
-      // Tính sẵn MỌI ranh giới giữa các câu trên trang bằng cách tìm khoảng trắng thật (không đoán cỡ
-      // chữ) — mỗi ranh giới tính ĐÚNG 1 LẦN rồi dùng chung làm "cuối câu trước" VÀ "đầu câu sau", nên
+      // Tính sẵn MỌI ranh giới giữa các câu trên trang bằng TOẠ ĐỘ DÒNG CHỮ THẬT (không đoán bằng
+      // khoảng trắng pixel — nhiều đề canh dòng đều tăm tắp, không có khoảng dư giữa 2 câu so với giữa
+      // 2 dòng NỘI BỘ 1 câu, nên "tìm khoảng trắng lớn nhất" dễ chọn nhầm ranh giới nội bộ của câu
+      // trước, đã thấy tận mắt: đáp án câu trước dính sang câu sau, đáp án câu này lại lạc sang câu kế
+      // tiếp). Mỗi ranh giới tính ĐÚNG 1 LẦN rồi dùng chung làm "cuối câu trước" VÀ "đầu câu sau", nên
       // không bao giờ hở (mất chữ) hay chồng (dính chữ câu bên cạnh) giữa 2 câu liền nhau.
       // Có mốc "PHẦN" trước mốc "Câu" đầu tiên trên trang -> KHÔNG nối câu đang mở với phần mới này.
+      const lineHeight = estimateLineHeight(lines);
       const partBeforeFirstMarker = events.some((e) => e.kind === 'part' && e.y < markers[0].y);
       const leadingSplit = (openQuestion && !partBeforeFirstMarker)
-        ? (findBlankGapSplitY(canvas, 0, markers[0].y) ?? Math.max(0, markers[0].y - QUIZ_MARKER_VERTICAL_PAD))
+        ? (() => {
+            const prevY = findPrevRealLineY(lines, markers[0].idx, lineHeight);
+            return prevY !== null ? (prevY + markers[0].y) / 2 : 0;
+          })()
         : 0;
       const boundaries = new Array(markers.length + 1);
       boundaries[0] = leadingSplit;
       for (let i = 1; i < markers.length; i++) {
-        const gap = findBlankGapSplitY(canvas, markers[i - 1].y, markers[i].y);
-        boundaries[i] = gap !== null ? gap : Math.max(boundaries[i - 1], markers[i].y - QUIZ_MARKER_VERTICAL_PAD);
+        const prevY = findPrevRealLineY(lines, markers[i].idx, lineHeight);
+        boundaries[i] = prevY !== null ? (prevY + markers[i].y) / 2 : Math.max(boundaries[i - 1], markers[i].y - QUIZ_MARKER_VERTICAL_PAD);
       }
       boundaries[markers.length] = canvas.height;
 
