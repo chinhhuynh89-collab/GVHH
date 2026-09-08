@@ -21,6 +21,7 @@
   let groupProgramChapterIds = {}; // programId -> [chapterId,...] được giao cho nhóm
   let groupPrograms = [];
   let groupGrades = [];
+  let currentMembership = null; // membership ĐANG dùng để dựng trang (null khi teacher/preview) — xem renderGroupPicker()
 
   let tabs = [];
   let currentTabKey = null;
@@ -107,6 +108,7 @@
     // hiện nhầm cho tài khoản MỚI trên cùng máy.
     const membership = typeof getVerifiedMembership === 'function' ? await getVerifiedMembership() : null;
     if (!membership || !membership.groupCode) { viewerMode = 'guest'; return; }
+    currentMembership = membership;
 
     // Nhóm bị khoá (vượt hạn mức số nhóm miễn phí, giáo viên chưa gia hạn Pro) — chặn NGAY, trước cả
     // khi tải tiến độ/chương trình, để không lộ nội dung của nhóm đang bị khoá.
@@ -158,6 +160,60 @@
     }
 
     viewerMode = (groupGrades.length || groupPrograms.length) ? 'group' : 'guest';
+  }
+
+  // Học sinh có thể ở NHIỀU NHÓM cùng lúc (xem join-group.js), nhưng "membership" (đọc ở initContext)
+  // chỉ nhớ ĐÚNG 1 nhóm — trang này là nơi học sinh THẬT SỰ bấm vào để học, nên đặt nút chuyển nhóm
+  // NGAY ĐÂY thay vì ở trang "Vào nhóm" (chỉ để xem danh sách). Chỉ hiện khi có TỪ 2 NHÓM TRỞ LÊN —
+  // 1 nhóm duy nhất thì không cần chọn gì cả. KHÔNG hiện lúc giáo viên xem thử 1 nhóm cụ thể
+  // (currentMembership vẫn null trong nhánh "previewing" ở initContext) vì không có tài khoản học
+  // sinh thật để tra danh sách nhóm.
+  async function renderGroupPicker() {
+    const card = $('#myGroupsPickerCard');
+    if (!card) return;
+    if (viewerMode !== 'group' || !currentMembership || !currentMembership.studentUid || typeof listMyGroups !== 'function') {
+      card.style.display = 'none';
+      return;
+    }
+    try {
+      const groups = await listMyGroups(currentMembership.studentUid);
+      if (groups.length <= 1) { card.style.display = 'none'; return; }
+      const { db } = ensureFirebase();
+      const teacherUids = Array.from(new Set(groups.map((g) => g.teacherUid).filter(Boolean)));
+      const profiles = await Promise.all(teacherUids.map((uid) => db.collection('teacherProfiles').doc(uid).get().catch(() => null)));
+      const profileByUid = new Map(teacherUids.map((uid, i) => [uid, (profiles[i] && profiles[i].exists) ? profiles[i].data() : {}]));
+      card.style.display = 'block';
+      const activeStudentId = currentMembership.studentId;
+      $('#myGroupsPickerList').innerHTML = groups.map((g, i) => {
+        const profile = profileByUid.get(g.teacherUid) || {};
+        const teacherLabel = profile.displayName
+          ? `${typeof honorificForGender === 'function' ? honorificForGender(profile.gender) : ''} ${profile.displayName}`.trim()
+          : 'Giáo viên';
+        const groupLabel = g.groupName || '(chưa rõ tên nhóm)';
+        const isActive = !!g.studentId && g.studentId === activeStudentId;
+        return `
+          <button class="btn ${isActive ? 'primary' : ''} group-picker-btn" type="button" data-index="${i}"
+            style="width:100%;text-align:left;margin-bottom:8px;${isActive ? 'opacity:1;' : ''}" ${isActive ? 'disabled' : ''}>
+            ${isActive ? '✓ ' : ''}${escapeHtml(teacherLabel)} — ${escapeHtml(groupLabel)} · Lớp ${escapeHtml(String(g.grade || '—'))}
+          </button>
+        `;
+      }).join('');
+      $$('.group-picker-btn', $('#myGroupsPickerList')).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const g = groups[parseInt(btn.dataset.index, 10)];
+          if (!g || g.studentId === activeStudentId) return;
+          setMembership(Object.assign({}, g, { studentUid: currentMembership.studentUid }));
+          showToast(`Đã chuyển sang nhóm "${g.groupName || '(chưa rõ tên nhóm)'}"`, false);
+          await initContext();
+          applyHeaderTitle();
+          buildTabs();
+          await renderCurrentTab();
+          await renderGroupPicker();
+        });
+      });
+    } catch (e) {
+      card.style.display = 'none';
+    }
   }
 
   // Trang này phục vụ CẢ giáo viên lẫn học sinh (không dùng chung requireTeacherAuth/requireStudentAuth
@@ -420,5 +476,6 @@
     $('#overviewWrap').style.display = 'block';
     buildTabs();
     await renderCurrentTab();
+    await renderGroupPicker();
   })();
 })();

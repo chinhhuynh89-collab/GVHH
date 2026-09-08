@@ -18,8 +18,9 @@
 </header>
 
 <main id="joinBody">
-  <!-- Danh sách nhóm ĐÃ tham gia (đã được duyệt) — kèm nút "Học nhóm này" khi ở từ 2 nhóm trở lên
-       (xem renderMyGroupsList, js/features/join-group.js), để chuyển đúng nhóm đang xem/học. -->
+  <!-- Danh sách nhóm ĐÃ tham gia (đã được duyệt) — chỉ để XEM. Chuyển "nhóm đang học" (khi ở nhiều
+       nhóm) làm ở trang "Chương trình học tập" (xem renderGroupPicker, chapter-overview.js), đúng nơi
+       học sinh bấm vào để bắt đầu học, thay vì ở đây. -->
   <div class="card" id="myGroupsCard" style="display:none;margin-bottom:14px;">
     <h2><span class="icon">✅</span>Nhóm đang tham gia</h2>
     <div id="myGroupsList"></div>

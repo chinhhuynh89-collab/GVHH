@@ -21,6 +21,15 @@
   <div class="card" id="gateCard" style="display:none;"></div>
 
   <div id="overviewWrap" style="display:none;">
+    <!-- Chỉ hiện khi học sinh ở TỪ 2 NHÓM TRỞ LÊN (xem renderGroupPicker, chapter-overview.js) — bấm
+         vào 1 nhóm khác để chuyển "nhóm đang học" (quyết định chương trình hiện ra bên dưới) sang
+         đúng nhóm đó, ngay tại nơi học sinh thật sự bấm vào để bắt đầu học. -->
+    <div class="card" id="myGroupsPickerCard" style="display:none;margin-bottom:14px;">
+      <h2><span class="icon">🧑‍🤝‍🧑</span>Nhóm đang học</h2>
+      <p class="hint" style="margin-top:-4px;">Bạn đang ở nhiều nhóm — bấm vào 1 nhóm để xem đúng chương trình học của nhóm đó.</p>
+      <div id="myGroupsPickerList"></div>
+    </div>
+
     <div class="tabs" id="gradeTabs"></div>
 
     <div class="card" id="programAddForm" style="display:none;">

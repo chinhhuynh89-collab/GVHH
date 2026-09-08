@@ -259,16 +259,10 @@ async function getLockedStudentIdentity(studentUid, studentEmail) {
   return await fromExistingGroup();
 }
 
-// Liệt kê các nhóm ĐÃ được duyệt vào — kèm nút "Học nhóm này" khi ở TỪ 2 NHÓM TRỞ LÊN, để chuyển
-// "membership" (nhóm đang xem/học — xem chú thích đầu file) sang đúng nhóm vừa bấm. Cần thiết vì
-// "membership" chỉ nhớ ĐÚNG 1 nhóm tại 1 thời điểm (index.html/hoc-theo-chuong.html/kiem-tra.html đều
-// đọc theo nhóm này để quyết định hiện chương trình học/đề thi nào) — trước đây KHÔNG có cách chuyển
-// (chỉ xem danh sách), nên học sinh được giáo viên thêm vào 1 nhóm MỚI (hoặc nhóm có chương trình
-// khác) vẫn tiếp tục thấy chương trình của nhóm CŨ đã cache, không có lối nào tự chuyển sang nhóm mới.
-// Bản trước đây từng có nút này nhưng bị gỡ vì lỗi hiện "undefined" khi thiếu tên nhóm — đã tránh lại
-// đúng lỗi đó ở dưới (luôn có phương án dự phòng "(chưa rõ tên nhóm)" cho mọi chỗ dùng g.groupName).
-// Gộp tên + xưng hô giáo viên của từng nhóm (đọc "teacherProfiles", công khai) — dùng Map để mỗi giáo
-// viên chỉ đọc 1 lần dù có nhiều nhóm của cùng người đó.
+// Liệt kê các nhóm ĐÃ được duyệt vào — CHỈ XEM ở trang này (nút "chuyển nhóm đang học" đặt ở trang
+// "Chương trình học tập" — xem renderGroupPicker(), js/features/chapter-overview.js — đúng nơi học
+// sinh thật sự bấm vào để học, thay vì ở đây). Gộp tên + xưng hô giáo viên của từng nhóm (đọc
+// "teacherProfiles", công khai) — dùng Map để mỗi giáo viên chỉ đọc 1 lần dù có nhiều nhóm của cùng người đó.
 async function renderMyGroupsList(studentUid) {
   const card = $('#myGroupsCard');
   const box = $('#myGroupsList');
@@ -280,35 +274,16 @@ async function renderMyGroupsList(studentUid) {
     const profiles = await Promise.all(teacherUids.map((uid) => db.collection('teacherProfiles').doc(uid).get().catch(() => null)));
     const profileByUid = new Map(teacherUids.map((uid, i) => [uid, (profiles[i] && profiles[i].exists) ? profiles[i].data() : {}]));
     card.style.display = 'block';
-    const activeStudentId = (getMembership() || {}).studentId;
-    const showSwitcher = groups.length > 1;
-    box.innerHTML = groups.map((g, i) => {
+    box.innerHTML = groups.map((g) => {
       const profile = profileByUid.get(g.teacherUid) || {};
       const teacherLabel = profile.displayName ? `${honorificForGender(profile.gender)} ${profile.displayName}` : 'Giáo viên';
       const joinedDate = g.joinedAt ? new Date(g.joinedAt).toLocaleDateString('vi-VN') : '—';
-      const groupLabel = g.groupName || '(chưa rõ tên nhóm)';
-      const isActive = !!g.studentId && g.studentId === activeStudentId;
       return `
         <div style="padding:8px 0;border-top:1px solid var(--border);">
-          <span class="hint"><strong>${escapeHtml(teacherLabel)}</strong> — ${escapeHtml(groupLabel)} (mã ${escapeHtml(g.groupCode || '—')}) · Lớp ${escapeHtml(String(g.grade || '—'))} · Tham gia: ${joinedDate}</span>
-          ${showSwitcher ? (
-            isActive
-              ? `<div style="margin-top:6px;"><span class="hint" style="color:var(--brand);font-weight:700;">✓ Đang học nhóm này</span></div>`
-              : `<div style="margin-top:6px;"><button class="btn select-group-btn" type="button" data-index="${i}" style="padding:6px 12px;font-size:13px;">Học nhóm này</button></div>`
-          ) : ''}
+          <span class="hint"><strong>${escapeHtml(teacherLabel)}</strong> — ${escapeHtml(g.groupName || '(chưa rõ tên nhóm)')} (mã ${escapeHtml(g.groupCode || '—')}) · Lớp ${escapeHtml(String(g.grade || '—'))} · Tham gia: ${joinedDate}</span>
         </div>
       `;
     }).join('');
-    if (showSwitcher) {
-      $$('.select-group-btn', box).forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const g = groups[parseInt(btn.dataset.index, 10)];
-          setMembership(Object.assign({}, g, { studentUid }));
-          showToast(`Đã chuyển sang học nhóm "${g.groupName || '(chưa rõ tên nhóm)'}" — vào trang chủ để bắt đầu học/làm bài.`, false);
-          renderMyGroupsList(studentUid);
-        });
-      });
-    }
   } catch (e) {
     card.style.display = 'block';
     box.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
