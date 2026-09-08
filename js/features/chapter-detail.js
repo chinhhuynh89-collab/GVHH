@@ -56,6 +56,8 @@
   // Set RỖNG = không loại Bài nào (mặc định) — dùng "danh sách LOẠI TRỪ" thay vì "danh sách chọn" để
   // Bài MỚI tạo tự động được tính vào ngay, không cần thêm tay vào 1 danh sách chọn riêng.
   const excludedUnitIds = new Set();
+  // Tích chọn NHIỀU Bài trong "Danh sách Bài" để xoá gộp 1 lần — xem renderUnitsList/deleteUnitsCascade.
+  const selectedUnitIdsForDelete = new Set();
   function applyQuizUnitFilter(items) {
     if (activeUnitId || !excludedUnitIds.size) return items;
     return items.filter((it) => !it.unitId || !excludedUnitIds.has(it.unitId));
@@ -116,6 +118,9 @@
         groupIds: group.map((g) => g.id),
         title: fileName.replace(/\.[^.]+$/, ''),
         points: group.reduce((acc, g) => acc.concat(g.points), []),
+        // Giữ lại TỪNG trang riêng (không chỉ gộp phẳng vào "points" ở trên) — cần để xoá được TỪNG
+        // trang lỗi/trùng bên trong 1 Bài nhiều trang, khỏi bắt xoá sạch cả Bài rồi nạp lại từ đầu.
+        pages: group,
         order: group[0].order,
         addedAt: group[0].addedAt,
         sourceFileName: fileName,
@@ -306,18 +311,32 @@
     const section = $('#unitsSection');
     if (section) {
       const units = getUnits();
+      // Bài đã bị xoá (VD do 1 tab khác/thiết bị khác) không còn trong danh sách -> bỏ khỏi lựa chọn
+      // đang tích, tránh giữ id "ma" khiến nút Xoá đã chọn tưởng còn N Bài trong khi thực ra ít hơn.
+      const validIds = new Set(units.map((u) => u.id));
+      Array.from(selectedUnitIdsForDelete).forEach((id) => { if (!validIds.has(id)) selectedUnitIdsForDelete.delete(id); });
       if (!units.length && !owner.isOwner) {
         section.style.display = 'none';
       } else {
         section.style.display = 'block';
         $('#unitsAddBtn').style.display = owner.isOwner ? 'block' : 'none';
+        const deleteSelectedBtn = $('#unitsDeleteSelectedBtn');
+        // Chỉ đáng hiện khi có TỪ 2 Bài trở lên — xoá 1 Bài đã có sẵn nút "Xoá cả Bài" riêng của nó rồi.
+        deleteSelectedBtn.style.display = (owner.isOwner && units.length > 1) ? 'block' : 'none';
+        deleteSelectedBtn.textContent = selectedUnitIdsForDelete.size
+          ? `🗑️ Xoá ${selectedUnitIdsForDelete.size} Bài đã chọn`
+          : '🗑️ Xoá các Bài đã chọn';
+        deleteSelectedBtn.disabled = !selectedUnitIdsForDelete.size;
         const list = $('#unitsList');
         if (!units.length) {
           list.innerHTML = '<div class="hint">Chưa có Bài nào — bấm "+ Thêm Bài mới" để bắt đầu.</div>';
         } else {
           list.innerHTML = units.map((u, i) => `
             <div class="unit-row">
-              <div class="unit-title">${escapeHtml(u.title)}</div>
+              <div class="unit-title" style="display:flex;align-items:center;gap:8px;">
+                ${owner.isOwner && units.length > 1 ? `<input type="checkbox" class="unit-select-check" data-id="${u.id}" ${selectedUnitIdsForDelete.has(u.id) ? 'checked' : ''} />` : ''}
+                <span>${escapeHtml(u.title)}</span>
+              </div>
               ${owner.isOwner ? `
               <div class="unit-owner-actions hint">
                 <a href="#" class="unit-rename" data-id="${u.id}">Đổi tên</a>
@@ -400,44 +419,60 @@
       });
     });
     $$('.unit-delete', list).forEach((a) => {
-      a.addEventListener('click', async (e) => {
-        e.preventDefault();
-        const units = getUnits();
-        const unit = units.find((u) => u.id === a.dataset.id);
-        if (!unit) return;
-        const lessonIds = customLessonsCache.filter((it) => it.unitId === unit.id).map((it) => it.id);
-        const quizIds = customQuizCache.filter((it) => it.unitId === unit.id).map((it) => it.id);
-        const flashIds = customFlashcardsCache.filter((it) => it.unitId === unit.id).map((it) => it.id);
-        const totalCount = lessonIds.length + quizIds.length + flashIds.length;
-        if (!confirm(`Xoá cả Bài "${unit.title}"? Sẽ xoá ${lessonIds.length} phần bài giảng, ${quizIds.length} câu hỏi, ${flashIds.length} flashcard bên trong Bài này. Không thể hoàn tác.`)) return;
-        try {
-          await Promise.all([
-            ...lessonIds.map((id) => deleteCustomLesson(id)),
-            ...quizIds.map((id) => deleteCustomQuiz(id)),
-            ...flashIds.map((id) => deleteCustomFlashcard(id))
-          ]);
-          customLessonsCache = customLessonsCache.filter((it) => it.unitId !== unit.id);
-          customQuizCache = customQuizCache.filter((it) => it.unitId !== unit.id);
-          customFlashcardsCache = customFlashcardsCache.filter((it) => it.unitId !== unit.id);
-          excludedUnitIds.delete(unit.id);
-          const newUnits = units.filter((u) => u.id !== unit.id);
-          await saveUnits(newUnits);
-          if (activeUnitId === unit.id) {
-            setActiveUnit(null);
-          } else {
-            rebuildEffectiveQuiz();
-            renderAllLessons();
-            renderFlash();
-            renderQuiz();
-            if (owner.isOwner) { renderQuizManager(); renderFlashManager(); renderQuizStats(); }
-          }
-          renderUnitsList();
-          showToast(`Đã xoá cả Bài "${unit.title}" (${totalCount} mục).`, false);
-        } catch (err) {
-          showToast('Không xoá được: ' + err.message);
-        }
+      a.addEventListener('click', (e) => { e.preventDefault(); deleteUnitsCascade([a.dataset.id]); });
+    });
+    $$('.unit-select-check', list).forEach((cb) => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) selectedUnitIdsForDelete.add(cb.dataset.id);
+        else selectedUnitIdsForDelete.delete(cb.dataset.id);
+        const btn = $('#unitsDeleteSelectedBtn');
+        btn.textContent = selectedUnitIdsForDelete.size ? `🗑️ Xoá ${selectedUnitIdsForDelete.size} Bài đã chọn` : '🗑️ Xoá các Bài đã chọn';
+        btn.disabled = !selectedUnitIdsForDelete.size;
       });
     });
+  }
+
+  // Xoá cả 1 HOẶC NHIỀU Bài cùng lúc (dùng chung cho nút "Xoá cả Bài" của từng dòng LẪN nút "Xoá các
+  // Bài đã chọn" ở dưới) — xoá sạch bài giảng/trắc nghiệm/flashcard bên trong TỪNG Bài rồi mới xoá
+  // entry khỏi chapterMeta.units, gộp 1 lượt xác nhận + 1 lượt vẽ lại duy nhất dù xoá bao nhiêu Bài.
+  async function deleteUnitsCascade(unitIds) {
+    const units = getUnits();
+    const targets = units.filter((u) => unitIds.includes(u.id));
+    if (!targets.length) return;
+    const lessonIds = customLessonsCache.filter((it) => unitIds.includes(it.unitId)).map((it) => it.id);
+    const quizIds = customQuizCache.filter((it) => unitIds.includes(it.unitId)).map((it) => it.id);
+    const flashIds = customFlashcardsCache.filter((it) => unitIds.includes(it.unitId)).map((it) => it.id);
+    const totalCount = lessonIds.length + quizIds.length + flashIds.length;
+    const confirmMsg = targets.length > 1
+      ? `Xoá ${targets.length} Bài đã chọn (${targets.map((u) => `"${u.title}"`).join(', ')})? Sẽ xoá tổng cộng ${lessonIds.length} phần bài giảng, ${quizIds.length} câu hỏi, ${flashIds.length} flashcard. Không thể hoàn tác.`
+      : `Xoá cả Bài "${targets[0].title}"? Sẽ xoá ${lessonIds.length} phần bài giảng, ${quizIds.length} câu hỏi, ${flashIds.length} flashcard bên trong Bài này. Không thể hoàn tác.`;
+    if (!confirm(confirmMsg)) return;
+    try {
+      await Promise.all([
+        ...lessonIds.map((id) => deleteCustomLesson(id)),
+        ...quizIds.map((id) => deleteCustomQuiz(id)),
+        ...flashIds.map((id) => deleteCustomFlashcard(id))
+      ]);
+      customLessonsCache = customLessonsCache.filter((it) => !unitIds.includes(it.unitId));
+      customQuizCache = customQuizCache.filter((it) => !unitIds.includes(it.unitId));
+      customFlashcardsCache = customFlashcardsCache.filter((it) => !unitIds.includes(it.unitId));
+      unitIds.forEach((id) => { excludedUnitIds.delete(id); selectedUnitIdsForDelete.delete(id); });
+      const newUnits = units.filter((u) => !unitIds.includes(u.id));
+      await saveUnits(newUnits);
+      if (unitIds.includes(activeUnitId)) {
+        setActiveUnit(null);
+      } else {
+        rebuildEffectiveQuiz();
+        renderAllLessons();
+        renderFlash();
+        renderQuiz();
+        if (owner.isOwner) { renderQuizManager(); renderFlashManager(); renderQuizStats(); }
+      }
+      renderUnitsList();
+      showToast(targets.length > 1 ? `Đã xoá ${targets.length} Bài (${totalCount} mục).` : `Đã xoá cả Bài "${targets[0].title}" (${totalCount} mục).`, false);
+    } catch (err) {
+      showToast('Không xoá được: ' + err.message);
+    }
   }
 
   function initUnitsSection() {
@@ -457,6 +492,10 @@
         } catch (err) {
           showToast('Không tạo được Bài mới: ' + err.message);
         }
+      });
+      const deleteSelectedBtn = $('#unitsDeleteSelectedBtn');
+      if (deleteSelectedBtn) deleteSelectedBtn.addEventListener('click', () => {
+        if (selectedUnitIdsForDelete.size) deleteUnitsCascade(Array.from(selectedUnitIdsForDelete));
       });
     }
     renderUnitsList();
@@ -708,6 +747,20 @@
     return html;
   }
 
+  // 1 Bài nạp từ file nhiều trang (isGroup) hiện TỪNG TRANG riêng (không gộp phẳng như trước) kèm nút
+  // xoá RIÊNG cho từng trang — trước đây chỉ có "Xoá cả bài" (xoá sạch mọi trang cùng lúc), lỡ 1 trang
+  // bị lỗi/trùng phải xoá hết rồi nạp lại từ đầu. Mục đơn (không phải nhóm, kể cả có sẵn trong app) vẫn
+  // hiện y như cũ (renderLessonPointsHtml thẳng), không có khái niệm "từng trang" để xoá riêng.
+  function renderLessonPagesHtml(l) {
+    if (!l.isGroup) return renderLessonPointsHtml(l.points);
+    return l.pages.map((p, i) => `
+      <div class="lesson-page-block" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px dashed var(--border);">
+        ${owner.isOwner ? `<div class="hint" style="margin-bottom:6px;">Trang ${i + 1}/${l.pages.length} · <a href="#" class="lesson-delete-page" data-id="${p.id}">🗑️ Xoá trang này</a></div>` : ''}
+        ${renderLessonPointsHtml(p.points)}
+      </div>
+    `).join('');
+  }
+
   // Chương có nhiều "Bài" — mặc định chỉ hiện TIÊU ĐỀ, bấm vào mới xổ nội dung ra (đỡ rối khi 1 chương
   // có nhiều bài, mỗi bài lại nhiều trang). Nhớ theo "key" riêng từng bài nên bấm mở/đóng 1 bài không
   // ảnh hưởng các bài khác đang mở, kể cả sau khi renderAllLessons() vẽ lại (VD sau khi sửa/xoá 1 bài).
@@ -732,7 +785,7 @@
           <h3 class="lesson-toggle" data-key="${key}">
             <span class="lesson-toggle-arrow">${expanded ? '▾' : '▸'}</span> ${escapeHtml(l.title)}
           </h3>
-          ${expanded ? renderLessonPointsHtml(l.points) : ''}
+          ${expanded ? renderLessonPagesHtml(l) : ''}
           ${owner.isOwner ? `
             <div class="hint" style="margin-top:8px;">
               ${l.kind === 'builtin' ? (l.edited ? 'Đã sửa' : 'Có sẵn trong app') : (l.isGroup ? `Tự thêm (${l.groupIds.length} phần)` : 'Tự thêm')}
@@ -800,6 +853,20 @@
           renderAllLessons();
         } catch (err) {
           showToast('Không thực hiện được: ' + err.message);
+        }
+      });
+    });
+    $$('.lesson-delete-page', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const id = a.dataset.id;
+        if (!confirm('Xoá trang này? Không thể hoàn tác.')) return;
+        try {
+          await deleteCustomLesson(id);
+          customLessonsCache = customLessonsCache.filter((it) => it.id !== id);
+          renderAllLessons();
+        } catch (err) {
+          showToast('Không xoá được: ' + err.message);
         }
       });
     });

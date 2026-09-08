@@ -47,7 +47,10 @@
     <h2><span class="icon">📚</span>Danh sách Bài</h2>
     <p class="hint" style="margin-top:-4px;">Gom bài giảng, flashcard, trắc nghiệm, tự kiểm tra Tự thêm theo từng Bài riêng — nội dung có sẵn trong app vẫn xem ở phần "Chung" bên dưới.</p>
     <div id="unitsList"></div>
-    <button class="btn block" id="unitsAddBtn" style="display:none;margin-top:10px;">+ Thêm Bài mới</button>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn block" id="unitsAddBtn" style="display:none;flex:1;">+ Thêm Bài mới</button>
+      <button class="btn block" id="unitsDeleteSelectedBtn" style="display:none;flex:1;">🗑️ Xoá các Bài đã chọn</button>
+    </div>
   </div>
   <div id="unitScopeBar" class="unit-scope-bar" style="display:none;">
     <span>📘 Đang xem: <strong id="unitScopeName"></strong></span>
