@@ -42,6 +42,17 @@
   let customQuizCache = [];
   let customFlashcardsCache = [];
   let effectiveQuiz = [];
+  // "Bài" (đơn vị con trong chương, xem chapterMeta.units) — CHỈ áp dụng cho nội dung Tự thêm, không
+  // đụng nội dung có sẵn trong app. null = đang xem phần "Chung" (mặc định + Tự thêm CHƯA gán Bài nào,
+  // đúng hành vi trước khi có tính năng này) — khác null = chỉ xem đúng Tự thêm có unitId trùng, ẩn
+  // hết nội dung có sẵn (builtin) vì builtin chưa được tổ chức theo Bài.
+  let activeUnitId = null;
+  function filterByActiveUnit(items) {
+    return items.filter((it) => (activeUnitId ? it.unitId === activeUnitId : !it.unitId));
+  }
+  function getUnits() {
+    return (chapterMeta.units || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
 
   function refreshDots() {
     const p = getChapterProgress(chapter.id);
@@ -144,24 +155,211 @@
     return result;
   }
 
+  // Đang xem 1 "Bài" cụ thể (activeUnitId khác null) -> CHỈ hiện Tự thêm gán đúng Bài đó, ẨN hết nội
+  // dung có sẵn trong app (builtin chưa được tổ chức theo Bài, xem chapterMeta.units ở trên).
   function getAllLessons() {
-    return mergeBuiltinWithOverrides(chapter.lessons, chapterMeta.lessonOverrides)
-      .concat(groupCustomLessonsByFile(customLessonsCache.map((it) => Object.assign({ kind: 'custom' }, it))));
+    const custom = groupCustomLessonsByFile(filterByActiveUnit(customLessonsCache).map((it) => Object.assign({ kind: 'custom' }, it)));
+    return activeUnitId ? custom : mergeBuiltinWithOverrides(chapter.lessons, chapterMeta.lessonOverrides).concat(custom);
   }
   function getAllFlashcards() {
-    return mergeBuiltinWithOverrides(chapter.flashcards, chapterMeta.flashcardOverrides)
-      .concat(customFlashcardsCache.map((it) => Object.assign({ kind: 'custom' }, it)));
+    const custom = filterByActiveUnit(customFlashcardsCache).map((it) => Object.assign({ kind: 'custom' }, it));
+    return activeUnitId ? custom : mergeBuiltinWithOverrides(chapter.flashcards, chapterMeta.flashcardOverrides).concat(custom);
   }
   // Câu hỏi builtin KHÔNG gộp theo bài (giống lesson builtin) — chỉ câu tự thêm/nạp file mới có
   // `sourceFileName` để gộp. `getAllQuizItems()` vẫn trả về DANH SÁCH PHẲNG như trước (dùng ở
   // renderQuizStats, quiz-taking, exam-creator...) — grouping CHỈ áp dụng lúc VẼ ở renderQuizManager.
   function getAllQuizItems() {
-    return mergeBuiltinWithOverrides(chapter.quiz, chapterMeta.quizOverrides)
-      .concat(customQuizCache.map((it) => Object.assign({ kind: 'custom' }, it)));
+    const custom = filterByActiveUnit(customQuizCache).map((it) => Object.assign({ kind: 'custom' }, it));
+    return activeUnitId ? custom : mergeBuiltinWithOverrides(chapter.quiz, chapterMeta.quizOverrides).concat(custom);
   }
   function getGroupedQuizItems() {
-    return mergeBuiltinWithOverrides(chapter.quiz, chapterMeta.quizOverrides)
-      .concat(groupCustomQuizByFile(customQuizCache.map((it) => Object.assign({ kind: 'custom' }, it))));
+    const custom = groupCustomQuizByFile(filterByActiveUnit(customQuizCache).map((it) => Object.assign({ kind: 'custom' }, it)));
+    return activeUnitId ? custom : mergeBuiltinWithOverrides(chapter.quiz, chapterMeta.quizOverrides).concat(custom);
+  }
+
+  // ---------- "Bài" (đơn vị con Tự thêm trong chương) ----------
+  // 1 Bài = { id, title, order }, lưu trong chapterMeta.units (mảng). Giáo viên đặt tên Bài TRƯỚC
+  // (khác cơ chế "1 file = 1 nhóm" của groupCustomLessonsByFile/groupCustomQuizByFile ở trên — vì
+  // flashcard không có file để tự suy tên) rồi mới dùng 4 nút của Bài đó để nạp bài giảng/flashcard/
+  // trắc nghiệm VÀO ĐÚNG Bài, xem chapter-detail.js đầu file (activeUnitId/filterByActiveUnit).
+  async function saveUnits(units) {
+    await setChapterMeta(chapter.id, { units });
+    chapterMeta.units = units;
+  }
+
+  function setActiveUnit(unitId) {
+    activeUnitId = unitId;
+    const bar = $('#unitScopeBar');
+    if (unitId) {
+      const unit = getUnits().find((u) => u.id === unitId);
+      $('#unitScopeName').textContent = unit ? unit.title : '';
+      bar.style.display = 'flex';
+    } else {
+      bar.style.display = 'none';
+    }
+    // Vẽ lại MỌI nơi phụ thuộc getAllLessons/getAllQuizItems/getAllFlashcards để đổi đúng phạm vi.
+    renderAllLessons();
+    renderFlash();
+    rebuildEffectiveQuiz();
+    renderQuiz();
+    initSelfTest();
+    if (owner.isOwner) {
+      refreshLessonDeleteAllRow();
+      refreshQuizDeleteAllRow();
+      renderFlashManager();
+      renderQuizManager();
+    }
+  }
+
+  // initTabs() (js/app.js) chỉ gắn sự kiện click cho .tab-btn — không có sẵn hàm chuyển tab BẰNG CODE,
+  // nên tự làm lại ĐÚNG logic tương tự (bật/tắt class "active" trên đúng cặp nút + khung nội dung).
+  function activateTab(tabPanelId) {
+    const tabBtns = $$('.tab-btn', document);
+    const panels = $$('.tab-panel', document);
+    tabBtns.forEach((b) => b.classList.remove('active'));
+    panels.forEach((p) => p.classList.remove('active'));
+    const btn = tabBtns.find((b) => b.dataset.tab === tabPanelId);
+    if (btn) btn.classList.add('active');
+    const panel = $('#' + tabPanelId);
+    if (panel) panel.classList.add('active');
+  }
+
+  function goToUnitSection(unitId, sectionId) {
+    setActiveUnit(unitId);
+    activateTab(sectionId === 'selfTestCard' ? 'tabQuiz' : sectionId);
+    if (sectionId === 'selfTestCard') {
+      // Nhảy thẳng vào màn Tự kiểm tra, khỏi qua menu "Ôn tập/Kiểm tra thử" trước cho tiện.
+      showQuizSection('selfTestCard');
+    } else if (sectionId === 'tabQuiz') {
+      showQuizMenu();
+    }
+    $('#chTabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderUnitsList() {
+    const section = $('#unitsSection');
+    if (!section) return;
+    const units = getUnits();
+    if (!units.length && !owner.isOwner) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    $('#unitsAddBtn').style.display = owner.isOwner ? 'block' : 'none';
+    const list = $('#unitsList');
+    if (!units.length) {
+      list.innerHTML = '<div class="hint">Chưa có Bài nào — bấm "+ Thêm Bài mới" để bắt đầu.</div>';
+      return;
+    }
+    list.innerHTML = units.map((u, i) => `
+      <div class="unit-row">
+        <div class="unit-title">${escapeHtml(u.title)}</div>
+        ${owner.isOwner ? `
+        <div class="unit-owner-actions hint">
+          <a href="#" class="unit-rename" data-id="${u.id}">Đổi tên</a>
+          ${i > 0 ? `· <a href="#" class="unit-move-up" data-id="${u.id}">↑</a>` : ''}
+          ${i < units.length - 1 ? `· <a href="#" class="unit-move-down" data-id="${u.id}">↓</a>` : ''}
+          · <a href="#" class="unit-delete" data-id="${u.id}">Xoá cả Bài</a>
+        </div>` : ''}
+        <div class="unit-actions">
+          <button type="button" class="btn unit-open" data-id="${u.id}" data-section="tabLesson">📖 Bài giảng</button>
+          <button type="button" class="btn unit-open" data-id="${u.id}" data-section="tabFlash">🗂️ Flashcard</button>
+          <button type="button" class="btn unit-open" data-id="${u.id}" data-section="tabQuiz">📝 Trắc nghiệm</button>
+          <button type="button" class="btn unit-open" data-id="${u.id}" data-section="selfTestCard">🎯 Tự kiểm tra</button>
+        </div>
+      </div>
+    `).join('');
+    wireUnitsList(list);
+  }
+
+  function wireUnitsList(list) {
+    $$('.unit-open', list).forEach((btn) => {
+      btn.addEventListener('click', () => goToUnitSection(btn.dataset.id, btn.dataset.section));
+    });
+    $$('.unit-rename', list).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const units = getUnits();
+        const unit = units.find((u) => u.id === a.dataset.id);
+        if (!unit) return;
+        const title = prompt('Tên mới cho Bài:', unit.title);
+        if (!title || !title.trim() || title.trim() === unit.title) return;
+        try {
+          const newUnits = units.map((u) => (u.id === unit.id ? Object.assign({}, u, { title: title.trim() }) : u));
+          await saveUnits(newUnits);
+          if (activeUnitId === unit.id) $('#unitScopeName').textContent = title.trim();
+          renderUnitsList();
+        } catch (err) {
+          showToast('Không đổi được tên: ' + err.message);
+        }
+      });
+    });
+    $$('.unit-move-up, .unit-move-down', list).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const units = getUnits();
+        const idx = units.findIndex((u) => u.id === a.dataset.id);
+        const swapWith = a.classList.contains('unit-move-up') ? idx - 1 : idx + 1;
+        if (idx === -1 || swapWith < 0 || swapWith >= units.length) return;
+        const newUnits = units.map((u, i) => Object.assign({}, u));
+        [newUnits[idx].order, newUnits[swapWith].order] = [newUnits[swapWith].order, newUnits[idx].order];
+        try {
+          await saveUnits(newUnits);
+          renderUnitsList();
+        } catch (err) {
+          showToast('Không đổi được thứ tự: ' + err.message);
+        }
+      });
+    });
+    $$('.unit-delete', list).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const units = getUnits();
+        const unit = units.find((u) => u.id === a.dataset.id);
+        if (!unit) return;
+        const lessonIds = customLessonsCache.filter((it) => it.unitId === unit.id).map((it) => it.id);
+        const quizIds = customQuizCache.filter((it) => it.unitId === unit.id).map((it) => it.id);
+        const flashIds = customFlashcardsCache.filter((it) => it.unitId === unit.id).map((it) => it.id);
+        const totalCount = lessonIds.length + quizIds.length + flashIds.length;
+        if (!confirm(`Xoá cả Bài "${unit.title}"? Sẽ xoá ${lessonIds.length} phần bài giảng, ${quizIds.length} câu hỏi, ${flashIds.length} flashcard bên trong Bài này. Không thể hoàn tác.`)) return;
+        try {
+          await Promise.all([
+            ...lessonIds.map((id) => deleteCustomLesson(id)),
+            ...quizIds.map((id) => deleteCustomQuiz(id)),
+            ...flashIds.map((id) => deleteCustomFlashcard(id))
+          ]);
+          customLessonsCache = customLessonsCache.filter((it) => it.unitId !== unit.id);
+          customQuizCache = customQuizCache.filter((it) => it.unitId !== unit.id);
+          customFlashcardsCache = customFlashcardsCache.filter((it) => it.unitId !== unit.id);
+          const newUnits = units.filter((u) => u.id !== unit.id);
+          await saveUnits(newUnits);
+          if (activeUnitId === unit.id) setActiveUnit(null);
+          renderUnitsList();
+          showToast(`Đã xoá cả Bài "${unit.title}" (${totalCount} mục).`, false);
+        } catch (err) {
+          showToast('Không xoá được: ' + err.message);
+        }
+      });
+    });
+  }
+
+  function initUnitsSection() {
+    const backLink = $('#unitScopeBackLink');
+    if (backLink) backLink.addEventListener('click', (e) => { e.preventDefault(); setActiveUnit(null); });
+    if (owner.isOwner) {
+      const addBtn = $('#unitsAddBtn');
+      if (addBtn) addBtn.addEventListener('click', async () => {
+        const title = prompt('Tên Bài mới (VD: "Bài 3. Tốc độ phản ứng"):');
+        if (!title || !title.trim()) return;
+        const units = getUnits();
+        const nextOrder = units.length ? Math.max(...units.map((u) => u.order || 0)) + 1 : 0;
+        const newUnits = units.concat([{ id: 'u' + Date.now(), title: title.trim(), order: nextOrder }]);
+        try {
+          await saveUnits(newUnits);
+          renderUnitsList();
+        } catch (err) {
+          showToast('Không tạo được Bài mới: ' + err.message);
+        }
+      });
+    }
+    renderUnitsList();
   }
 
   // ---------- Kho chung: chia sẻ/nhập bài giảng-câu hỏi-flashcard giữa các giáo viên ----------
@@ -560,8 +758,10 @@
           const it = customLessonsCache.find((x) => x.id === box.dataset.id);
           if (it) { it.title = title; it.points = points; }
         } else {
-          const id = await addCustomLesson(chapter.id, { title, points, sourceFileName: null });
-          customLessonsCache.push({ id, chapterId: chapter.id, title, points, sourceFileName: null });
+          const payload = { title, points, sourceFileName: null };
+          if (activeUnitId) payload.unitId = activeUnitId;
+          const id = await addCustomLesson(chapter.id, payload);
+          customLessonsCache.push(Object.assign({ id, chapterId: chapter.id }, payload));
         }
         box.style.display = 'none';
         renderAllLessons();
@@ -606,7 +806,7 @@
       saveBtns.forEach((b) => { b.disabled = true; b.textContent = 'Đang lưu...'; });
       try {
         await addCustomLessonBatch(chapter.id, chosen.map((sec) =>
-          ({ title: sec.title, points: sec.points, sourceFileName: fileName })
+          Object.assign({ title: sec.title, points: sec.points, sourceFileName: fileName }, activeUnitId ? { unitId: activeUnitId } : null)
         ));
         customLessonsCache = await getCustomLessons(owner.uid, chapter.id);
         box.innerHTML = `<div class="result-box show">✓ Đã lưu vào chương.</div>`;
@@ -622,7 +822,9 @@
   function refreshLessonDeleteAllRow() {
     const row = $('#lessonDeleteAllRow');
     if (!row) return;
-    row.style.display = (owner.isOwner && customLessonsCache.length) ? 'flex' : 'none';
+    // Ẩn khi đang xem 1 Bài cụ thể — nút này xoá TOÀN BỘ bài giảng tự thêm của CẢ CHƯƠNG, dễ hiểu
+    // nhầm là "xoá của Bài đang xem" và xoá nhầm nội dung Bài khác. Xoá riêng 1 Bài dùng "Xoá cả Bài".
+    row.style.display = (owner.isOwner && customLessonsCache.length && !activeUnitId) ? 'flex' : 'none';
   }
 
   function initUploadControl() {
@@ -808,8 +1010,9 @@
           const it = customFlashcardsCache.find((x) => x.id === box.dataset.id);
           if (it) { it.front = front; it.back = back; }
         } else {
-          const id = await addCustomFlashcard(chapter.id, { front, back });
-          customFlashcardsCache.push({ id, chapterId: chapter.id, front, back });
+          const payload = activeUnitId ? { front, back, unitId: activeUnitId } : { front, back };
+          const id = await addCustomFlashcard(chapter.id, payload);
+          customFlashcardsCache.push(Object.assign({ id, chapterId: chapter.id }, payload));
         }
         box.style.display = 'none';
         renderFlashManager();
@@ -847,22 +1050,31 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
+  let selfTestWired = false;
   function initSelfTest() {
     // Không tự hiện #selfTestCard nữa — chỉ chuẩn bị dữ liệu/wiring, còn hiển thị do menu Trắc
     // nghiệm điều khiển (xem initQuizMenu) khi học sinh bấm "🎯 Kiểm tra thử".
+    // Gọi lại được NHIỀU LẦN (mỗi lần đổi phạm vi Bài đang xem, xem setActiveUnit) vì số câu khả dụng
+    // đổi theo — nhưng CHỈ gắn sự kiện click 1 lần duy nhất (selfTestWired), tránh chồng nhiều listener
+    // khiến bấm 1 lần chạy startSelfTest() nhiều lần.
     const total = effectiveQuiz.length;
     if (total < 5) {
       $('#selfTestSetup').style.display = 'none';
       $('#selfTestNotEnough').style.display = 'block';
-      return;
+    } else {
+      $('#selfTestSetup').style.display = 'block';
+      $('#selfTestNotEnough').style.display = 'none';
+      const validCounts = SELF_TEST_COUNT_OPTIONS.filter((n) => n <= total);
+      if (!validCounts.includes(total)) validCounts.push(total);
+      const defaultCount = validCounts.includes(10) ? 10 : validCounts[validCounts.length - 1];
+      $('#selfTestCount').innerHTML = validCounts.map((n) =>
+        `<option value="${n}" ${n === defaultCount ? 'selected' : ''}>${n} câu</option>`
+      ).join('');
     }
-    const validCounts = SELF_TEST_COUNT_OPTIONS.filter((n) => n <= total);
-    if (!validCounts.includes(total)) validCounts.push(total);
-    const defaultCount = validCounts.includes(10) ? 10 : validCounts[validCounts.length - 1];
-    $('#selfTestCount').innerHTML = validCounts.map((n) =>
-      `<option value="${n}" ${n === defaultCount ? 'selected' : ''}>${n} câu</option>`
-    ).join('');
-    $('#selfTestStartBtn').addEventListener('click', startSelfTest);
+    if (!selfTestWired) {
+      selfTestWired = true;
+      $('#selfTestStartBtn').addEventListener('click', startSelfTest);
+    }
   }
 
   function startSelfTest() {
@@ -1165,7 +1377,9 @@
   function refreshQuizDeleteAllRow() {
     const row = $('#quizDeleteAllRow');
     if (!row) return;
-    row.style.display = (owner.isOwner && customQuizCache.length) ? 'flex' : 'none';
+    // Ẩn khi đang xem 1 Bài cụ thể — nút này xoá TOÀN BỘ câu hỏi tự thêm của CẢ CHƯƠNG, dễ hiểu nhầm
+    // là "xoá của Bài đang xem" và xoá nhầm nội dung Bài khác. Xoá riêng 1 Bài dùng "Xoá cả Bài".
+    row.style.display = (owner.isOwner && customQuizCache.length && !activeUnitId) ? 'flex' : 'none';
   }
 
   // Markup xem trước ảnh câu hỏi cắt từ PDF (dùng chung 3 chỗ: danh sách quản lý, form sửa, xem toàn
@@ -1470,6 +1684,7 @@
           if (it) Object.assign(it, question);
           pendingCorrect.delete('custom:' + box.dataset.id);
         } else {
+          if (activeUnitId) question.unitId = activeUnitId;
           const id = await addCustomQuiz(chapter.id, question);
           customQuizCache.push(Object.assign({ id, chapterId: chapter.id }, question));
         }
@@ -1492,7 +1707,7 @@
       box.innerHTML = `<div class="result-box show">⏳ Đang cắt ảnh từng câu trong "${escapeHtml(file.name)}"...</div>`;
       try {
         const { questions, warnings } = await extractQuizFromPdf(await file.arrayBuffer());
-        questions.forEach((q) => { q.sourceFileName = file.name; });
+        questions.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
         // Báo NGAY mọi cảnh báo gặp phải lúc nạp (thiếu/trùng số câu, trang lỗi...) — giáo viên cần biết
@@ -1574,7 +1789,7 @@
       box.innerHTML = `<div class="result-box show">⏳ Đang xử lý "${escapeHtml(file.name)}"...</div>`;
       try {
         const questions = await parseQuizExcelFile(file);
-        questions.forEach((q) => { q.sourceFileName = file.name; });
+        questions.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
         box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>${quizImportConfirmBtnHtml()}`;
@@ -1641,7 +1856,9 @@
   // (không tự gộp/ghi đè), giáo viên bấm nhầm nạp lại file cũ nhiều lần sẽ tạo câu hỏi trùng lặp trong
   // kho mà không hay biết. Trả về false nếu giáo viên chọn huỷ (nơi gọi phải dừng lại, không nạp).
   function confirmIfDuplicateSourceFile(fileName) {
-    const existing = customQuizCache.filter((q) => q.sourceFileName === fileName).length;
+    // So trùng tên file TRONG ĐÚNG phạm vi đang nạp (Bài đang chọn, hoặc phần Chung) — nạp cùng tên
+    // file vào 2 Bài khác nhau không tính là trùng.
+    const existing = filterByActiveUnit(customQuizCache).filter((q) => q.sourceFileName === fileName).length;
     if (!existing) return true;
     return confirm(`File "${fileName}" đã được nạp trước đó (${existing} câu hỏi). Nạp lại sẽ THÊM MỚI chứ không thay thế, có thể tạo ra câu hỏi TRÙNG LẶP trong kho. Vẫn muốn tiếp tục?`);
   }
@@ -1709,6 +1926,7 @@
     }
 
     renderHeader();
+    initUnitsSection();
     renderAllLessons();
     renderFlash();
     rebuildEffectiveQuiz();

@@ -43,6 +43,17 @@
     </div>
   </div>
 
+  <div class="card" id="unitsSection" style="display:none;">
+    <h2><span class="icon">📚</span>Danh sách Bài</h2>
+    <p class="hint" style="margin-top:-4px;">Gom bài giảng, flashcard, trắc nghiệm, tự kiểm tra Tự thêm theo từng Bài riêng — nội dung có sẵn trong app vẫn xem ở phần "Chung" bên dưới.</p>
+    <div id="unitsList"></div>
+    <button class="btn block" id="unitsAddBtn" style="display:none;margin-top:10px;">+ Thêm Bài mới</button>
+  </div>
+  <div id="unitScopeBar" class="unit-scope-bar" style="display:none;">
+    <span>📘 Đang xem: <strong id="unitScopeName"></strong></span>
+    <a href="#" id="unitScopeBackLink">← Xem phần chung / chọn Bài khác</a>
+  </div>
+
   <div class="tabs" id="chTabs">
     <button class="tab-btn active" data-tab="tabLesson">Bài giảng <span class="dot" id="dotLesson"></span></button>
     <button class="tab-btn" data-tab="tabFlash">Flashcard <span class="dot" id="dotFlash"></span></button>

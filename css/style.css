@@ -973,6 +973,42 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .custom-lesson-block h3 { color: var(--accent); }
 .custom-lesson-block .hint a { color: var(--danger); text-decoration: underline; }
 
+/* "Bài" (đơn vị con Tự thêm trong chương, xem chapter-detail.js: activeUnitId) — danh sách ở đầu
+   trang, mỗi Bài 1 khối gồm tên + 4 nút vào từng phần (Bài giảng/Flashcard/Trắc nghiệm/Tự kiểm tra). */
+.unit-row {
+  padding: 14px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+}
+.unit-title { font-weight: 700; font-size: calc(16px * var(--font-scale)); margin-bottom: 6px; }
+.unit-owner-actions { margin-bottom: 10px; }
+.unit-owner-actions a { color: var(--brand); }
+.unit-owner-actions .unit-delete { color: var(--danger); }
+.unit-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.unit-actions .btn { width: 100%; white-space: normal; line-height: 1.3; text-align: center; }
+@media (min-width: 560px) {
+  .unit-actions { grid-template-columns: repeat(4, 1fr); }
+}
+/* Thanh nhỏ báo đang xem TRONG 1 Bài cụ thể (thay vì phần "Chung") — đặt ngay trên 3 tab chính để
+   luôn thấy được đang ở phạm vi nào, tránh nạp/xem nhầm nội dung Bài này sang Bài khác. */
+.unit-scope-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(20, 184, 166, 0.12);
+  border: 1px solid var(--brand);
+  font-size: calc(14px * var(--font-scale));
+}
+.unit-scope-bar a { color: var(--brand); font-weight: 700; }
+
 /* Flashcard */
 .flash-wrap { text-align: center; }
 .flash-progress { font-size: 12px; color: var(--text-faint); margin-bottom: 10px; }
