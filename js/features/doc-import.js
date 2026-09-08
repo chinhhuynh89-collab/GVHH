@@ -476,6 +476,11 @@ function findLabelEndX(line, markerRe) {
 function findOptionMarkStartsOnLine(line) {
   const marks = [];
   for (let s = 0; s < line.items.length; s++) {
+    // Bỏ qua mảnh CHỈ có khoảng trắng làm điểm bắt đầu — nếu không, khoảng trắng đứng NGAY TRƯỚC 1
+    // đáp án (VD dấu cách rộng giữa 2 đáp án chung 1 dòng) cũng bị tính thành 1 điểm bắt đầu GIẢ (do
+    // khoảng trắng đầu chuỗi tự động bị loại khi kiểm tra khớp mẫu) — trùng với điểm bắt đầu THẬT của
+    // chính đáp án đó, làm sai số lượng đếm được rồi rơi nhầm về Tầng 2 dù đáng lẽ tách sạch được.
+    if (!line.items[s].str.trim().length) continue;
     let acc = '';
     for (let k = s; k < line.items.length && acc.length <= 8; k++) {
       acc += line.items[k].str;
@@ -522,7 +527,7 @@ function cropPageCanvasVertical(pageCanvas, top, bottom) {
   const out = document.createElement('canvas');
   out.width = width;
   out.height = h;
-  out.getContext('2d').drawImage(pageCanvas, 0, top + innerTop, width, h, 0, 0, width, h);
+  out.getContext('2d', { willReadFrequently: true }).drawImage(pageCanvas, 0, top + innerTop, width, h, 0, 0, width, h);
   return out;
 }
 
@@ -533,7 +538,9 @@ function stackCanvasesVertically(canvases) {
   const out = document.createElement('canvas');
   out.width = width;
   out.height = totalHeight;
-  const ctx = out.getContext('2d');
+  // willReadFrequently: canvas ghép này thường bị đọc lại (getImageData) ngay sau đó để xoá màu tô sẵn
+  // (xem analyzeAndStripHighlight) — khai báo từ lúc tạo context để trình duyệt tối ưu đường đọc-lại.
+  const ctx = out.getContext('2d', { willReadFrequently: true });
   let y = 0;
   canvases.forEach((c) => { ctx.drawImage(c, 0, y); y += c.height; });
   return out;
@@ -575,7 +582,7 @@ function cropPageCanvasRect(pageCanvas, top, bottom, left, right) {
   const out = document.createElement('canvas');
   out.width = w;
   out.height = h;
-  out.getContext('2d').drawImage(pageCanvas, left + innerLeft, top + innerTop, w, h, 0, 0, w, h);
+  out.getContext('2d', { willReadFrequently: true }).drawImage(pageCanvas, left + innerLeft, top + innerTop, w, h, 0, 0, w, h);
   return out;
 }
 
@@ -590,6 +597,54 @@ function cropRegionStrips(canvas, strips) {
   }
   if (!pieces.length) return null;
   return stackCanvasesVertically(pieces);
+}
+
+// Giáo viên thường TÔ SẴN màu (nền vàng/xanh highlight, hoặc chữ đỏ/xanh) để tự đánh dấu đáp án đúng
+// trong file gốc lúc soạn đề — đã kiểm chứng thực tế trên file thật (đáp án đúng tô nền vàng). Nếu giữ
+// nguyên màu đó khi cắt vào app, học sinh nhìn thấy ngay đáp án mà không cần suy nghĩ. 1 pixel coi là
+// "có màu" khi lệch giữa kênh màu lớn nhất/nhỏ nhất (r,g,b) đủ lớn — chữ/nền đen-trắng-xám bình thường
+// luôn có r≈g≈b, không bị tính nhầm.
+// Gộp 2 việc vào CHUNG 1 lượt đọc/ghi pixel: (1) đo tỉ lệ pixel "có màu" TRƯỚC khi xoá (dùng để so
+// sánh đáp án nào được tô sẵn — xem detectAndStripHighlight), (2) xoá luôn màu đó NGAY trong cùng lượt
+// duyệt — pixel có màu chuyển thành ĐEN (chữ tô màu) hoặc TRẮNG (nền tô màu/highlight) tuỳ độ sáng gốc,
+// giữ nguyên hình dạng chữ/nét. Giảm 1 nửa số lần đọc/ghi pixel so với tách riêng 2 bước — đáng kể vì
+// hàm này chạy cho MỌI ảnh câu hỏi/đáp án cắt ra, ảnh hưởng trực tiếp tốc độ nạp cả đề dài. Sửa TRỰC
+// TIẾP trên canvas truyền vào.
+function analyzeAndStripHighlight(canvas) {
+  if (!canvas || !canvas.width || !canvas.height) return 0;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imgData.data;
+  let colored = 0;
+  let sampled = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const isColored = Math.max(r, g, b) - Math.min(r, g, b) > 30;
+    if ((i >> 2) % 3 === 0) { sampled++; if (isColored) colored++; } // lấy mẫu 1/3 pixel để tính tỉ lệ, đủ chính xác mà nhanh hơn quét hết
+    if (isColored) {
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      const v = lum > 150 ? 255 : 0;
+      data[i] = v; data[i + 1] = v; data[i + 2] = v;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return sampled ? colored / sampled : 0;
+}
+
+// Trong 1 nhóm canvas (4 đáp án), XOÁ MÀU khỏi cả 4 (luôn làm, bất kể có nhận diện được đáp án nào hay
+// không) rồi tìm chỉ số đáp án có tỉ lệ pixel màu (đo được TRƯỚC khi xoá) VƯỢT TRỘI hẳn 3 đáp án còn
+// lại (dấu hiệu chính là đáp án được giáo viên tô sẵn) — đòi hỏi cả "đủ nhiều màu" (>3% pixel mẫu) LẪN
+// "vượt trội rõ rệt" (gấp ít nhất 3 lần đáp án có màu nhiều thứ nhì) để tránh nhận nhầm nếu nhiều đáp
+// án cùng có chút màu (VD công thức hoá học có kí hiệu đặc biệt) — không chắc chắn thì thà bỏ qua (trả
+// null) còn hơn tự ý chọn sai đáp án, giáo viên vẫn tự chọn lại bằng nút chọn nhanh như bình thường.
+function detectAndStripHighlight(optionCanvases) {
+  const fractions = optionCanvases.map(analyzeAndStripHighlight);
+  const maxVal = Math.max(...fractions);
+  if (maxVal < 0.03) return null;
+  const maxIdx = fractions.indexOf(maxVal);
+  const secondVal = Math.max(...fractions.filter((_, i) => i !== maxIdx));
+  if (secondVal > 0 && maxVal < secondVal * 3) return null;
+  return maxIdx;
 }
 
 // Ngân sách RIÊNG cho ảnh câu hỏi trắc nghiệm — nhỏ hơn NHIỀU so với ảnh trang bài giảng
@@ -696,9 +751,10 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   }
   const stemCanvas = cropRegionStrips(canvas, stemStrips);
   if (!stemCanvas) return null;
+  analyzeAndStripHighlight(stemCanvas);
 
   if (firstOptionLineIdx === -1) {
-    return { stemCanvas, hasOptions: false, optionCanvases: null, optionsCanvas: null };
+    return { stemCanvas, hasOptions: false, optionCanvases: null, optionsCanvas: null, detectedCorrect: null };
   }
 
   const optionLinesIdx = [];
@@ -707,12 +763,18 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   // Ảnh gộp CHUNG toàn bộ vùng đáp án (giữ NGUYÊN nhãn gốc, y hệt cách cắt cũ) — CHỈ tính khi THẬT SỰ
   // cần dùng làm lưới an toàn Tầng 2 (tách riêng từng đáp án bên dưới thất bại) — đọc pixel 2 LẦN cho
   // cùng 1 vùng (vừa cắt gộp vừa cắt riêng) tốn thời gian đáng kể khi nạp đề dài, nên chỉ cắt khi cần.
-  const getOptionsCanvasFallback = () => cropPageCanvasVertical(canvas, bands[firstOptionLineIdx].top, bands[optionLinesIdx[optionLinesIdx.length - 1]].bottom);
+  // Vẫn xoá màu tô sẵn (nếu có) dù không xác định được CHÍNH XÁC đáp án nào — ít nhất học sinh không
+  // nhìn thấy dấu vết màu, dù trường hợp này giáo viên vẫn cần tự chọn đáp án đúng bằng tay.
+  const getOptionsCanvasFallback = () => {
+    const c = cropPageCanvasVertical(canvas, bands[firstOptionLineIdx].top, bands[optionLinesIdx[optionLinesIdx.length - 1]].bottom);
+    if (c) analyzeAndStripHighlight(c);
+    return c;
+  };
 
   const optionsText = optionLinesIdx.map((i) => lines[i].text).join(' ');
   const expectedLetters = countOptionLetterSequence(optionsText);
   if (expectedLetters.length !== 4 || expectedLetters.join('') !== 'ABCD') {
-    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback() };
+    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null };
   }
 
   const marks = [];
@@ -723,7 +785,7 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   // thuần theo chữ ở trên — lệch nghĩa là có nhãn dính liền nội dung không tách sạch pixel được (dù
   // đếm chữ vẫn thấy đủ 4) — KHÔNG được tin, rơi về Tầng 2 an toàn thay vì cắt liều ra kết quả sai.
   if (marks.length !== 4 || marks.map((m) => m.letter).join('') !== 'ABCD') {
-    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback() };
+    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null };
   }
 
   const optionCanvases = [];
@@ -747,11 +809,15 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
       }
     }
     const cropped = cropRegionStrips(canvas, strips);
-    if (!cropped) return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback() };
+    if (!cropped) return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null };
     optionCanvases.push(cropped);
   }
 
-  return { stemCanvas, hasOptions: true, optionCanvases, optionsCanvas: null };
+  // Nhận diện đáp án được TÔ SẴN màu (giáo viên tự đánh dấu đáp án đúng trong file gốc) TRƯỚC KHI xoá
+  // màu — cần màu gốc để so sánh, xoá xong sẽ không còn phân biệt được nữa.
+  const detectedCorrect = detectAndStripHighlight(optionCanvases);
+
+  return { stemCanvas, hasOptions: true, optionCanvases, optionsCanvas: null, detectedCorrect };
 }
 
 // Trả về { questions, warnings } thay vì mảng trần — "warnings" liệt kê MỌI vấn đề gặp phải lúc nạp
@@ -783,9 +849,11 @@ async function extractQuizFromPdf(arrayBuffer) {
         : null;
 
       if (tiered && tiered.hasOptions && tiered.optionCanvases) {
-        // Tầng 1 — tách sạch cả đề lẫn TỪNG đáp án, trộn được cả câu lẫn đáp án tự do.
+        // Tầng 1 — tách sạch cả đề lẫn TỪNG đáp án, trộn được cả câu lẫn đáp án tự do. Nếu nhận diện
+        // được đáp án giáo viên đã TÔ SẴN màu trong file gốc (xem detectAndStripHighlight), tự
+        // điền luôn đáp án đúng — đỡ phải bấm chọn nhanh cho câu này; không chắc thì để trống như cũ.
         const [stemImage, ...optionImages] = canvasesToBudgetedJpegs([tiered.stemCanvas, ...tiered.optionCanvases], QUIZ_IMAGE_BUDGET_PER_QUESTION);
-        questions.push({ q: qLabel, stemImage, optionImages, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null });
+        questions.push({ q: qLabel, stemImage, optionImages, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: tiered.detectedCorrect });
       } else if (tiered && tiered.hasOptions && tiered.optionsCanvas) {
         // Tầng 2 — đề tách sạch (trộn được VỊ TRÍ CÂU) nhưng không tách riêng được từng đáp án (VD 2
         // đáp án chung 1 dòng, nhãn dính liền nội dung) — gộp cả 4 đáp án (giữ nguyên nhãn gốc) vào 1
@@ -799,8 +867,10 @@ async function extractQuizFromPdf(arrayBuffer) {
         questions.push({ q: qLabel, stemImage, type: 'text', acceptedAnswers: '' });
       } else {
         // Tầng 3 — cách cũ (1 ảnh gộp kèm "Câu N.", không trộn được vị trí câu lẫn đáp án) — dùng khi
-        // câu hỏi tràn trang, HOẶC (hiếm) không tách sạch được nhãn "Câu N." khỏi nội dung.
+        // câu hỏi tràn trang, HOẶC (hiếm) không tách sạch được nhãn "Câu N." khỏi nội dung. Vẫn xoá màu
+        // tô sẵn (nếu có) để học sinh không nhìn thấy dấu vết đáp án, dù không tự điền được đáp án nào.
         const canvas = stackCanvasesVertically(openQuestion.canvases);
+        analyzeAndStripHighlight(canvas);
         const dataUri = canvasToBudgetedJpeg(canvas);
         if (openQuestion.hasOptions) {
           questions.push({ q: qLabel, qImage: dataUri, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null, noShuffle: true });
