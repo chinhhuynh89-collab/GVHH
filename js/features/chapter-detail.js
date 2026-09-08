@@ -1449,6 +1449,7 @@
       const file = e.target.files[0];
       e.target.value = '';
       if (!file) return;
+      if (!confirmIfDuplicateSourceFile(file.name)) return;
       const box = $('#quizPdfResult');
       box.innerHTML = `<div class="result-box show">⏳ Đang cắt ảnh từng câu trong "${escapeHtml(file.name)}"...</div>`;
       try {
@@ -1459,7 +1460,7 @@
         // Báo NGAY mọi cảnh báo gặp phải lúc nạp (thiếu/trùng số câu, trang lỗi...) — giáo viên cần biết
         // ngay chỗ nào phải tự kiểm tra lại, không im lặng bỏ qua rồi chỉ phát hiện đề bị thiếu khi đã trễ.
         const warningHtml = warnings.length
-          ? `<div class="result-box show error" style="margin-bottom:8px;"><strong>⚠️ Có ${warnings.length} vấn đề cần kiểm tra lại:</strong><ul style="margin:6px 0 0;padding-left:20px;">${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`
+          ? `<div class="result-box show error" id="quizPdfWarningBox" style="margin-bottom:8px;"><strong>⚠️ Có ${warnings.length} vấn đề cần kiểm tra lại:</strong><ul style="margin:6px 0 0;padding-left:20px;">${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`
           : '';
         // Câu bị "khoá" (optionsLocked/noShuffle — không tách sạch được nhãn/đáp án, xem doc-import.js)
         // vẫn nạp được nhưng không trộn được đầy đủ — cho xoá gọn CẢ NHÓM này của riêng lượt nạp này
@@ -1488,6 +1489,8 @@
               await Promise.all(ids.map((id) => deleteCustomQuiz(id)));
               customQuizCache = customQuizCache.filter((it) => !ids.includes(it.id));
               deleteFlaggedBtn.remove();
+              const warnBox = $('#quizPdfWarningBox');
+              if (warnBox) warnBox.remove(); // đã xoá xong câu gây cảnh báo — tắt luôn cảnh báo, tránh hiện cảnh báo "chết" không còn tác dụng
               rebuildEffectiveQuiz();
               renderQuizManager();
               renderQuiz();
@@ -1528,6 +1531,7 @@
       const file = e.target.files[0];
       e.target.value = '';
       if (!file) return;
+      if (!confirmIfDuplicateSourceFile(file.name)) return;
       const box = $('#quizExcelResult');
       box.innerHTML = `<div class="result-box show">⏳ Đang xử lý "${escapeHtml(file.name)}"...</div>`;
       try {
@@ -1586,13 +1590,22 @@
   }
 
   // Nút "Xác nhận" sau khi nạp file xong — giáo viên xem qua kết quả/cảnh báo xong thì bấm để đóng
-  // hẳn khung nạp file, quay lại menu Trắc nghiệm (dùng chung cho cả 3 cách nạp: txt/Word, PDF, Excel).
+  // hẳn khung nạp file, quay lại menu Trắc nghiệm (dùng chung cho cả 2 cách nạp: PDF, Excel).
   function quizImportConfirmBtnHtml() {
     return `<button type="button" class="btn primary block quiz-import-confirm" style="margin-top:8px;">✓ Xác nhận</button>`;
   }
   function wireQuizImportConfirmBtn(box) {
     const btn = $('.quiz-import-confirm', box);
     if (btn) btn.addEventListener('click', showQuizMenu);
+  }
+
+  // Cảnh báo TRƯỚC khi nạp nếu file này (theo TÊN file) đã từng nạp rồi — mỗi lần nạp luôn THÊM MỚI
+  // (không tự gộp/ghi đè), giáo viên bấm nhầm nạp lại file cũ nhiều lần sẽ tạo câu hỏi trùng lặp trong
+  // kho mà không hay biết. Trả về false nếu giáo viên chọn huỷ (nơi gọi phải dừng lại, không nạp).
+  function confirmIfDuplicateSourceFile(fileName) {
+    const existing = customQuizCache.filter((q) => q.sourceFileName === fileName).length;
+    if (!existing) return true;
+    return confirm(`File "${fileName}" đã được nạp trước đó (${existing} câu hỏi). Nạp lại sẽ THÊM MỚI chứ không thay thế, có thể tạo ra câu hỏi TRÙNG LẶP trong kho. Vẫn muốn tiếp tục?`);
   }
 
   function initQuizMenu() {
