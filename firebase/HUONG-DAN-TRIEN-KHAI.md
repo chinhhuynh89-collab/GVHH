@@ -59,5 +59,48 @@ Mặc định Firebase chỉ cho phép đăng nhập từ `localhost`. Khi bạn
 
 - **Dữ liệu nằm ở đâu:** mở Firebase Console → Firestore Database → Data để xem trực tiếp các nhóm, đề kiểm tra, điểm số — giống như mở Google Sheet trước đây.
 - **Nhiều giáo viên dùng chung:** vì config đã nhúng sẵn trong code, giáo viên khác KHÔNG cần tạo project riêng, KHÔNG cần biết gì về Firebase — chỉ mở app, bấm đăng nhập bằng tài khoản Google của họ, hệ thống tự tách dữ liệu từng người.
-- **Chi phí:** hoàn toàn nằm trong gói miễn phí (Spark) — không cần thẻ thanh toán, không có Cloud Functions.
+- **Chi phí:** phần Firestore/Auth/Hosting hoàn toàn nằm trong gói miễn phí (Spark). Riêng tính năng "Tạo bằng AI" (xem mục Bước 8 bên dưới) cần Cloud Functions nên bắt buộc gói **Blaze** (trả theo dùng) — vẫn có hạn mức miễn phí lớn, chỉ tính phí nếu vượt.
 - **Giới hạn đã biết:** đáp án trắc nghiệm được tách riêng khỏi câu hỏi và chỉ tải về lúc học sinh nộp bài — giảm rủi ro xem trộm, nhưng học sinh rành kỹ thuật (mở DevTools) vẫn có thể xem được nếu cố tình, vì không dùng Cloud Functions để lọc phía server.
+
+## Bước 8 — (Tuỳ chọn) Triển khai Cloud Function "Tạo bằng AI"
+
+Chỉ cần làm bước này nếu muốn bật tính năng "🤖 Tạo bằng AI" (tạo trắc nghiệm/flashcard từ bài giảng
+bằng Claude API, chỉ dành cho giáo viên gói Pro). Không làm bước này thì mọi tính năng khác của app
+vẫn hoạt động bình thường — nút "🤖 Tạo bằng AI" sẽ chỉ báo lỗi kết nối nếu bấm vào.
+
+1. **Nâng cấp gói Blaze**: Firebase Console → biểu tượng bánh răng góc trái → **Usage and billing** →
+   **Details & settings** → **Modify plan** → chọn **Blaze**. Cần gắn 1 thẻ thanh toán, nhưng chỉ bị
+   trừ tiền nếu vượt hạn mức miễn phí hàng tháng (rất rộng rãi cho quy mô 1 app nhỏ).
+2. **Cài Firebase CLI** (nếu máy bạn chưa có): mở terminal, chạy `npm install -g firebase-tools`, sau
+   đó `firebase login` (mở trình duyệt đăng nhập đúng tài khoản Google đã tạo project ở Bước 1).
+3. **Lấy API key Claude**: vào [console.anthropic.com](https://console.anthropic.com) → tạo 1 API
+   key mới, copy lại (chỉ hiện đúng 1 lần).
+4. **Lưu key vào Cloud Functions** (KHÔNG dán key này vào code hay gửi cho ai): trong thư mục gốc của
+   app (chứa file `firebase.json`), chạy:
+   ```
+   firebase functions:secrets:set ANTHROPIC_API_KEY
+   ```
+   CLI sẽ hỏi dán key vào — dán rồi Enter, key được Google mã hoá lưu riêng, không nằm trong code/Git.
+5. **Cài thư viện cho Cloud Function** (chỉ cần làm 1 lần, hoặc mỗi khi đổi máy):
+   ```
+   cd functions
+   npm install
+   cd ..
+   ```
+6. **Triển khai**:
+   ```
+   firebase deploy --only functions
+   ```
+   Lần đầu deploy thường mất 2-5 phút. Xong sẽ thấy dòng
+   `✔  functions[generateFromLesson(asia-southeast1)]: Successful create operation.`
+7. **Gán gói Pro cho giáo viên muốn dùng thử**: Firebase Console → Firestore Database →
+   collection `subscriptions` → tạo tài liệu với ID = đúng UID tài khoản Google của giáo viên đó
+   (xem UID trong Authentication → Users), field `tier` = `"pro"`, field `expiresAt` = 1 ngày trong
+   tương lai (VD `"2027-01-01"`).
+
+**Sau này mỗi khi sửa code trong `functions/index.js`**: chỉ cần chạy lại `firebase deploy --only
+functions` (không cần lặp lại các bước cài đặt/nâng cấp gói ở trên).
+
+**Kiểm soát chi phí đã có sẵn trong code** (`functions/index.js`): tối đa 15 trang bài giảng/lượt tạo,
+tối đa 100 lượt/giáo viên/tháng — xem/sửa 2 hằng số `MAX_POINTS_PER_REQUEST`/`MONTHLY_CALL_CAP` ở đầu
+file nếu muốn đổi.

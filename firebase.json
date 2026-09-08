@@ -1,0 +1,23 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firebase/firestore.rules"
+  },
+  "emulators": {
+    "functions": { "port": 5001 },
+    "firestore": { "port": 8089 },
+    "hub": { "port": 4401 },
+    "ui": { "enabled": true, "port": 4000 }
+  }
+}

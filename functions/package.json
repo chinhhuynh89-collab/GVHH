@@ -1,0 +1,20 @@
+{
+  "name": "functions",
+  "description": "Cloud Functions cho Trợ Lý Giáo Viên Hoá Học — tạo trắc nghiệm/flashcard bằng AI (Claude), chỉ dành cho giáo viên gói Pro.",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions,firestore",
+    "shell": "firebase functions:shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.0",
+    "@anthropic-ai/sdk": "^0.32.1"
+  },
+  "private": true
+}

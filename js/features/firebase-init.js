@@ -36,10 +36,16 @@ function isFirebaseConfigured() {
 let _fbApp = null;
 let _fbAuth = null;
 let _fbDb = null;
+let _fbFunctions = null;
 
-// Khởi tạo (nếu chưa) và trả về { app, auth, db }. Ném lỗi rõ ràng nếu chưa cấu hình hoặc SDK lỗi.
+// Vùng triển khai Cloud Functions (xem functions/index.js: region: 'asia-southeast1') — BẮT BUỘC
+// truyền đúng vùng này khi lấy functions() phía trình duyệt, không thì SDK mặc định gọi nhầm sang
+// us-central1 (không tồn tại hàm nào ở đó) và báo lỗi "not-found".
+const FUNCTIONS_REGION = 'asia-southeast1';
+
+// Khởi tạo (nếu chưa) và trả về { app, auth, db, functions }. Ném lỗi rõ ràng nếu chưa cấu hình hoặc SDK lỗi.
 function ensureFirebase() {
-  if (_fbApp) return { app: _fbApp, auth: _fbAuth, db: _fbDb };
+  if (_fbApp) return { app: _fbApp, auth: _fbAuth, db: _fbDb, functions: _fbFunctions };
   const config = getFirebaseConfig();
   if (!config) throw new Error('Chưa kết nối Firebase. Vào "Kết nối đồng bộ" để thiết lập trước.');
   if (typeof firebase === 'undefined') throw new Error('Không tải được thư viện Firebase.');
@@ -47,6 +53,9 @@ function ensureFirebase() {
   _fbApp = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(config);
   _fbAuth = firebase.auth();
   _fbDb = firebase.firestore();
+  // functions-compat chỉ được nạp ở 1 số trang có dùng AI (xem pages/chuong.html) — bỏ qua êm nếu
+  // trang hiện tại không tải script đó, để không làm hỏng các trang khác không cần Cloud Functions.
+  _fbFunctions = (typeof firebase.functions === 'function') ? _fbApp.functions(FUNCTIONS_REGION) : null;
 
   // Cờ debug cục bộ (không ảnh hưởng người dùng thật): nối vào Firebase Emulator Suite khi đang phát triển.
   const useEmu = localStorage.getItem('hoahoc_use_emulator') === '1';
@@ -55,6 +64,7 @@ function ensureFirebase() {
     // chặn kết nối streaming WebChannel của Firestore, cần ép long-polling để vẫn kết nối được.
     _fbDb.settings({ host: '127.0.0.1:8080', ssl: false, experimentalForceLongPolling: true, useFetchStreams: false });
     _fbAuth.useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
+    if (_fbFunctions) _fbFunctions.useEmulator('127.0.0.1', 5001);
   }
 
   if (!useEmu) {
@@ -71,5 +81,5 @@ function ensureFirebase() {
     // chỉ mất khả năng cache/offline cho phần Firestore (không phải phần công cụ offline gốc).
   }
 
-  return { app: _fbApp, auth: _fbAuth, db: _fbDb };
+  return { app: _fbApp, auth: _fbAuth, db: _fbDb, functions: _fbFunctions };
 }
