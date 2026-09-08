@@ -1028,6 +1028,9 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 /* Câu "Nhập đáp án" — tái dùng nguyên style .quiz-option/.selected/.correct/.wrong cho <input> thay
    vì viết CSS riêng, chỉ cần đổi con trỏ chuột cho đúng ngữ cảnh gõ chữ. */
 input.quiz-option { cursor: text; }
+/* Nút chọn/sửa đáp án đúng trong danh sách quản lý câu hỏi (renderQuizItemCard, chapter-detail.js) —
+   đáp án đang chọn (đã lưu hoặc mới bấm thử, chưa lưu) tô nổi bật để phân biệt với các đáp án khác. */
+.quiz-pick-answer.selected { border-color: var(--brand); background: rgba(20, 184, 166, 0.15); font-weight: 700; }
 /* Đáp án tách riêng thành ảnh (Tầng 1 — xem getQuizVisual/doc-import.js) — nhãn A/B/C/D TỰ VẼ bằng
    HTML (không phải pixel), luôn đúng vị trí hiện tại dù đề có trộn thứ tự đáp án hay không. */
 .quiz-option-image { display: flex; align-items: center; gap: 10px; }

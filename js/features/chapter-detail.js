@@ -1142,22 +1142,35 @@
     `;
   }
 
+  // Chọn/sửa đáp án đúng CHỜ LƯU (chưa ghi Firestore) — key theo "kind:id/index" — cho phép giáo viên
+  // bấm thử, đổi ý, rồi mới bấm "Nạp đáp án" để lưu thật, tránh lưu nhầm ngay khi lỡ bấm sai nút.
+  const pendingCorrect = new Map();
+  function quizItemKey(item) { return item.kind + ':' + (item.kind === 'builtin' ? item.index : item.id); }
+
   // 1 câu hỏi — dùng lại được cho CẢ mục đơn lẻ LẪN từng câu bên trong 1 "Bài" đang mở (xem
   // groupCustomQuizByFile) — tách riêng khỏi renderQuizManager để không viết trùng markup 2 chỗ.
   function renderQuizItemCard(item) {
     const qType = getQuestionType(item);
-    // Câu nạp từ PDF (cắt ảnh) luôn thiếu đáp án đúng (correct: null) — cho bấm chọn nhanh NGAY tại
-    // đây thay vì bắt giáo viên mở form "Sửa" từng câu một, đỡ mất công khi nạp hàng chục/trăm câu.
-    const needsQuickPick = (qType === 'abcd' || qType === 'truefalse') && (item.correct === null || item.correct === undefined) && Array.isArray(item.options);
+    const qKey = quizItemKey(item);
+    // LUÔN cho chọn/sửa đáp án (không chỉ khi còn thiếu) — giáo viên có thể bấm nhầm lúc chọn nhanh
+    // hoặc app tự nhận diện sai đáp án tô sẵn màu, cần sửa lại được ngay tại đây thay vì phải mở form
+    // "Sửa" riêng. Bấm 1 đáp án chỉ TẠM CHỌN (chưa lưu) — phải bấm "Nạp đáp án" mới thực sự ghi lại.
+    const canPickAnswer = (qType === 'abcd' || qType === 'truefalse') && Array.isArray(item.options);
+    const savedCorrect = (item.correct === undefined) ? null : item.correct;
+    const hasPending = pendingCorrect.has(qKey);
+    const selectedIdx = hasPending ? pendingCorrect.get(qKey) : savedCorrect;
+    const isDirty = hasPending && pendingCorrect.get(qKey) !== savedCorrect;
     return `
       <div class="quiz-review-item" style="text-align:left;">
         ${renderQuizVisualHtml(item, 'max-width:100%;display:block;border-radius:8px;margin-bottom:6px;')}
         <div class="qi-q">${escapeHtml(item.q)}</div>
         <div class="hint">[${QUIZ_TYPE_LABELS[qType]}] Đúng: ${formatCorrectAnswerDisplay(item) ? escapeHtml(formatCorrectAnswerDisplay(item)) : '⚠️ chưa có đáp án đúng'}</div>
-        ${needsQuickPick ? `
+        ${canPickAnswer ? `
         <div class="btn-row" style="margin-top:6px;flex-wrap:wrap;gap:6px;">
-          ${item.options.map((opt, i) => `<button type="button" class="btn quiz-quickpick" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}" data-i="${i}">✓ ${escapeHtml(opt)}</button>`).join('')}
-        </div>` : ''}
+          ${item.options.map((opt, i) => `<button type="button" class="btn quiz-pick-answer${i === selectedIdx ? ' selected' : ''}" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}" data-i="${i}">${i === selectedIdx ? '✓ ' : ''}${escapeHtml(opt)}</button>`).join('')}
+        </div>
+        ${isDirty ? `<button type="button" class="btn primary block quiz-save-answer" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}" style="margin-top:6px;">💾 Nạp đáp án</button>` : ''}
+        ` : ''}
         <div class="hint" style="margin-top:4px;">
           ${item.kind === 'builtin' ? (item.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
           · <a href="#" class="quiz-edit" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">Sửa</a>
@@ -1216,12 +1229,21 @@
       });
     });
 
-    $$('.quiz-quickpick', box).forEach((btn) => {
+    $$('.quiz-pick-answer', box).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const qKey = btn.dataset.kind + ':' + btn.dataset.key;
+        pendingCorrect.set(qKey, parseInt(btn.dataset.i, 10));
+        renderQuizManager();
+      });
+    });
+    $$('.quiz-save-answer', box).forEach((btn) => {
       btn.addEventListener('click', async () => {
         const kind = btn.dataset.kind;
         const key = btn.dataset.key;
-        const i = parseInt(btn.dataset.i, 10);
-        $$('.quiz-quickpick', btn.closest('.quiz-review-item')).forEach((b) => { b.disabled = true; });
+        const qKey = kind + ':' + key;
+        const i = pendingCorrect.get(qKey);
+        btn.disabled = true;
+        btn.textContent = 'Đang lưu...';
         try {
           if (kind === 'custom') {
             await updateCustomQuiz(key, { correct: i });
@@ -1233,12 +1255,14 @@
             await setChapterMeta(chapter.id, { ['quizOverrides.' + key]: question });
             chapterMeta.quizOverrides = Object.assign({}, chapterMeta.quizOverrides, { [key]: question });
           }
+          pendingCorrect.delete(qKey);
           rebuildEffectiveQuiz();
           renderQuizManager();
           renderQuiz();
         } catch (err) {
           showToast('Không lưu được: ' + err.message);
-          $$('.quiz-quickpick', box).forEach((b) => { b.disabled = false; });
+          btn.disabled = false;
+          btn.textContent = '💾 Nạp đáp án';
         }
       });
     });
@@ -1396,10 +1420,12 @@
           const index = box.dataset.index;
           await setChapterMeta(chapter.id, { ['quizOverrides.' + index]: question });
           chapterMeta.quizOverrides = Object.assign({}, chapterMeta.quizOverrides, { [index]: question });
+          pendingCorrect.delete('builtin:' + index); // form đã lưu đáp án mới nhất — bỏ lựa chọn tạm (nếu có) để không hiện nhầm nút "Nạp đáp án"
         } else if (box.dataset.id) {
           await updateCustomQuiz(box.dataset.id, question);
           const it = customQuizCache.find((x) => x.id === box.dataset.id);
           if (it) Object.assign(it, question);
+          pendingCorrect.delete('custom:' + box.dataset.id);
         } else {
           const id = await addCustomQuiz(chapter.id, question);
           customQuizCache.push(Object.assign({ id, chapterId: chapter.id }, question));
@@ -1430,7 +1456,8 @@
         questions.forEach((q) => { q.sourceFileName = file.name; });
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
-        box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>`;
+        box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>${quizImportConfirmBtnHtml()}`;
+        wireQuizImportConfirmBtn(box);
         rebuildEffectiveQuiz();
         renderQuizManager();
         renderQuiz();
@@ -1462,7 +1489,9 @@
           <div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi — nhớ vào "Sửa câu hỏi trắc nghiệm" để chọn đáp án đúng cho từng câu.</div>
           <button class="btn block" id="quizPdfViewAllBtn" style="margin-top:8px;">👁️ Xem toàn bộ đề vừa nạp</button>
           <div id="quizPdfPreviewList" style="display:none;margin-top:10px;"></div>
+          ${quizImportConfirmBtnHtml()}
         `;
+        wireQuizImportConfirmBtn(box);
         $('#quizPdfViewAllBtn').addEventListener('click', () => {
           const list = $('#quizPdfPreviewList');
           const show = list.style.display === 'none';
@@ -1498,7 +1527,8 @@
         questions.forEach((q) => { q.sourceFileName = file.name; });
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
-        box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>`;
+        box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>${quizImportConfirmBtnHtml()}`;
+        wireQuizImportConfirmBtn(box);
         rebuildEffectiveQuiz();
         renderQuizManager();
         renderQuiz();
@@ -1545,6 +1575,16 @@
     $('#quizStudentMenu').style.display = owner.isOwner ? 'none' : 'block';
     $('#quizTeacherMenu').style.display = owner.isOwner ? 'block' : 'none';
     if (owner.isOwner) renderQuizStats();
+  }
+
+  // Nút "Xác nhận" sau khi nạp file xong — giáo viên xem qua kết quả/cảnh báo xong thì bấm để đóng
+  // hẳn khung nạp file, quay lại menu Trắc nghiệm (dùng chung cho cả 3 cách nạp: txt/Word, PDF, Excel).
+  function quizImportConfirmBtnHtml() {
+    return `<button type="button" class="btn primary block quiz-import-confirm" style="margin-top:8px;">✓ Xác nhận</button>`;
+  }
+  function wireQuizImportConfirmBtn(box) {
+    const btn = $('.quiz-import-confirm', box);
+    if (btn) btn.addEventListener('click', showQuizMenu);
   }
 
   function initQuizMenu() {
