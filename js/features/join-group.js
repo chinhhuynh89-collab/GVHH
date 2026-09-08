@@ -82,6 +82,26 @@ async function getVerifiedMembership() {
       }
     } catch (e) { /* lỗi mạng tạm thời -> vẫn tạm dùng cache cũ, không chặn trang vì 1 lần lỗi mạng */ }
   }
+
+  // Đồng bộ lại tên nhóm/lớp/giáo viên MỚI NHẤT — cache trên máy chỉ chụp nhanh 1 lần lúc vào/chuyển
+  // nhóm (xem setMembership() ở các nơi gọi, và renderGroupPicker() ở chapter-overview.js), KHÔNG tự
+  // cập nhật khi giáo viên đổi tên nhóm/đổi khối lớp SAU ĐÓ. getVerifiedMembership() được gọi ở hầu
+  // hết trang học sinh (trang chủ, Chương trình học tập, Kiểm tra...) nên đồng bộ lại NGAY ĐÂY giúp
+  // mọi nơi tự thấy tên mới ở lần tải trang kế tiếp, học sinh không cần tự làm gì cả.
+  if (m.groupCode) {
+    try {
+      const { db } = ensureFirebase();
+      const snap = await db.collection('groups').where('groupCode', '==', m.groupCode).limit(1).get();
+      if (!snap.empty) {
+        const live = snap.docs[0].data();
+        if (live.groupName !== m.groupName || live.grade !== m.grade || live.teacherUid !== m.teacherUid) {
+          const refreshed = Object.assign({}, m, { groupName: live.groupName, grade: live.grade, teacherUid: live.teacherUid });
+          setMembership(refreshed);
+          return refreshed;
+        }
+      }
+    } catch (e) { /* lỗi mạng tạm thời -> vẫn dùng cache cũ, không chặn trang */ }
+  }
   return m;
 }
 
@@ -104,11 +124,25 @@ async function saveStudentProfile(uid, info) {
 }
 
 // Toàn bộ nhóm tài khoản này ĐÃ được duyệt vào — xem chú thích đầu file (multi-group).
+// Bản ghi "students" KHÔNG lưu groupName/grade (chỉ lưu groupCode — xem addStudentToGroup,
+// groups-data.js) — nạp thẳng nhóm hiện có (collection "groups") để LUÔN LẤY ĐÚNG TÊN/LỚP MỚI NHẤT,
+// tránh chụp nhanh 1 lần rồi không bao giờ cập nhật nếu giáo viên đổi tên nhóm sau này.
 async function listMyGroups(studentUid) {
   const { db } = ensureFirebase();
   const snap = await db.collection('students').where('studentUid', '==', studentUid).get();
-  return snap.docs.map((d) => Object.assign({ studentId: d.id }, d.data()))
-    .sort((a, b) => (b.joinedAt || '').localeCompare(a.joinedAt || ''));
+  const docs = snap.docs.map((d) => Object.assign({ studentId: d.id }, d.data()));
+  const codes = Array.from(new Set(docs.map((d) => d.groupCode).filter(Boolean)));
+  const groupByCode = new Map();
+  await Promise.all(codes.map(async (code) => {
+    try {
+      const gSnap = await db.collection('groups').where('groupCode', '==', code).limit(1).get();
+      if (!gSnap.empty) groupByCode.set(code, gSnap.docs[0].data());
+    } catch (e) { /* nhóm có thể đã bị xoá, hoặc lỗi mạng thoáng qua -> bỏ qua, giữ nguyên không có tên */ }
+  }));
+  return docs.map((d) => {
+    const live = d.groupCode ? groupByCode.get(d.groupCode) : null;
+    return live ? Object.assign({}, d, { groupName: live.groupName, grade: live.grade, freeMode: live.freeMode }) : d;
+  }).sort((a, b) => (b.joinedAt || '').localeCompare(a.joinedAt || ''));
 }
 
 // Xưng hô Thầy/Cô theo giới tính đặt ở hồ sơ giáo viên — hồ sơ cũ chưa từng chọn giới tính thì dùng

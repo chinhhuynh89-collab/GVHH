@@ -8,7 +8,7 @@
     main.innerHTML = `<div class="card"><p class="hint">⚠️ Tính năng kiểm tra chưa được giáo viên bật.</p></div>`;
     return;
   }
-  const membership = getMembership();
+  let membership = getMembership();
   if (!membership) {
     main.innerHTML = `<div class="card"><p class="hint">Bạn chưa tham gia nhóm nào.</p><a class="btn primary" href="vao-nhom.html">Vào nhóm học tập</a></div>`;
     return;
@@ -26,6 +26,14 @@
         </div>
       `;
       return;
+    }
+    // Đồng bộ lại tên nhóm/lớp MỚI NHẤT trước khi hiện gì cả — getMembership() ở trên chỉ đọc CACHE,
+    // không tự cập nhật khi giáo viên đổi tên nhóm sau lúc học sinh vào/chuyển nhóm (xem
+    // getVerifiedMembership, join-group.js). Trang này trước đây dùng thẳng cache nên tên nhóm hiện ở
+    // "Nhóm: ..." (renderWaiting) có thể cũ, không theo kịp lúc giáo viên đổi tên.
+    if (typeof getVerifiedMembership === 'function') {
+      const refreshed = await getVerifiedMembership();
+      if (refreshed) membership = refreshed;
     }
     // Nhóm bị khoá (vượt hạn mức số nhóm miễn phí, giáo viên chưa gia hạn Pro) — chặn làm bài kiểm
     // tra, không riêng gì học/xem chương (chapter-overview.js/chapter-detail.js đã chặn tương tự).
