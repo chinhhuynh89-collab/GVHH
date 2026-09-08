@@ -278,6 +278,12 @@
   function goToUnitSection(unitId, sectionId) {
     setActiveUnit(unitId);
     activateTab(sectionId === 'selfTestCard' ? 'tabQuiz' : sectionId);
+    if (sectionId === 'tabLesson') {
+      // Bấm "📖 Bài giảng" là muốn ĐỌC LUÔN nội dung — tự mở sẵn (các) bài giảng của đúng Bài này,
+      // khỏi bắt bấm thêm 1 lần vào tiêu đề (▸) mới xổ nội dung ra như trước.
+      getAllLessons().forEach((l) => expandedLessonKeys.add(lessonKey(l)));
+      renderAllLessons();
+    }
     if (sectionId === 'selfTestCard') {
       // Nhảy thẳng vào màn Tự kiểm tra, khỏi qua menu "Ôn tập/Kiểm tra thử" trước cho tiện.
       showQuizSection('selfTestCard');
