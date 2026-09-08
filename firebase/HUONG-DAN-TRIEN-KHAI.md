@@ -59,7 +59,7 @@ Mặc định Firebase chỉ cho phép đăng nhập từ `localhost`. Khi bạn
 
 - **Dữ liệu nằm ở đâu:** mở Firebase Console → Firestore Database → Data để xem trực tiếp các nhóm, đề kiểm tra, điểm số — giống như mở Google Sheet trước đây.
 - **Nhiều giáo viên dùng chung:** vì config đã nhúng sẵn trong code, giáo viên khác KHÔNG cần tạo project riêng, KHÔNG cần biết gì về Firebase — chỉ mở app, bấm đăng nhập bằng tài khoản Google của họ, hệ thống tự tách dữ liệu từng người.
-- **Chi phí:** phần Firestore/Auth/Hosting hoàn toàn nằm trong gói miễn phí (Spark). Riêng tính năng "Tạo bằng AI" (xem mục Bước 8 bên dưới) cần Cloud Functions nên bắt buộc gói **Blaze** (trả theo dùng) — vẫn có hạn mức miễn phí lớn, chỉ tính phí nếu vượt.
+- **Chi phí:** phần Firestore/Auth/Hosting hoàn toàn nằm trong gói miễn phí (Spark). Riêng tính năng "Tạo bằng AI" (xem mục Bước 8 bên dưới) cần Cloud Functions nên bắt buộc gói **Blaze** (trả theo dùng) — vẫn có hạn mức miễn phí lớn, chỉ tính phí nếu vượt. Nhà cung cấp AI mặc định là **Google Gemini**, có hạn mức miễn phí riêng, **không cần thẻ thanh toán** ở mức dùng thử.
 - **Giới hạn đã biết:** đáp án trắc nghiệm được tách riêng khỏi câu hỏi và chỉ tải về lúc học sinh nộp bài — giảm rủi ro xem trộm, nhưng học sinh rành kỹ thuật (mở DevTools) vẫn có thể xem được nếu cố tình, vì không dùng Cloud Functions để lọc phía server.
 
 ## Bước 8 — (Tuỳ chọn) Triển khai Cloud Function "Tạo bằng AI"
@@ -69,16 +69,18 @@ bằng Claude API, chỉ dành cho giáo viên gói Pro). Không làm bước n�
 vẫn hoạt động bình thường — nút "🤖 Tạo bằng AI" sẽ chỉ báo lỗi kết nối nếu bấm vào.
 
 1. **Nâng cấp gói Blaze**: Firebase Console → biểu tượng bánh răng góc trái → **Usage and billing** →
-   **Details & settings** → **Modify plan** → chọn **Blaze**. Cần gắn 1 thẻ thanh toán, nhưng chỉ bị
-   trừ tiền nếu vượt hạn mức miễn phí hàng tháng (rất rộng rãi cho quy mô 1 app nhỏ).
+   **Details & settings** → **Modify plan** → chọn **Blaze**. Cần gắn 1 thẻ thanh toán (Google yêu cầu
+   để mở Cloud Functions, dù dùng Gemini miễn phí thì Firestore/Functions vẫn chỉ tính phí nếu vượt
+   hạn mức miễn phí hàng tháng — rất rộng rãi cho quy mô 1 app nhỏ).
 2. **Cài Firebase CLI** (nếu máy bạn chưa có): mở terminal, chạy `npm install -g firebase-tools`, sau
    đó `firebase login` (mở trình duyệt đăng nhập đúng tài khoản Google đã tạo project ở Bước 1).
-3. **Lấy API key Claude**: vào [console.anthropic.com](https://console.anthropic.com) → tạo 1 API
-   key mới, copy lại (chỉ hiện đúng 1 lần).
+3. **Lấy API key Gemini** (miễn phí, không cần thẻ thanh toán ở mức dùng thử): vào
+   [aistudio.google.com](https://aistudio.google.com) → đăng nhập bằng tài khoản Google → menu
+   **Get API key** → **Create API key** → copy lại.
 4. **Lưu key vào Cloud Functions** (KHÔNG dán key này vào code hay gửi cho ai): trong thư mục gốc của
    app (chứa file `firebase.json`), chạy:
    ```
-   firebase functions:secrets:set ANTHROPIC_API_KEY
+   firebase functions:secrets:set GEMINI_API_KEY
    ```
    CLI sẽ hỏi dán key vào — dán rồi Enter, key được Google mã hoá lưu riêng, không nằm trong code/Git.
 5. **Cài thư viện cho Cloud Function** (chỉ cần làm 1 lần, hoặc mỗi khi đổi máy):
@@ -104,3 +106,13 @@ functions` (không cần lặp lại các bước cài đặt/nâng cấp gói �
 **Kiểm soát chi phí đã có sẵn trong code** (`functions/index.js`): tối đa 15 trang bài giảng/lượt tạo,
 tối đa 100 lượt/giáo viên/tháng — xem/sửa 2 hằng số `MAX_POINTS_PER_REQUEST`/`MONTHLY_CALL_CAP` ở đầu
 file nếu muốn đổi.
+
+**Đổi sang nhà cung cấp AI khác (VD Claude) sau này — KHÔNG cần sửa code/deploy lại**: code đã hỗ trợ
+sẵn cả Gemini lẫn Claude qua `functions/providers/`. Chỉ cần:
+1. Lấy API key của hãng muốn đổi (VD Claude: [console.anthropic.com](https://console.anthropic.com)),
+   lưu bằng `firebase functions:secrets:set ANTHROPIC_API_KEY` (chạy 1 lần, xem lại `secretName` trong
+   từng file `functions/providers/*.js` nếu quên đúng tên biến).
+2. Vào Firestore Console → collection `config` → tài liệu `aiProvider` → sửa field `provider` thành
+   `"claude"` (hoặc `"gemini"` để đổi lại). Có hiệu lực ngay, không cần deploy.
+Muốn thêm hãng hoàn toàn mới (không phải Gemini/Claude) mới cần code thêm 1 file adapter trong
+`functions/providers/` rồi deploy lại 1 lần.
