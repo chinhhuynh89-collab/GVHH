@@ -451,11 +451,21 @@ function stackCanvasesVertically(canvases) {
   return out;
 }
 
+// Ngân sách RIÊNG cho ảnh câu hỏi trắc nghiệm — nhỏ hơn NHIỀU so với ảnh trang bài giảng
+// (LESSON_IMAGE_BUDGET_PER_SECTION, ~700KB): lúc TẠO ĐỀ THI, NHIỀU câu hỏi bị gộp vào CHUNG 1 tài
+// liệu Firestore duy nhất (mảng "questions" — xem createExamForCurrentTeacher, exam-creator.js), nếu
+// mỗi câu vẫn được phép nặng tới mức của 1 trang bài giảng thì 1 đề vài chục câu ảnh sẽ vượt hạn mức
+// 1MiB/tài liệu ngay lập tức. Đã kiểm chứng bằng mắt (phóng to 3 lần, so trực tiếp) — chữ đen/trắng
+// thường (không có hình vẽ/đồ thị) vẫn SẮC NÉT ở chất lượng nén thấp (0.3-0.4), vì JPEG chỉ mất nét ở
+// vùng có màu/gradient chứ không phải chữ đơn sắc — hạ hẳn mức khởi điểm so với 0.7 trước đây mà không
+// ảnh hưởng gì tới việc đọc chữ/công thức.
+const QUIZ_IMAGE_BUDGET_PER_QUESTION = 150000;
+
 function canvasToBudgetedJpeg(canvas) {
-  let quality = 0.7;
+  let quality = 0.4;
   let dataUri = canvas.toDataURL('image/jpeg', quality);
-  while (dataUri.length > LESSON_IMAGE_BUDGET_PER_SECTION && quality > 0.35) {
-    quality -= 0.15;
+  while (dataUri.length > QUIZ_IMAGE_BUDGET_PER_QUESTION && quality > 0.15) {
+    quality -= 0.05;
     dataUri = canvas.toDataURL('image/jpeg', quality);
   }
   return dataUri;

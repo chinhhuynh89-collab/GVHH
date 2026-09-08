@@ -134,9 +134,16 @@ function sanitizeFileNamePart(s) {
 
 // Câu "Nhập đáp án" không có "options" (không có gì để chọn) — chỉ ghi field phù hợp với từng loại,
 // tránh lưu options:undefined (Firestore không chấp nhận field undefined).
+// qImage/noShuffle: câu nạp từ PDF (cắt ảnh nguyên câu — xem doc-import.js) PHẢI giữ lại 2 field này
+// khi đưa vào đề thi thật, nếu không học sinh sẽ thấy câu hỏi TRỐNG KHÔNG ẢNH (thiếu sót đã gặp thực
+// tế: publicQuestionFields trước đây chỉ giữ q/type/options, bỏ mất đúng ảnh câu hỏi) và/hoặc bị xáo
+// nhầm thứ tự A/B/C/D không khớp với chữ trong ảnh (xem exam-taker.js: q.noShuffle).
 function publicQuestionFields(q) {
   const type = getQuestionType(q);
-  return type === 'text' ? { q: q.q, type } : { q: q.q, type, options: q.options };
+  const base = type === 'text' ? { q: q.q, type } : { q: q.q, type, options: q.options };
+  if (q.qImage) base.qImage = q.qImage;
+  if (q.noShuffle) base.noShuffle = true;
+  return base;
 }
 function answerKeyFields(q) {
   const type = getQuestionType(q);
@@ -149,6 +156,19 @@ async function createExamForCurrentTeacher(examInput) {
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   if (typeof enforceFeatureLock === 'function') await enforceFeatureLock(teacher.uid, 'examCreator');
   const { db } = ensureFirebase();
+  const publicQuestions = examInput.questions.map(publicQuestionFields);
+
+  // Firestore giới hạn CỨNG 1MiB/tài liệu — 1 đề gộp NHIỀU câu ảnh (nạp từ PDF, xem doc-import.js)
+  // vào CHUNG 1 tài liệu "exams" duy nhất rất dễ vượt nếu chọn quá nhiều câu ảnh cùng lúc. Kiểm tra
+  // TRƯỚC khi ghi, báo lỗi rõ ràng (đúng số câu ảnh + gợi ý cách khắc phục) thay vì để Firestore tự
+  // chặn với thông báo khó hiểu giữa chừng.
+  const EXAM_DOC_SAFE_BYTES = 900 * 1024;
+  const estimatedSize = JSON.stringify(publicQuestions).length;
+  if (estimatedSize > EXAM_DOC_SAFE_BYTES) {
+    const imageCount = publicQuestions.filter((q) => q.qImage).length;
+    throw new Error(`Đề này quá nặng để lưu (~${Math.round(estimatedSize / 1024)}KB, giới hạn an toàn ${Math.round(EXAM_DOC_SAFE_BYTES / 1024)}KB) — có ${imageCount} câu dạng ảnh (nạp từ PDF). Hãy chọn ít câu ảnh hơn (giảm số chương/số câu của đề này), hoặc tách thành nhiều đề nhỏ hơn.`);
+  }
+
   const examRef = db.collection('exams').doc();
   // 2 tài liệu độc lập (câu hỏi + đáp án) — ghi CÙNG LÚC thay vì lần lượt để đỡ mất 1 round-trip mạng.
   await Promise.all([
@@ -161,7 +181,7 @@ async function createExamForCurrentTeacher(examInput) {
       durationMinutes: examInput.durationMinutes,
       startTime: examInput.startTime,
       endTime: examInput.endTime,
-      questions: examInput.questions.map(publicQuestionFields),
+      questions: publicQuestions,
       createdAt: new Date().toISOString()
     }),
     db.collection('examAnswers').doc(examRef.id).set({
