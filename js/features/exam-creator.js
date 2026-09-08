@@ -28,10 +28,12 @@ function drawQuestionsForExport(poolByType, counts) {
 
 // ---------- Xuất đề in giấy (Word/PDF) — KHÔNG ghi Firestore, xử lý hoàn toàn phía trình duyệt ----------
 // Chỉ xáo đáp án cho câu "abcd" — câu "Đúng/Sai" giữ nguyên thứ tự Đúng trước/Sai sau (quy ước quen
-// thuộc trên đề giấy), câu "Nhập đáp án" không có gì để xáo. Câu cắt ảnh từ PDF (question.noShuffle,
-// xem doc-import.js) dùng nhãn A/B/C/D chung chung khớp với ảnh gốc — xáo sẽ làm sai lệch, giữ nguyên.
+// thuộc trên đề giấy), câu "Nhập đáp án" không có gì để xáo. Câu cắt ảnh từ PDF chưa tách riêng được
+// từng đáp án (q.noShuffle — ảnh gộp cũ, HOẶC q.optionsLocked — đề đã tách nhưng đáp án còn gộp chung,
+// xem doc-import.js/quiz-common.js) dùng nhãn A/B/C/D chung chung khớp với ảnh gốc — xáo sẽ làm sai
+// lệch, giữ nguyên.
 function shuffleOptionsForPrint(question) {
-  if (getQuestionType(question) !== 'abcd' || question.noShuffle) return question;
+  if (getQuestionType(question) !== 'abcd' || question.noShuffle || question.optionsLocked) return question;
   const order = shuffleArray(question.options.map((_, i) => i));
   return Object.assign({}, question, {
     options: order.map((i) => question.options[i]),
@@ -134,15 +136,19 @@ function sanitizeFileNamePart(s) {
 
 // Câu "Nhập đáp án" không có "options" (không có gì để chọn) — chỉ ghi field phù hợp với từng loại,
 // tránh lưu options:undefined (Firestore không chấp nhận field undefined).
-// qImage/noShuffle: câu nạp từ PDF (cắt ảnh nguyên câu — xem doc-import.js) PHẢI giữ lại 2 field này
-// khi đưa vào đề thi thật, nếu không học sinh sẽ thấy câu hỏi TRỐNG KHÔNG ẢNH (thiếu sót đã gặp thực
-// tế: publicQuestionFields trước đây chỉ giữ q/type/options, bỏ mất đúng ảnh câu hỏi) và/hoặc bị xáo
-// nhầm thứ tự A/B/C/D không khớp với chữ trong ảnh (xem exam-taker.js: q.noShuffle).
+// Câu nạp từ PDF (cắt ảnh — xem doc-import.js) PHẢI giữ lại các field ảnh khi đưa vào đề thi thật, nếu
+// không học sinh sẽ thấy câu hỏi TRỐNG KHÔNG ẢNH (thiếu sót đã gặp thực tế: publicQuestionFields trước
+// đây chỉ giữ q/type/options, bỏ mất đúng ảnh câu hỏi) và/hoặc bị xáo nhầm thứ tự A/B/C/D không khớp
+// với ảnh (xem exam-taker.js: q.noShuffle/q.optionsLocked, getQuizVisual ở quiz-common.js).
 function publicQuestionFields(q) {
   const type = getQuestionType(q);
   const base = type === 'text' ? { q: q.q, type } : { q: q.q, type, options: q.options };
   if (q.qImage) base.qImage = q.qImage;
+  if (q.stemImage) base.stemImage = q.stemImage;
+  if (q.optionImages) base.optionImages = q.optionImages;
+  if (q.optionsImage) base.optionsImage = q.optionsImage;
   if (q.noShuffle) base.noShuffle = true;
+  if (q.optionsLocked) base.optionsLocked = true;
   return base;
 }
 function answerKeyFields(q) {
@@ -165,7 +171,7 @@ async function createExamForCurrentTeacher(examInput) {
   const EXAM_DOC_SAFE_BYTES = 900 * 1024;
   const estimatedSize = JSON.stringify(publicQuestions).length;
   if (estimatedSize > EXAM_DOC_SAFE_BYTES) {
-    const imageCount = publicQuestions.filter((q) => q.qImage).length;
+    const imageCount = publicQuestions.filter((q) => q.qImage || q.stemImage).length;
     throw new Error(`Đề này quá nặng để lưu (~${Math.round(estimatedSize / 1024)}KB, giới hạn an toàn ${Math.round(EXAM_DOC_SAFE_BYTES / 1024)}KB) — có ${imageCount} câu dạng ảnh (nạp từ PDF). Hãy chọn ít câu ảnh hơn (giảm số chương/số câu của đề này), hoặc tách thành nhiều đề nhỏ hơn.`);
   }
 

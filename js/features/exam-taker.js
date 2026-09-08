@@ -75,6 +75,27 @@
     return a;
   }
 
+  // Trộn VỊ TRÍ hiển thị của các câu — GIỮ CỐ ĐỊNH đúng vị trí gốc cho câu ảnh CŨ (qImage, không có
+  // stemImage — số "Câu N." còn kẹt trong pixel, đổi vị trí sẽ hiện SAI số so với ảnh) hoặc câu tràn
+  // nhiều trang lúc nạp; chỉ xáo TỰ DO các câu còn lại (câu chữ thường + câu ảnh MỚI đã tách sạch nhãn
+  // "Câu N." — xem getQuizVisual/quiz-common.js) vào đúng các vị trí còn trống.
+  function buildQuestionOrder(questions) {
+    const n = questions.length;
+    const order = new Array(n);
+    const shuffleableOrigIdx = [];
+    questions.forEach((q, i) => {
+      const visual = getQuizVisual(q);
+      const canShuffle = !visual || visual.canShuffleQuestion;
+      if (canShuffle) shuffleableOrigIdx.push(i); else order[i] = i;
+    });
+    const shuffled = shuffleIndices(shuffleableOrigIdx.length).map((k) => shuffleableOrigIdx[k]);
+    let p = 0;
+    for (let i = 0; i < n; i++) {
+      if (order[i] === undefined) order[i] = shuffled[p++];
+    }
+    return order;
+  }
+
   function renderWaiting(message) {
     main.innerHTML = `
       <div class="card">
@@ -107,14 +128,17 @@
   function startExam() {
     const n = exam.questions.length;
     answers = new Array(n).fill(null);
-    questionOrder = shuffleIndices(n);
+    questionOrder = buildQuestionOrder(exam.questions);
     // Câu "Nhập đáp án" không có options để xáo (mảng rỗng, vô hại — không dùng tới ở renderQuestion).
-    // Câu cắt ảnh từ PDF (q.noShuffle, xem doc-import.js) dùng nhãn A/B/C/D CHUNG CHUNG vì nội dung
-    // thật nằm trong ảnh — xáo thứ tự nút bấm sẽ làm nút "A" không còn khớp chữ "A." trong ảnh nữa,
-    // học sinh chọn sai vì bối rối chứ không phải sai kiến thức, nên giữ nguyên thứ tự cho các câu này.
+    // Câu ảnh CHƯA tách riêng được từng đáp án (getQuizVisual(q).canShuffleOptions === false — gồm cả
+    // qImage cũ lẫn optionsImage gộp chung Tầng 2) dùng nhãn A/B/C/D CHUNG CHUNG vì nội dung thật nằm
+    // trong ảnh — xáo thứ tự nút bấm sẽ làm nút "A" không còn khớp đúng đáp án trong ảnh nữa, học sinh
+    // chọn sai vì bối rối chứ không phải sai kiến thức, nên giữ nguyên thứ tự cho các câu này.
     optionOrder = exam.questions.map((q) => {
       const len = getQuestionType(q) === 'text' ? 0 : q.options.length;
-      return q.noShuffle ? Array.from({ length: len }, (_, i) => i) : shuffleIndices(len);
+      const visual = getQuizVisual(q);
+      const canShuffleOptions = !visual || visual.canShuffleOptions;
+      return canShuffleOptions ? shuffleIndices(len) : Array.from({ length: len }, (_, i) => i);
     });
     qIndex = 0;
     startedAt = Date.now();
@@ -156,14 +180,16 @@
     const origIdx = questionOrder[qIndex];
     const item = exam.questions[origIdx];
     const dispOptions = optionOrder[origIdx]; // mảng chỉ số gốc theo thứ tự hiển thị cho học sinh này
+    const visual = getQuizVisual(item);
     main.innerHTML = `
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div class="quiz-progress" style="margin:0;">Câu ${qIndex + 1}/${total}</div>
           <div id="examTimer" style="font-weight:800;font-size:16px;color:var(--brand);"></div>
         </div>
-        ${item.qImage ? `<div class="quiz-question-image"><img src="${item.qImage}" alt="Ảnh câu hỏi"></div>` : ''}
+        ${visual ? `<div class="quiz-question-image"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>` : ''}
         <div class="quiz-question">${escapeHtml(item.q)}</div>
+        ${visual && visual.combinedOptionsSrc ? `<div class="quiz-question-image"><img src="${visual.combinedOptionsSrc}" alt="Ảnh đáp án"></div>` : ''}
         <div class="quiz-options" id="examOptions"></div>
         <div class="btn-row">
           <button class="btn" id="examPrevBtn" ${qIndex === 0 ? 'disabled' : ''}>← Câu trước</button>
@@ -184,6 +210,17 @@
       // focus/con trỏ đang gõ dở (khác nút bấm ABCD, mỗi click là 1 hành động rời rạc).
       input.addEventListener('input', () => { answers[origIdx] = input.value.trim() || null; });
       optWrap.appendChild(input);
+    } else if (visual && visual.optionSrcs) {
+      // Đáp án tách riêng thành ảnh (Tầng 1) — nhãn A/B/C/D TỰ VẼ theo ĐÚNG vị trí hiển thị hiện tại
+      // (dispOptions đã xáo), không dùng chữ cắt sẵn trong ảnh (không còn tồn tại ở Tầng này).
+      const labels = ['A', 'B', 'C', 'D'];
+      dispOptions.forEach((origOptIdx, dispIdx) => {
+        const b = document.createElement('button');
+        b.className = 'quiz-option quiz-option-image' + (answers[origIdx] === origOptIdx ? ' selected' : '');
+        b.innerHTML = `<span class="quiz-option-label">${labels[dispIdx]}.</span><img src="${visual.optionSrcs[origOptIdx]}" alt="Đáp án ${labels[dispIdx]}">`;
+        b.addEventListener('click', () => { answers[origIdx] = origOptIdx; renderQuestion(); });
+        optWrap.appendChild(b);
+      });
     } else {
       dispOptions.forEach((origOptIdx) => {
         const b = document.createElement('button');

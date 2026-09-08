@@ -432,6 +432,78 @@ function findPrevRealLineY(lines, idx, lineHeight) {
   return lines[j].y;
 }
 
+// Tính sẵn "dải dòng" (top/bottom) cho MỌI dòng trên trang — khái quát findPrevRealLineY (vốn chỉ
+// tính cho riêng dòng mốc) thành ranh giới CHUNG dùng được cho bất kỳ dòng nào (đề, đáp án...), tránh
+// viết trùng logic tính ranh giới dọc ở nhiều chỗ.
+function computeLineBands(lines, lineHeight, canvasHeight) {
+  const boundaries = new Array(lines.length + 1);
+  boundaries[0] = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const prevY = findPrevRealLineY(lines, i, lineHeight);
+    boundaries[i] = prevY !== null ? (prevY + lines[i].y) / 2 : boundaries[i - 1];
+  }
+  boundaries[lines.length] = canvasHeight;
+  return lines.map((_, i) => ({ top: boundaries[i], bottom: boundaries[i + 1] }));
+}
+
+// Tìm toạ độ X ngay SAU nhãn (VD "Câu 17." hoặc "A.") trên 1 dòng, dựa vào toạ độ X THẬT của từng mảnh
+// chữ pdf.js (không đoán) — trả về null nếu nhãn DÍNH LIỀN nội dung trong CÙNG 1 mảnh text (hiếm, do
+// pdf.js không cho biết vị trí X theo TỪNG KÝ TỰ, chỉ theo từng mảnh — không thể cắt sạch pixel trong
+// trường hợp này, nơi gọi tự rơi về phương án dự phòng an toàn hơn thay vì cắt liều).
+function findLabelEndX(line, markerRe) {
+  let acc = '';
+  for (let k = 0; k < line.items.length; k++) {
+    acc += line.items[k].str;
+    const leadingWs = acc.length - acc.replace(/^\s+/, '').length;
+    const trimmed = acc.slice(leadingWs);
+    const m = trimmed.match(markerRe);
+    if (m && m.index === 0) {
+      // Cho phép phần THỪA sau nhãn (nếu có) chỉ là khoảng trắng (VD mảnh cuối là ". " có dấu cách
+      // theo sau dấu chấm) — vẫn coi là cắt SẠCH; chỉ khi có CHỮ THẬT dính liền mới không cắt được.
+      const rest = acc.slice(leadingWs + m[0].length);
+      const cleanCut = /^\s*$/.test(rest);
+      return cleanCut ? (line.items[k].x + line.items[k].width) : null;
+    }
+  }
+  return null;
+}
+
+// Tìm MỌI điểm bắt đầu 1 đáp án A/B/C/D trên 1 dòng — không chỉ đầu dòng, vì 2 đáp án có thể nằm
+// CHUNG 1 dòng ngang (đã gặp thực tế, VD "A. HCl trong C6H6. C. Ca(OH)2 trong nước." trên cùng 1
+// dòng). Chỉ ghi nhận khi cắt SẠCH được nhãn (xem findLabelEndX) — bỏ qua các điểm khớp nhưng nhãn
+// dính liền nội dung, để nơi gọi đối chiếu số lượng tìm được với số lượng đếm thuần theo chữ
+// (countOptionLetterSequence) rồi tự quyết định có tin kết quả tách pixel này hay không.
+function findOptionMarkStartsOnLine(line) {
+  const marks = [];
+  for (let s = 0; s < line.items.length; s++) {
+    let acc = '';
+    for (let k = s; k < line.items.length && acc.length <= 8; k++) {
+      acc += line.items[k].str;
+      const leadingWs = acc.length - acc.replace(/^\s+/, '').length;
+      const trimmed = acc.slice(leadingWs);
+      const m = trimmed.match(QUIZ_OPTION_MARKER_RE);
+      if (m && m.index === 0) {
+        const rest = acc.slice(leadingWs + m[0].length);
+        if (/^\s*$/.test(rest)) {
+          marks.push({ x: line.items[s].x, labelEndX: line.items[k].x + line.items[k].width, letter: trimmed[0].toUpperCase() });
+        }
+        break;
+      }
+    }
+  }
+  return marks;
+}
+
+// Đếm THUẦN THEO CHỮ (không phụ thuộc cách pdf.js chia mảnh) có đúng 4 đáp án A,B,C,D xuất hiện theo
+// thứ tự hay không — dùng làm "đối chiếu an toàn": nếu số lượng tách được bằng pixel (findOptionMark
+// StartsOnLine) không khớp con số đếm thuần theo chữ ở đây, nghĩa là có nhãn dính liền nội dung không
+// tách sạch pixel được dù đếm chữ vẫn thấy đủ — KHÔNG được tin kết quả tách pixel, phải rơi về phương
+// án gộp chung an toàn (Tầng 2) thay vì cắt liều ra kết quả sai.
+function countOptionLetterSequence(text) {
+  const matches = text.match(/[A-D][\.\):]/g) || [];
+  return matches.map((m) => m[0]);
+}
+
 // Cắt vùng dọc [top, bottom) của canvas trang thành 1 canvas riêng, tự bỏ lề trắng thừa 2 đầu (giống
 // trimCanvasWhitespace ở phần PDF bài giảng) để không dư khoảng trắng quanh câu hỏi.
 function cropPageCanvasVertical(pageCanvas, top, bottom) {
@@ -467,6 +539,59 @@ function stackCanvasesVertically(canvases) {
   return out;
 }
 
+// Tổng quát hoá cropPageCanvasVertical: cắt 1 dải HÌNH CHỮ NHẬT [top,bottom) x [left,right) của canvas
+// trang, tự bỏ lề trắng thừa CẢ 4 CẠNH (không chỉ trên/dưới) — dùng để cắt riêng đề/từng đáp án SAU KHI
+// đã trừ bỏ phần nhãn "Câu N."/"A./B./C./D." theo toạ độ X thật (xem findLabelEndX). KHÔNG thay
+// cropPageCanvasVertical hiện có (giữ nguyên cho Tầng 3 — vẫn đang hoạt động đúng, tránh đổi hành vi
+// ảnh cũ ngoài ý muốn).
+function cropPageCanvasRect(pageCanvas, top, bottom, left, right) {
+  const pageWidth = pageCanvas.width;
+  top = Math.max(0, Math.round(top));
+  bottom = Math.min(pageCanvas.height, Math.round(bottom));
+  left = Math.max(0, Math.round(left));
+  right = Math.min(pageWidth, Math.round(right));
+  if (bottom <= top || right <= left) return null;
+  const width = right - left;
+  const height = bottom - top;
+  const data = pageCanvas.getContext('2d').getImageData(left, top, width, height).data;
+  let innerTop = 0;
+  while (innerTop < height && quizRowBlank(data, width, innerTop)) innerTop++;
+  let innerBottom = height - 1;
+  while (innerBottom > innerTop && quizRowBlank(data, width, innerBottom)) innerBottom--;
+  const colBlank = (x) => {
+    for (let y = innerTop; y <= innerBottom; y += 3) {
+      const i = (y * width + x) * 4;
+      if (data[i] < 248 || data[i + 1] < 248 || data[i + 2] < 248) return false;
+    }
+    return true;
+  };
+  let innerLeft = 0;
+  while (innerLeft < width && colBlank(innerLeft)) innerLeft++;
+  let innerRight = width - 1;
+  while (innerRight > innerLeft && colBlank(innerRight)) innerRight--;
+  const h = innerBottom - innerTop + 1;
+  const w = innerRight - innerLeft + 1;
+  if (h <= 0 || w <= 0) return null;
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  out.getContext('2d').drawImage(pageCanvas, left + innerLeft, top + innerTop, w, h, 0, 0, w, h);
+  return out;
+}
+
+// Cắt NHIỀU dải hình chữ nhật (mỗi dải tự chọn top/bottom/left/right riêng) rồi nối dọc thành 1 ảnh
+// DUY NHẤT — dùng cho cả đề (dòng đầu cắt bỏ nhãn "Câu N." + các dòng tràn tiếp theo nếu đề dài) LẪN
+// từng đáp án riêng (dòng đầu cắt bỏ nhãn "A./B./C./D." + phần tràn dòng nếu đáp án dài).
+function cropRegionStrips(canvas, strips) {
+  const pieces = [];
+  for (const s of strips) {
+    const piece = cropPageCanvasRect(canvas, s.top, s.bottom, s.left, s.right);
+    if (piece) pieces.push(piece);
+  }
+  if (!pieces.length) return null;
+  return stackCanvasesVertically(pieces);
+}
+
 // Ngân sách RIÊNG cho ảnh câu hỏi trắc nghiệm — nhỏ hơn NHIỀU so với ảnh trang bài giảng
 // (LESSON_IMAGE_BUDGET_PER_SECTION, ~700KB): lúc TẠO ĐỀ THI, NHIỀU câu hỏi bị gộp vào CHUNG 1 tài
 // liệu Firestore duy nhất (mảng "questions" — xem createExamForCurrentTeacher, exam-creator.js), nếu
@@ -487,6 +612,25 @@ function canvasToBudgetedJpeg(canvas) {
   return dataUri;
 }
 
+// Câu hỏi tách riêng đề + từng đáp án (Tầng 1/2 — xem buildTieredQuestionImages) có NHIỀU ảnh/câu thay
+// vì 1 — chia CHUNG 1 ngân sách QUIZ_IMAGE_BUDGET_PER_QUESTION cho cả cụm theo TỈ LỆ CHIỀU CAO canvas
+// gốc (đề thường cao hơn hẳn 1 đáp án ngắn) thay vì áp nguyên ngân sách cho MỖI ảnh riêng (sẽ vượt xa
+// tổng dung lượng cũ của 1 câu). Đặt sàn tối thiểu để ảnh quá ngắn (1 đáp án vài chữ) không bị ép nén
+// xuống chất lượng thấp không cần thiết dù bản thân đã rất nhẹ.
+function canvasesToBudgetedJpegs(canvases, totalBudget) {
+  const totalHeight = canvases.reduce((s, c) => s + c.height, 0) || 1;
+  return canvases.map((c) => {
+    const budget = Math.max(20000, Math.round(totalBudget * (c.height / totalHeight)));
+    let quality = 0.4;
+    let dataUri = c.toDataURL('image/jpeg', quality);
+    while (dataUri.length > budget && quality > 0.15) {
+      quality -= 0.05;
+      dataUri = c.toDataURL('image/jpeg', quality);
+    }
+    return dataUri;
+  });
+}
+
 // Câu hỏi cắt ra chỉ cao vài dòng (không phải cả trang) nên vẫn nhẹ dù render trang gốc ở độ phân giải
 // CAO HƠN hẳn mức dùng cho bài giảng (800px, ưu tiên nhẹ vì hiện NGUYÊN TRANG dài) — ở đây ưu tiên
 // ĐỌC RÕ TỪNG CHỮ trong 1 câu hỏi ngắn, nên dùng riêng 1 mức phân giải cao hơn.
@@ -495,18 +639,119 @@ const QUIZ_PAGE_RENDER_WIDTH = 1500;
 // pdf.js trả về chữ theo TỪNG MẢNH nhỏ (VD "Câu ", "5", ". " tách riêng nếu khác định dạng trong file
 // Word gốc — đã gặp thực tế) — so khớp mẫu "Câu N." trên TỪNG MẢNH riêng lẻ dễ BỎ SÓT câu hỏi vì không
 // mảnh nào có đủ cả cụm. Ghép các mảnh THEO ĐÚNG VỊ TRÍ thành từng DÒNG hoàn chỉnh trước khi so khớp.
+// Giữ lại CẢ toạ độ X + bề rộng từng mảnh chữ (không chỉ Y) — cần để sau này cắt bỏ nhãn "Câu N."/
+// "A./B./C./D." theo đúng ranh giới pixel thật (xem findLabelEndX/findOptionMarkStartsOnLine), thay vì
+// chỉ dùng để sắp xếp thứ tự trước khi gộp thành text như trước đây. Nhân theo `scale` GIỐNG HỆT cách
+// `y` đang làm để cùng hệ toạ độ pixel canvas — bản cũ CHỈ nhân scale cho y (x giữ nguyên đơn vị PDF
+// point), vô hại lúc đó vì x chỉ dùng để SẮP XẾP (không đổi thứ tự dù có nhân scale hay không), nhưng
+// giờ x dùng để CẮT PIXEL nên bắt buộc phải cùng đơn vị với canvas.
 function groupTextItemsIntoLines(items, viewportHeight, scale) {
   const positioned = items
     .filter((it) => it.str.length)
-    .map((it) => ({ str: it.str, x: it.transform[4], y: (viewportHeight - it.transform[5]) * scale }));
+    .map((it) => ({ str: it.str, x: it.transform[4] * scale, width: it.width * scale, y: (viewportHeight - it.transform[5]) * scale }));
   positioned.sort((a, b) => (a.y - b.y) || (a.x - b.x));
   const lines = [];
   positioned.forEach((it) => {
     const last = lines[lines.length - 1];
-    if (last && Math.abs(it.y - last.y) <= 3) last.text += it.str;
-    else lines.push({ y: it.y, text: it.str });
+    if (last && Math.abs(it.y - last.y) <= 3) { last.text += it.str; last.items.push(it); }
+    else lines.push({ y: it.y, text: it.str, items: [it] });
   });
   return lines;
+}
+
+// Cố cắt 1 câu hỏi thành dạng KHÔNG kèm nhãn "Câu N."/"A./B./C./D." để sau này TRỘN được vị trí câu
+// và/hoặc trộn được thứ tự đáp án — CHỈ gọi khi câu hỏi gọn trong 1 trang (không tràn trang, xem nơi
+// gọi trong extractQuizFromPdf). Trả về null nếu KHÔNG tách sạch được cả nhãn "Câu N." (hiếm — nhãn
+// dính liền nội dung trong cùng 1 mảnh text pdf.js, không có ranh giới pixel để cắt) — khi đó nơi gọi
+// tự dùng cách cũ (1 ảnh gộp, không trộn được) làm lưới an toàn, KHÔNG BAO GIỜ tệ hơn hiện tại.
+//
+// Trả về { stemCanvas, hasOptions, optionCanvases, optionsCanvas }:
+// - hasOptions=false: câu "Nhập đáp án" (không có lựa chọn A-D) — chỉ có stemCanvas.
+// - hasOptions=true, optionCanvases (mảng 4 canvas): TẦNG 1 — tách sạch cả 4 đáp án riêng, trộn được
+//   cả câu lẫn đáp án.
+// - hasOptions=true, optionCanvases=null, optionsCanvas: TẦNG 2 — đề tách sạch nhưng KHÔNG tách riêng
+//   được từng đáp án (VD 2 đáp án chung 1 dòng mà nhãn dính liền nội dung) — gộp cả 4 đáp án (giữ
+//   NGUYÊN nhãn gốc, không cắt gì thêm) vào 1 ảnh, trộn được vị trí câu nhưng KHÔNG trộn được đáp án.
+function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) {
+  const stemLine = lines[markerLineIdx];
+  const labelEndX = findLabelEndX(stemLine, QUIZ_QUESTION_MARKER_RE);
+  if (labelEndX === null) return null;
+
+  // Dòng ĐẦU TIÊN (từ dòng mốc trở đi, trong phạm vi câu này) có mốc đáp án A-D đánh dấu ranh giới
+  // giữa "đề" và "đáp án".
+  let firstOptionLineIdx = -1;
+  for (let i = markerLineIdx; i < lines.length && lines[i].y < bottom; i++) {
+    if (findOptionMarkStartsOnLine(lines[i]).length) { firstOptionLineIdx = i; break; }
+  }
+  let stemLastLineIdx = markerLineIdx;
+  if (firstOptionLineIdx === -1) {
+    for (let i = markerLineIdx; i < lines.length && lines[i].y < bottom; i++) stemLastLineIdx = i;
+  } else {
+    stemLastLineIdx = firstOptionLineIdx - 1;
+  }
+
+  const stemStrips = [{ top: bands[markerLineIdx].top, bottom: bands[markerLineIdx].bottom, left: labelEndX, right: canvas.width }];
+  for (let i = markerLineIdx + 1; i <= stemLastLineIdx; i++) {
+    stemStrips.push({ top: bands[i].top, bottom: bands[i].bottom, left: 0, right: canvas.width });
+  }
+  const stemCanvas = cropRegionStrips(canvas, stemStrips);
+  if (!stemCanvas) return null;
+
+  if (firstOptionLineIdx === -1) {
+    return { stemCanvas, hasOptions: false, optionCanvases: null, optionsCanvas: null };
+  }
+
+  const optionLinesIdx = [];
+  for (let i = firstOptionLineIdx; i < lines.length && lines[i].y < bottom; i++) optionLinesIdx.push(i);
+
+  // Ảnh gộp CHUNG toàn bộ vùng đáp án (giữ NGUYÊN nhãn gốc, y hệt cách cắt cũ) — CHỈ tính khi THẬT SỰ
+  // cần dùng làm lưới an toàn Tầng 2 (tách riêng từng đáp án bên dưới thất bại) — đọc pixel 2 LẦN cho
+  // cùng 1 vùng (vừa cắt gộp vừa cắt riêng) tốn thời gian đáng kể khi nạp đề dài, nên chỉ cắt khi cần.
+  const getOptionsCanvasFallback = () => cropPageCanvasVertical(canvas, bands[firstOptionLineIdx].top, bands[optionLinesIdx[optionLinesIdx.length - 1]].bottom);
+
+  const optionsText = optionLinesIdx.map((i) => lines[i].text).join(' ');
+  const expectedLetters = countOptionLetterSequence(optionsText);
+  if (expectedLetters.length !== 4 || expectedLetters.join('') !== 'ABCD') {
+    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback() };
+  }
+
+  const marks = [];
+  optionLinesIdx.forEach((i) => {
+    findOptionMarkStartsOnLine(lines[i]).forEach((m) => marks.push({ lineIdx: i, x: m.x, labelEndX: m.labelEndX, letter: m.letter }));
+  });
+  // ĐỐI CHIẾU AN TOÀN: số lượng/thứ tự nhãn tách sạch được bằng pixel PHẢI khớp CHÍNH XÁC với số đếm
+  // thuần theo chữ ở trên — lệch nghĩa là có nhãn dính liền nội dung không tách sạch pixel được (dù
+  // đếm chữ vẫn thấy đủ 4) — KHÔNG được tin, rơi về Tầng 2 an toàn thay vì cắt liều ra kết quả sai.
+  if (marks.length !== 4 || marks.map((m) => m.letter).join('') !== 'ABCD') {
+    return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback() };
+  }
+
+  const optionCanvases = [];
+  for (let k = 0; k < 4; k++) {
+    const mark = marks[k];
+    const nextMark = marks[k + 1]; // undefined với đáp án D (cuối cùng)
+    const strips = [];
+    if (nextMark && nextMark.lineIdx === mark.lineIdx) {
+      // 2 đáp án chung 1 dòng ngang — cắt NGANG đúng khoảng giữa 2 nhãn trên CÙNG dòng.
+      strips.push({ top: bands[mark.lineIdx].top, bottom: bands[mark.lineIdx].bottom, left: mark.labelEndX, right: nextMark.x });
+    } else {
+      // Đáp án nằm cuối dòng hiện tại, có thể TRÀN sang các dòng tiếp theo (đầy đủ chiều rộng) tới
+      // ngay trước dòng chứa đáp án kế tiếp (hoặc hết vùng đáp án nếu là đáp án D).
+      strips.push({ top: bands[mark.lineIdx].top, bottom: bands[mark.lineIdx].bottom, left: mark.labelEndX, right: canvas.width });
+      const endLineIdx = nextMark ? nextMark.lineIdx : optionLinesIdx[optionLinesIdx.length - 1];
+      for (let i = mark.lineIdx + 1; i < endLineIdx; i++) {
+        strips.push({ top: bands[i].top, bottom: bands[i].bottom, left: 0, right: canvas.width });
+      }
+      if (nextMark && nextMark.lineIdx > mark.lineIdx && nextMark.x > 0) {
+        strips.push({ top: bands[nextMark.lineIdx].top, bottom: bands[nextMark.lineIdx].bottom, left: 0, right: nextMark.x });
+      }
+    }
+    const cropped = cropRegionStrips(canvas, strips);
+    if (!cropped) return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback() };
+    optionCanvases.push(cropped);
+  }
+
+  return { stemCanvas, hasOptions: true, optionCanvases, optionsCanvas: null };
 }
 
 // Trả về { questions, warnings } thay vì mảng trần — "warnings" liệt kê MỌI vấn đề gặp phải lúc nạp
@@ -519,20 +764,52 @@ async function extractQuizFromPdf(arrayBuffer) {
   const questions = [];
   const foundNums = []; // { num, part } — xem ghi chú QUIZ_PART_MARKER_RE (tính thiếu/trùng RIÊNG từng phần)
   const warnings = [];
-  let openQuestion = null; // { num, part, canvases: [...], hasOptions }
+  // { num, part, canvases: [...], hasOptions, singlePageCtx }. `singlePageCtx` (canvas/lines/bands/
+  // markerLineIdx/bottom của ĐÚNG 1 trang) chỉ tồn tại khi câu hỏi CHƯA từng bị nối thêm nội dung từ
+  // trang khác — mất hiệu lực (set về null) NGAY khi có nội dung tràn trang được ghép thêm (2 chỗ
+  // "openQuestion.canvases.push" bên dưới) — dùng để thử cắt tách nhãn (buildTieredQuestionImages) lúc
+  // flush, CHỈ khi chắc chắn câu hỏi gọn trong 1 trang (tách nhãn khi tràn trang phức tạp/rủi ro hơn
+  // nhiều, trong khi thực tế hầu hết câu hỏi đều gọn 1 trang — không đáng đánh đổi).
+  let openQuestion = null;
   let partIndex = 0; // tăng mỗi khi gặp 1 mốc "PHẦN" mới — file không chia phần thì luôn = 0, vẫn đúng
   let essayMode = false; // đang ở phần "tự luận" — bỏ qua hẳn, không đưa vào kho câu hỏi (đã hỏi ý kiến)
 
   function flushQuestion() {
     if (!openQuestion) return;
     try {
-      const canvas = stackCanvasesVertically(openQuestion.canvases);
-      const dataUri = canvasToBudgetedJpeg(canvas);
       const qLabel = `Câu ${openQuestion.num} (xem ảnh)`;
-      if (openQuestion.hasOptions) {
-        questions.push({ q: qLabel, qImage: dataUri, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null, noShuffle: true });
+      const tiered = openQuestion.singlePageCtx
+        ? buildTieredQuestionImages(openQuestion.singlePageCtx.canvas, openQuestion.singlePageCtx.lines, openQuestion.singlePageCtx.bands, openQuestion.singlePageCtx.bottom, openQuestion.singlePageCtx.markerLineIdx)
+        : null;
+
+      if (tiered && tiered.hasOptions && tiered.optionCanvases) {
+        // Tầng 1 — tách sạch cả đề lẫn TỪNG đáp án, trộn được cả câu lẫn đáp án tự do.
+        const [stemImage, ...optionImages] = canvasesToBudgetedJpegs([tiered.stemCanvas, ...tiered.optionCanvases], QUIZ_IMAGE_BUDGET_PER_QUESTION);
+        questions.push({ q: qLabel, stemImage, optionImages, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null });
+      } else if (tiered && tiered.hasOptions && tiered.optionsCanvas) {
+        // Tầng 2 — đề tách sạch (trộn được VỊ TRÍ CÂU) nhưng không tách riêng được từng đáp án (VD 2
+        // đáp án chung 1 dòng, nhãn dính liền nội dung) — gộp cả 4 đáp án (giữ nguyên nhãn gốc) vào 1
+        // ảnh, khoá thứ tự đáp án.
+        const [stemImage, optionsImage] = canvasesToBudgetedJpegs([tiered.stemCanvas, tiered.optionsCanvas], QUIZ_IMAGE_BUDGET_PER_QUESTION);
+        questions.push({ q: qLabel, stemImage, optionsImage, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null, optionsLocked: true });
+        warnings.push(`Câu ${openQuestion.num}: không tách riêng được từng đáp án (có thể 2 đáp án chung 1 dòng) — vẫn nạp được, đề có thể trộn VỊ TRÍ CÂU nhưng KHÔNG trộn được thứ tự đáp án A/B/C/D của câu này.`);
+      } else if (tiered && !tiered.hasOptions) {
+        // Câu "Nhập đáp án" — không có lựa chọn A-D, chỉ cần đề (đã tách sạch nhãn "Câu N.").
+        const [stemImage] = canvasesToBudgetedJpegs([tiered.stemCanvas], QUIZ_IMAGE_BUDGET_PER_QUESTION);
+        questions.push({ q: qLabel, stemImage, type: 'text', acceptedAnswers: '' });
       } else {
-        questions.push({ q: qLabel, qImage: dataUri, type: 'text', acceptedAnswers: '', noShuffle: true });
+        // Tầng 3 — cách cũ (1 ảnh gộp kèm "Câu N.", không trộn được vị trí câu lẫn đáp án) — dùng khi
+        // câu hỏi tràn trang, HOẶC (hiếm) không tách sạch được nhãn "Câu N." khỏi nội dung.
+        const canvas = stackCanvasesVertically(openQuestion.canvases);
+        const dataUri = canvasToBudgetedJpeg(canvas);
+        if (openQuestion.hasOptions) {
+          questions.push({ q: qLabel, qImage: dataUri, type: 'abcd', options: ['A', 'B', 'C', 'D'], correct: null, noShuffle: true });
+        } else {
+          questions.push({ q: qLabel, qImage: dataUri, type: 'text', acceptedAnswers: '', noShuffle: true });
+        }
+        if (openQuestion.singlePageCtx) {
+          warnings.push(`Câu ${openQuestion.num}: không tách được nhãn "Câu N." khỏi nội dung (hiếm gặp) — vẫn nạp được nhưng KHÔNG trộn được vị trí câu này khi tạo đề.`);
+        }
       }
       foundNums.push({ num: parseInt(openQuestion.num, 10), part: openQuestion.part, partLabel: openQuestion.partLabel });
     } catch (e) {
@@ -551,7 +828,10 @@ async function extractQuizFromPdf(arrayBuffer) {
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(viewport.width));
       canvas.height = Math.max(1, Math.round(viewport.height));
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      // willReadFrequently: canvas này bị đọc lại (getImageData) RẤT NHIỀU LẦN sau đó — mỗi câu hỏi cắt
+      // riêng đề + từng đáp án đều đọc pixel từ CHÍNH canvas trang này (xem cropPageCanvasRect) — khai
+      // báo ngay từ lúc tạo context để trình duyệt tối ưu đường đọc-lại thay vì tối ưu cho vẽ (mặc định).
+      await page.render({ canvasContext: canvas.getContext('2d', { willReadFrequently: true }), viewport }).promise;
 
       const lines = groupTextItemsIntoLines(content.items, baseViewport.height, scale);
 
@@ -592,6 +872,7 @@ async function extractQuizFromPdf(arrayBuffer) {
           if (cropped) {
             openQuestion.canvases.push(cropped);
             openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, canvas.height);
+            openQuestion.singlePageCtx = null; // đã tràn sang trang khác — không còn gọn 1 trang nữa
           }
         }
         continue;
@@ -605,6 +886,9 @@ async function extractQuizFromPdf(arrayBuffer) {
       // không bao giờ hở (mất chữ) hay chồng (dính chữ câu bên cạnh) giữa 2 câu liền nhau.
       // Có mốc "PHẦN" trước mốc "Câu" đầu tiên trên trang -> KHÔNG nối câu đang mở với phần mới này.
       const lineHeight = estimateLineHeight(lines);
+      // Dải dòng CHUNG cho mọi dòng trên trang (đề/đáp án của TỪNG câu sẽ tra lại mảng này thay vì tự
+      // tính lại) — xem buildTieredQuestionImages.
+      const bands = computeLineBands(lines, lineHeight, canvas.height);
       const partBeforeFirstMarker = events.some((e) => e.kind === 'part' && e.y < markers[0].y);
       // Ranh giới TRƯỚC mốc "Câu" đầu tiên trên trang: LUÔN tính bằng dòng chữ thật đứng ngay trước nó
       // (có thể chính là dòng "PHẦN ..." nếu có) — dùng CHUNG 1 cách dù trang có mốc "PHẦN" hay không,
@@ -630,6 +914,7 @@ async function extractQuizFromPdf(arrayBuffer) {
         if (cropped) {
           openQuestion.canvases.push(cropped);
           openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, boundary0);
+          openQuestion.singlePageCtx = null; // đã nối thêm nội dung tràn từ trang trước — không còn gọn 1 trang
         }
       }
       flushQuestion();
@@ -642,7 +927,11 @@ async function extractQuizFromPdf(arrayBuffer) {
           warnings.push(`Câu ${markers[i].num} (trang ${pageNum}): không cắt được ảnh — có thể trang này bị lỗi hiển thị, cần bổ sung thủ công.`);
           continue;
         }
-        openQuestion = { num: markers[i].num, part: markers[i].part, partLabel: markers[i].partLabel, canvases: [cropped], hasOptions: hasOptionsBetween(top, bottom) };
+        openQuestion = {
+          num: markers[i].num, part: markers[i].part, partLabel: markers[i].partLabel,
+          canvases: [cropped], hasOptions: hasOptionsBetween(top, bottom),
+          singlePageCtx: { canvas, lines, bands, markerLineIdx: markers[i].idx, bottom }
+        };
         if (i < markers.length - 1) flushQuestion(); // còn câu sau trên cùng trang -> câu này chắc chắn đã khép
       }
     } catch (e) {

@@ -1004,10 +1004,12 @@
     const item = effectiveQuiz[qIndex];
     const type = getQuestionType(item);
     const answered = qAnswers[qIndex] !== null && qAnswers[qIndex] !== undefined;
+    const visual = getQuizVisual(item);
     $('#quizWrap').innerHTML = `
       <div class="quiz-progress">Câu ${qIndex + 1}/${total}</div>
-      ${item.qImage ? `<div class="quiz-question-image"><img src="${item.qImage}" alt="Ảnh câu hỏi"></div>` : ''}
+      ${visual ? `<div class="quiz-question-image"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>` : ''}
       <div class="quiz-question">${escapeHtml(item.q)}</div>
+      ${visual && visual.combinedOptionsSrc ? `<div class="quiz-question-image"><img src="${visual.combinedOptionsSrc}" alt="Ảnh đáp án"></div>` : ''}
       <div class="quiz-options" id="quizOptions"></div>
       ${type === 'text' && answered ? `<div class="hint" style="margin:-6px 0 10px;">Đáp án đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>` : ''}
       <div class="quiz-explain ${answered ? 'show' : ''}" id="quizExplain">${escapeHtml(item.explain || '')}</div>
@@ -1040,6 +1042,26 @@
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
         optWrap.appendChild(checkBtn);
       }
+    } else if (visual && visual.optionSrcs) {
+      // Đáp án tách riêng thành ảnh (Tầng 1) — nhãn A/B/C/D TỰ VẼ (không phải pixel), luôn đúng vị trí
+      // hiện tại của nút dù đề có trộn thứ tự đáp án hay không.
+      const labels = ['A', 'B', 'C', 'D'];
+      visual.optionSrcs.forEach((src, i) => {
+        const b = document.createElement('button');
+        b.className = 'quiz-option quiz-option-image';
+        b.innerHTML = `<span class="quiz-option-label">${labels[i]}.</span><img src="${src}" alt="Đáp án ${labels[i]}">`;
+        if (answered) {
+          b.disabled = true;
+          if (i === item.correct) b.classList.add('correct');
+          else if (i === qAnswers[qIndex]) b.classList.add('wrong');
+        }
+        b.addEventListener('click', () => {
+          if (qAnswers[qIndex] !== null && qAnswers[qIndex] !== undefined) return;
+          qAnswers[qIndex] = i;
+          renderQuiz();
+        });
+        optWrap.appendChild(b);
+      });
     } else {
       item.options.forEach((opt, i) => {
         const b = document.createElement('button');
@@ -1108,6 +1130,18 @@
     row.style.display = (owner.isOwner && customQuizCache.length) ? 'flex' : 'none';
   }
 
+  // Markup xem trước ảnh câu hỏi cắt từ PDF (dùng chung 3 chỗ: danh sách quản lý, form sửa, xem toàn
+  // bộ đề vừa nạp) — dựa trên getQuizVisual (quiz-common.js) để hiện đúng dù câu ở Tầng 1/2/3 nào.
+  function renderQuizVisualHtml(item, imgStyle) {
+    const visual = getQuizVisual(item);
+    if (!visual) return '';
+    return `
+      <img src="${visual.stemSrc}" alt="${escapeHtml(item.q)}" style="${imgStyle}">
+      ${visual.combinedOptionsSrc ? `<img src="${visual.combinedOptionsSrc}" alt="Đáp án" style="${imgStyle}">` : ''}
+      ${visual.optionSrcs ? visual.optionSrcs.map((src) => `<img src="${src}" alt="Đáp án" style="${imgStyle}">`).join('') : ''}
+    `;
+  }
+
   // 1 câu hỏi — dùng lại được cho CẢ mục đơn lẻ LẪN từng câu bên trong 1 "Bài" đang mở (xem
   // groupCustomQuizByFile) — tách riêng khỏi renderQuizManager để không viết trùng markup 2 chỗ.
   function renderQuizItemCard(item) {
@@ -1117,7 +1151,7 @@
     const needsQuickPick = (qType === 'abcd' || qType === 'truefalse') && (item.correct === null || item.correct === undefined) && Array.isArray(item.options);
     return `
       <div class="quiz-review-item" style="text-align:left;">
-        ${item.qImage ? `<img src="${item.qImage}" alt="${escapeHtml(item.q)}" style="max-width:100%;display:block;border-radius:8px;margin-bottom:6px;">` : ''}
+        ${renderQuizVisualHtml(item, 'max-width:100%;display:block;border-radius:8px;margin-bottom:6px;')}
         <div class="qi-q">${escapeHtml(item.q)}</div>
         <div class="hint">[${QUIZ_TYPE_LABELS[qType]}] Đúng: ${formatCorrectAnswerDisplay(item) ? escapeHtml(formatCorrectAnswerDisplay(item)) : '⚠️ chưa có đáp án đúng'}</div>
         ${needsQuickPick ? `
@@ -1282,9 +1316,9 @@
     const box = $('#quizForm');
     box.style.display = 'block';
     const imgBox = $('#quizFormImagePreview');
-    if (existing && existing.qImage) {
+    if (existing && getQuizVisual(existing)) {
       imgBox.style.display = 'block';
-      imgBox.innerHTML = `<img src="${existing.qImage}" style="width:100%;display:block;" alt="Ảnh câu hỏi gốc">`;
+      imgBox.innerHTML = renderQuizVisualHtml(existing, 'width:100%;display:block;margin-bottom:6px;');
     } else {
       imgBox.style.display = 'none';
       imgBox.innerHTML = '';
@@ -1438,7 +1472,7 @@
             list.innerHTML = questions.map((q) => `
               <div class="lesson-block" style="margin-bottom:10px;">
                 <h3 style="margin-bottom:8px;">${escapeHtml(q.q)}</h3>
-                ${q.qImage ? `<img src="${q.qImage}" alt="${escapeHtml(q.q)}" style="max-width:100%;display:block;">` : ''}
+                ${renderQuizVisualHtml(q, 'max-width:100%;display:block;margin-bottom:6px;')}
               </div>
             `).join('');
           }

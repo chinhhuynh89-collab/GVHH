@@ -1028,6 +1028,11 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 /* Câu "Nhập đáp án" — tái dùng nguyên style .quiz-option/.selected/.correct/.wrong cho <input> thay
    vì viết CSS riêng, chỉ cần đổi con trỏ chuột cho đúng ngữ cảnh gõ chữ. */
 input.quiz-option { cursor: text; }
+/* Đáp án tách riêng thành ảnh (Tầng 1 — xem getQuizVisual/doc-import.js) — nhãn A/B/C/D TỰ VẼ bằng
+   HTML (không phải pixel), luôn đúng vị trí hiện tại dù đề có trộn thứ tự đáp án hay không. */
+.quiz-option-image { display: flex; align-items: center; gap: 10px; }
+.quiz-option-image .quiz-option-label { font-weight: 700; flex-shrink: 0; color: var(--brand); }
+.quiz-option-image img { max-width: 100%; display: block; flex: 1; }
 .quiz-explain {
   font-size: calc(13.5px * var(--font-scale));
   color: var(--text-dim);

@@ -60,6 +60,31 @@ function formatCorrectAnswerDisplay(item) {
   return (item.options && item.options[item.correct]) || '';
 }
 
+// Chuẩn hoá 3 dạng dữ liệu ảnh câu hỏi cắt từ PDF (doc-import.js) thành 1 hình dạng CHUNG cho mọi nơi
+// hiển thị (luyện tập trong chương, làm bài kiểm tra, xuất đề in) — tránh mỗi nơi tự kiểm tra field
+// nào tồn tại, dễ lệch nhau khi thêm/sửa sau này:
+// - Tầng 1 (stemImage + optionImages[4]):  tách sạch cả đề lẫn TỪNG đáp án — trộn được cả câu lẫn
+//   đáp án tự do.
+// - Tầng 2 (stemImage + optionsImage):     đề tách sạch (trộn được VỊ TRÍ CÂU) nhưng 4 đáp án gộp
+//   chung 1 ảnh giữ nguyên nhãn gốc (KHÔNG trộn được thứ tự đáp án).
+// - Tầng 3 (qImage cũ, không stemImage):   1 ảnh gộp cả "Câu N." lẫn đáp án — KHÔNG trộn được gì cả
+//   (dữ liệu nạp từ TRƯỚC khi có tính năng tách nhãn, hoặc câu hỏi tràn nhiều trang).
+// Trả về null nếu câu hỏi không có ảnh nào (câu tự soạn bình thường).
+function getQuizVisual(item) {
+  const stemSrc = item.stemImage || item.qImage || null;
+  if (!stemSrc) return null;
+  const optionSrcs = (Array.isArray(item.optionImages) && item.optionImages.length === 4) ? item.optionImages : null;
+  return {
+    stemSrc,
+    optionSrcs, // 4 ảnh riêng (Tầng 1) hoặc null
+    combinedOptionsSrc: item.optionsImage || null, // 1 ảnh gộp giữ nhãn gốc (Tầng 2) hoặc null
+    // Chỉ ảnh đề MỚI (stemImage, đã cắt bỏ "Câu N.") mới an toàn đổi VỊ TRÍ câu — qImage cũ vẫn còn
+    // kẹt số câu gốc trong pixel, đổi vị trí sẽ hiện sai số.
+    canShuffleQuestion: !!item.stemImage,
+    canShuffleOptions: !!optionSrcs
+  };
+}
+
 // ---------- Xem lại 1 bài kiểm tra ĐÃ NỘP (dùng ở cả 2 phía: học sinh xem lại bài mình, giáo viên
 // xem bài của 1 học sinh cụ thể — xem exam-taker.js/exam-stats.js) ----------
 
