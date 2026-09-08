@@ -171,7 +171,11 @@
 
     <div class="card" id="quizEditSection" style="display:none;">
       <h2><span class="icon">📋</span>Sửa câu hỏi trắc nghiệm</h2>
-      <button class="btn block" id="quizFormAddBtn" style="margin:10px 0;">+ Thêm câu hỏi</button>
+      <div class="btn-row" style="margin:10px 0;">
+        <button class="btn primary" id="quizFormAddBtn" style="flex:1;">+ Thêm câu hỏi</button>
+        <button class="btn" id="quizEditPdfShortcutBtn" style="flex:1;" title="Nạp đề thi PDF">🖼️ Nạp PDF</button>
+        <button class="btn" id="quizEditExcelShortcutBtn" style="flex:1;" title="Nạp file Excel/CSV">📊 Nạp Excel</button>
+      </div>
       <div class="btn-row" id="quizDeleteAllRow" style="display:none;margin-bottom:12px;">
         <button class="btn" id="quizDeleteAllBtn" style="flex:1;" title="Xoá toàn bộ câu hỏi tự thêm/nạp từ file của chương này (không đụng câu hỏi có sẵn trong app) — dùng khi cần nạp lại file từ đầu">🗑️ Xoá tất cả câu hỏi tự thêm</button>
       </div>

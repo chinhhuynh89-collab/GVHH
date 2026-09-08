@@ -198,21 +198,25 @@
 
   // ---------- "Bài" (đơn vị con Tự thêm trong chương) ----------
   // 1 Bài = { id, title, order }, lưu trong chapterMeta.units (mảng). 2 cách có 1 Bài:
-  // 1) TỰ ĐỘNG — nạp file bài giảng/trắc nghiệm (PDF/Excel) lúc KHÔNG đang xem 1 Bài nào (activeUnitId
-  //    null) sẽ tự tạo luôn 1 Bài mới đặt tên theo tên file (xem ensureUnitForImport bên dưới), y hệt
-  //    cách "1 file = 1 nhóm" của groupCustomLessonsByFile/groupCustomQuizByFile ở trên nhưng có thêm
-  //    unitId thật để flashcard/trắc nghiệm khác gắn vào ĐƯỢC cùng Bài này sau đó.
+  // 1) TỰ ĐỘNG — CHỈ khi nạp file BÀI GIẢNG (PDF) lúc KHÔNG đang xem 1 Bài nào (activeUnitId null) —
+  //    1 file bài giảng luôn ứng với ĐÚNG 1 Bài thật (VD "Bài 2. Cân bằng..."), khớp quy ước "1 file =
+  //    1 nhóm" của groupCustomLessonsByFile ở trên, nên tự tạo Bài mới đặt tên theo tên file luôn cho
+  //    tiện (xem ensureUnitForImport bên dưới). File CÂU HỎI TRẮC NGHIỆM thì KHÔNG áp dụng — 1 file câu
+  //    hỏi thường là ngân hàng đề TỔNG HỢP nhiều chủ đề (VD "CÁC DẠNG CÂU HỎI HOÁ HỌC.pdf"), không phải
+  //    "1 file = 1 Bài" như bài giảng — nạp câu hỏi CHỈ gắn vào 1 Bài khi giáo viên ĐANG scope sẵn vào
+  //    đúng Bài đó (activeUnitId có giá trị), tuyệt đối không tự bịa ra 1 Bài mới từ tên file câu hỏi
+  //    (lỗi thực tế đã gặp — nạp "CÁC DẠNG CÂU HỎI HOÁ HỌC.pdf" tạo ra 1 "Bài" vô nghĩa cùng tên file).
   // 2) THỦ CÔNG — bấm "+ Thêm Bài mới" đặt tên trước rồi mới nạp nội dung (dùng cho flashcard, vì
-  //    flashcard không có file để tự suy tên) — xem initUnitsSection.
+  //    flashcard không có file để tự suy tên, HOẶC để tạo sẵn 1 Bài rồi nạp câu hỏi trắc nghiệm vào
+  //    đúng Bài đó thay vì để trôi nổi ở phần Chung) — xem initUnitsSection.
   async function saveUnits(units) {
     await setChapterMeta(chapter.id, { units });
     chapterMeta.units = units;
   }
 
-  // Nạp file (bài giảng/trắc nghiệm) lúc đang xem 1 Bài cụ thể -> gắn luôn vào Bài đó. Lúc đang ở
-  // phần Chung (activeUnitId null) -> TỰ tạo 1 Bài mới đặt tên theo tên file (bỏ đuôi, cùng quy tắc
-  // đặt tên với groupCustomLessonsByFile/groupCustomQuizByFile) để 4 nút hiện ngay trên đúng khối vừa
-  // nạp, khỏi bắt giáo viên phải bấm "+ Thêm Bài mới" đặt tên trước cho MỌI lần nạp file.
+  // CHỈ dùng cho nạp file BÀI GIẢNG (PDF) — xem giải thích đầy đủ ở khối chú thích phía trên. Nạp file
+  // câu hỏi trắc nghiệm KHÔNG được gọi hàm này (chỉ gắn unitId khi activeUnitId đã có sẵn, xem 2 nhánh
+  // nạp PDF/Excel trắc nghiệm bên dưới).
   async function ensureUnitForImport(fileName) {
     if (activeUnitId) return activeUnitId;
     const units = getUnits();
@@ -226,12 +230,19 @@
   // vừa nạp — dùng chung 1 mảnh HTML + 1 cách gắn sự kiện (wireUnitOpenButtons) ở CẢ 3 nơi: danh sách
   // Bài rỗng, khối bài giảng (renderAllLessons), khối nhóm câu hỏi (renderQuizManager).
   function unitButtonsHtml(unitId) {
+    const items = [
+      ['tabLesson', '📖', 'Bài giảng'],
+      ['tabFlash', '🗂️', 'Flashcard'],
+      ['tabQuiz', '📝', 'Trắc nghiệm'],
+      ['selfTestCard', '🎯', 'Tự kiểm tra']
+    ];
     return `
       <div class="unit-actions" style="margin-top:8px;">
-        <button type="button" class="btn unit-open" data-id="${unitId}" data-section="tabLesson">📖 Bài giảng</button>
-        <button type="button" class="btn unit-open" data-id="${unitId}" data-section="tabFlash">🗂️ Flashcard</button>
-        <button type="button" class="btn unit-open" data-id="${unitId}" data-section="tabQuiz">📝 Trắc nghiệm</button>
-        <button type="button" class="btn unit-open" data-id="${unitId}" data-section="selfTestCard">🎯 Tự kiểm tra</button>
+        ${items.map(([section, icon, label]) => `
+          <button type="button" class="btn unit-open" data-id="${unitId}" data-section="${section}" title="${escapeHtml(label)}">
+            <span class="unit-btn-icon">${icon}</span><span>${escapeHtml(label)}</span>
+          </button>
+        `).join('')}
       </div>
     `;
   }
@@ -288,6 +299,10 @@
       // khỏi bắt bấm thêm 1 lần vào tiêu đề (▸) mới xổ nội dung ra như trước.
       getAllLessons().forEach((l) => expandedLessonKeys.add(lessonKey(l)));
       renderAllLessons();
+    } else if (sectionId === 'tabFlash') {
+      // Bấm "🗂️ Flashcard" là muốn thấy NGAY danh sách flashcard hiện có + nút xem/xoá/thêm mới, khỏi
+      // bấm thêm "⚙️ Quản lý flashcard" 1 lần nữa mới hiện ra.
+      openFlashManagerPanel();
     }
     if (sectionId === 'selfTestCard') {
       // Nhảy thẳng vào màn Tự kiểm tra, khỏi qua menu "Ôn tập/Kiểm tra thử" trước cho tiện.
@@ -350,6 +365,7 @@
                 <a href="#" class="unit-rename" data-id="${u.id}">Đổi tên</a>
                 ${i > 0 ? `· <a href="#" class="unit-move-up" data-id="${u.id}">↑</a>` : ''}
                 ${i < units.length - 1 ? `· <a href="#" class="unit-move-down" data-id="${u.id}">↓</a>` : ''}
+                ${unitHasContentElsewhere(u.id) ? `· <a href="#" class="unit-detach" data-id="${u.id}" title="Bỏ nội dung ra khỏi Bài này (không xoá) — dùng khi lỡ tạo nhầm Bài">Gỡ Bài (giữ nội dung)</a>` : ''}
                 · <a href="#" class="unit-delete" data-id="${u.id}">Xoá cả Bài</a>
               </div>` : ''}
               ${unitHasContentElsewhere(u.id) ? '' : unitButtonsHtml(u.id)}
@@ -429,6 +445,9 @@
     $$('.unit-delete', list).forEach((a) => {
       a.addEventListener('click', (e) => { e.preventDefault(); deleteUnitsCascade([a.dataset.id]); });
     });
+    $$('.unit-detach', list).forEach((a) => {
+      a.addEventListener('click', (e) => { e.preventDefault(); detachUnit(a.dataset.id); });
+    });
     $$('.unit-select-check', list).forEach((cb) => {
       cb.addEventListener('change', () => {
         if (cb.checked) selectedUnitIdsForDelete.add(cb.dataset.id);
@@ -480,6 +499,48 @@
       showToast(targets.length > 1 ? `Đã xoá ${targets.length} Bài (${totalCount} mục).` : `Đã xoá cả Bài "${targets[0].title}" (${totalCount} mục).`, false);
     } catch (err) {
       showToast('Không xoá được: ' + err.message);
+    }
+  }
+
+  // Gỡ 1 Bài nhưng GIỮ NGUYÊN nội dung bên trong (chỉ bỏ unitId, chuyển về phần "Chung") — khác hẳn
+  // "Xoá cả Bài" (xoá sạch dữ liệu). Dùng khi 1 Bài được tạo NHẦM (VD trước đây nạp file câu hỏi trắc
+  // nghiệm lại tự tạo thành 1 "Bài" vô nghĩa cùng tên file — lỗi đã sửa, nhưng Bài lỡ tạo trước đó vẫn
+  // còn) mà giáo viên không muốn mất câu hỏi/bài giảng/flashcard đã nạp bên trong.
+  async function detachUnit(unitId) {
+    const units = getUnits();
+    const unit = units.find((u) => u.id === unitId);
+    if (!unit) return;
+    const lessonItems = customLessonsCache.filter((it) => it.unitId === unitId);
+    const quizItems = customQuizCache.filter((it) => it.unitId === unitId);
+    const flashItems = customFlashcardsCache.filter((it) => it.unitId === unitId);
+    const totalCount = lessonItems.length + quizItems.length + flashItems.length;
+    if (!confirm(`Gỡ Bài "${unit.title}"? ${totalCount} mục bên trong (${lessonItems.length} phần bài giảng, ${quizItems.length} câu hỏi, ${flashItems.length} flashcard) sẽ được GIỮ NGUYÊN, chỉ chuyển về phần "Chung" (không còn thuộc Bài nào nữa). Có thể gán lại vào 1 Bài khác sau nếu muốn.`)) return;
+    try {
+      await Promise.all([
+        ...lessonItems.map((it) => updateCustomLesson(it.id, { unitId: null })),
+        ...quizItems.map((it) => updateCustomQuiz(it.id, { unitId: null })),
+        ...flashItems.map((it) => updateCustomFlashcard(it.id, { unitId: null }))
+      ]);
+      lessonItems.forEach((it) => { it.unitId = null; });
+      quizItems.forEach((it) => { it.unitId = null; });
+      flashItems.forEach((it) => { it.unitId = null; });
+      excludedUnitIds.delete(unitId);
+      selectedUnitIdsForDelete.delete(unitId);
+      const newUnits = units.filter((u) => u.id !== unitId);
+      await saveUnits(newUnits);
+      if (activeUnitId === unitId) {
+        setActiveUnit(null);
+      } else {
+        rebuildEffectiveQuiz();
+        renderAllLessons();
+        renderFlash();
+        renderQuiz();
+        if (owner.isOwner) { renderQuizManager(); renderFlashManager(); renderQuizStats(); }
+      }
+      renderUnitsList();
+      showToast(`Đã gỡ Bài "${unit.title}" — ${totalCount} mục bên trong vẫn còn nguyên, đã chuyển về phần Chung.`, false);
+    } catch (err) {
+      showToast('Không gỡ được: ' + err.message);
     }
   }
 
@@ -1162,6 +1223,14 @@
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
+  // Mở sẵn khung quản lý flashcard (danh sách + nút thêm mới) — dùng khi bấm "🗂️ Flashcard" của 1 Bài
+  // (xem goToUnitSection) để thấy đủ xem/xoá/thêm NGAY, khỏi bấm thêm "⚙️ Quản lý flashcard" 1 lần nữa.
+  function openFlashManagerPanel() {
+    if (!owner.isOwner) return;
+    $('#flashFormWrap').style.display = 'block';
+    $('#flashManagerToggle').textContent = '⚙️ Ẩn quản lý flashcard';
+  }
+
   function initFlashManager() {
     if (!owner.isOwner) return;
     $('#flashManagerSection').style.display = 'block';
@@ -1812,6 +1881,10 @@
     $('#quizFormType').addEventListener('change', updateQuizFormTypeFields);
 
     $('#quizFormAddBtn').addEventListener('click', () => openQuizForm(null));
+    // Lối tắt nạp PDF/Excel NGAY từ màn "Sửa câu hỏi trắc nghiệm" — trước đây phải bấm "Quay lại" về
+    // menu mới thấy 2 lựa chọn này, giờ đủ cả xem/sửa/xoá/tạo/nạp trong CÙNG 1 màn cho tiện.
+    $('#quizEditPdfShortcutBtn').addEventListener('click', () => showQuizSection('quizPdfCard'));
+    $('#quizEditExcelShortcutBtn').addEventListener('click', () => showQuizSection('quizExcelCard'));
     $('#quizDeleteAllBtn').addEventListener('click', async () => {
       if (!customQuizCache.length) return;
       if (!confirm(`Xoá toàn bộ ${customQuizCache.length} câu hỏi tự thêm/nạp từ file của chương này? Không thể hoàn tác. Câu hỏi có sẵn trong app KHÔNG bị ảnh hưởng.`)) return;
@@ -1893,11 +1966,12 @@
       box.innerHTML = `<div class="result-box show">⏳ Đang cắt ảnh từng câu trong "${escapeHtml(file.name)}"...</div>`;
       try {
         const { questions, warnings } = await extractQuizFromPdf(await file.arrayBuffer());
-        const unitId = await ensureUnitForImport(file.name);
-        questions.forEach((q) => { q.sourceFileName = file.name; q.unitId = unitId; });
+        // Câu hỏi trắc nghiệm LUÔN thuộc về 1 Bài có sẵn (đã có bài giảng) — KHÔNG tự tạo Bài mới chỉ
+        // vì nạp file câu hỏi (khác bài giảng: 1 file câu hỏi thường là ngân hàng đề tổng hợp NHIỀU chủ
+        // đề, không phải "1 file = 1 Bài" như bài giảng) — chỉ gắn unitId khi ĐANG scope sẵn vào 1 Bài.
+        questions.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
-        renderUnitsList();
         // Báo NGAY mọi cảnh báo gặp phải lúc nạp (thiếu/trùng số câu, trang lỗi...) — giáo viên cần biết
         // ngay chỗ nào phải tự kiểm tra lại, không im lặng bỏ qua rồi chỉ phát hiện đề bị thiếu khi đã trễ.
         const warningHtml = warnings.length
@@ -1977,11 +2051,11 @@
       box.innerHTML = `<div class="result-box show">⏳ Đang xử lý "${escapeHtml(file.name)}"...</div>`;
       try {
         const questions = await parseQuizExcelFile(file);
-        const unitId = await ensureUnitForImport(file.name);
-        questions.forEach((q) => { q.sourceFileName = file.name; q.unitId = unitId; });
+        // Xem chú thích ở nhánh nạp PDF trắc nghiệm phía trên — không tự tạo Bài mới, chỉ gắn unitId
+        // khi ĐANG scope sẵn vào 1 Bài có sẵn.
+        questions.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
-        renderUnitsList();
         box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>${quizImportConfirmBtnHtml()}`;
         wireQuizImportConfirmBtn(box);
         rebuildEffectiveQuiz();

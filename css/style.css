@@ -987,11 +987,20 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .unit-owner-actions { margin-bottom: 10px; }
 .unit-owner-actions a { color: var(--brand); }
 .unit-owner-actions .unit-delete { color: var(--danger); }
-.unit-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.unit-actions .btn { width: 100%; white-space: normal; line-height: 1.3; text-align: center; }
-@media (min-width: 560px) {
-  .unit-actions { grid-template-columns: repeat(4, 1fr); }
+/* Gọn gàng, kiểu thanh biểu tượng nhỏ — LUÔN 4 cột 1 hàng (kể cả màn hẹp) thay vì xếp 2x2 to nặng
+   nề, icon xếp TRÊN chữ (flex-direction: column) để mỗi nút hẹp lại, đọc vẫn rõ nhờ vẫn giữ chữ. */
+.unit-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.unit-actions .btn {
+  width: 100%;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 4px;
+  font-size: 11.5px;
+  line-height: 1.25;
+  white-space: normal;
+  text-align: center;
 }
+.unit-actions .btn .unit-btn-icon { font-size: 16px; }
 /* Thanh nhỏ báo đang xem TRONG 1 Bài cụ thể (thay vì phần "Chung") — đặt ngay trên 3 tab chính để
    luôn thấy được đang ở phạm vi nào, tránh nạp/xem nhầm nội dung Bài này sang Bài khác. */
 .unit-scope-bar {
