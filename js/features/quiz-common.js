@@ -107,9 +107,21 @@ function buildSubmissionReviewHtml(items, answers) {
     const isOk = isQuizAnswerCorrect(item, answer);
     const yourAnswerText = answer == null ? '(chưa trả lời)'
       : (getQuestionType(item) === 'text' ? answer : ((item.options && item.options[answer]) || ''));
+    // Câu nạp từ PDF (cắt ảnh) không có nội dung THẬT trong item.q/item.options (chỉ là nhãn/chữ cái
+    // giữ chỗ) — không vẽ ảnh thì khi xem lại chỉ thấy "Câu N (xem ảnh)" + 1 chữ cái, không biết đề/
+    // đáp án THẬT SỰ là gì (cùng nguyên nhân đã sửa ở "Tự kiểm tra"/in đề, xem chapter-detail.js).
+    const visual = getQuizVisual(item);
+    const stemHtml = visual
+      ? `<div class="quiz-question-image${visual.stemMultiline ? ' multiline' : ''}" style="margin-bottom:6px;"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>`
+      : '';
+    const optsImgHtml = visual && visual.combinedOptionsSrc
+      ? `<div class="quiz-question-image" style="margin-bottom:6px;"><img src="${visual.combinedOptionsSrc}" alt="Ảnh đáp án"></div>`
+      : '';
     return `
       <div class="quiz-review-item ${isOk ? 'ok' : 'bad'}">
+        ${stemHtml}
         <div class="qi-q">${i + 1}. ${escapeHtml(item.q)}</div>
+        ${optsImgHtml}
         <div>Đáp án đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>
         <div class="qi-status">${isOk ? '✓ Trả lời đúng' : '✗ Đã chọn: ' + escapeHtml(yourAnswerText)}</div>
       </div>

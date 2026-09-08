@@ -968,9 +968,20 @@
       if (isOk) correctCount++;
       const yourAnswerText = stAnswers[i] == null ? '(chưa trả lời)'
         : (getQuestionType(item) === 'text' ? stAnswers[i] : ((item.options && item.options[stAnswers[i]]) || ''));
+      // Câu nạp từ PDF (cắt ảnh) không có nội dung THẬT trong item.q/item.options — không vẽ ảnh thì
+      // xem lại chỉ thấy "Câu N (xem ảnh)" + 1 chữ cái, không biết đề/đáp án thật là gì.
+      const visual = getQuizVisual(item);
+      const stemHtml = visual
+        ? `<div class="quiz-question-image${visual.stemMultiline ? ' multiline' : ''}" style="margin-bottom:6px;"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>`
+        : '';
+      const optsImgHtml = visual && visual.combinedOptionsSrc
+        ? `<div class="quiz-question-image" style="margin-bottom:6px;"><img src="${visual.combinedOptionsSrc}" alt="Ảnh đáp án"></div>`
+        : '';
       return `
         <div class="quiz-review-item ${isOk ? 'ok' : 'bad'}">
+          ${stemHtml}
           <div class="qi-q">${i + 1}. ${escapeHtml(item.q)}</div>
+          ${optsImgHtml}
           <div>Đáp án đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>
           <div class="qi-status">${isOk ? '✓ Bạn trả lời đúng' : '✗ Bạn chọn: ' + escapeHtml(yourAnswerText)}</div>
         </div>
@@ -1112,9 +1123,20 @@
       if (isOk) correctCount++;
       const yourAnswerText = qAnswers[i] == null ? '(chưa trả lời)'
         : (getQuestionType(item) === 'text' ? qAnswers[i] : ((item.options && item.options[qAnswers[i]]) || ''));
+      // Câu nạp từ PDF (cắt ảnh) không có nội dung THẬT trong item.q/item.options — không vẽ ảnh thì
+      // xem lại chỉ thấy "Câu N (xem ảnh)" + 1 chữ cái, không biết đề/đáp án thật là gì.
+      const visual = getQuizVisual(item);
+      const stemHtml = visual
+        ? `<div class="quiz-question-image${visual.stemMultiline ? ' multiline' : ''}" style="margin-bottom:6px;"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>`
+        : '';
+      const optsImgHtml = visual && visual.combinedOptionsSrc
+        ? `<div class="quiz-question-image" style="margin-bottom:6px;"><img src="${visual.combinedOptionsSrc}" alt="Ảnh đáp án"></div>`
+        : '';
       return `
         <div class="quiz-review-item ${isOk ? 'ok' : 'bad'}">
+          ${stemHtml}
           <div class="qi-q">${i + 1}. ${escapeHtml(item.q)}</div>
+          ${optsImgHtml}
           <div>Đáp án đúng: ${escapeHtml(formatCorrectAnswerDisplay(item))}</div>
           <div class="qi-status">${isOk ? '✓ Bạn trả lời đúng' : '✗ Bạn chọn: ' + escapeHtml(yourAnswerText)}</div>
         </div>
