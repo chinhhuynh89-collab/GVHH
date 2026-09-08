@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v223';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v224';
 const ASSETS = [
   './',
   './index.html',
@@ -81,6 +81,7 @@ const ASSETS = [
   './pages/tao-de-kiem-tra.html',
   './pages/kiem-tra.html',
   './pages/thong-ke.html',
+  './templates/mau-de-trac-nghiem-pdf.docx',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-192.png',

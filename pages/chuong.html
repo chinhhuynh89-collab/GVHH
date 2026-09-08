@@ -233,9 +233,17 @@ Câu hỏi Nhập đáp án ở đây?
         công thức như file gốc), không cần đọc hiểu nội dung.
       </div>
       <div class="hint">
-        <strong>Lưu ý bắt buộc:</strong> file không kèm sẵn đáp án đúng nào cả — sau khi nạp, mỗi câu
-        cần vào <strong>"📋 Sửa câu hỏi trắc nghiệm"</strong> để tự chọn đáp án đúng thì học sinh mới
-        chấm điểm được. Câu hỏi kiểu này cũng KHÔNG bị xáo thứ tự A/B/C/D khi thi thật (để khớp đúng ảnh).
+        <strong>Để cắt ảnh không bị lệch:</strong> soạn câu hỏi trong Word theo đúng cấu trúc — mỗi câu
+        bắt đầu bằng "Câu 1.", "Câu 2."... ở ĐẦU DÒNG RIÊNG; mỗi phương án A/B/C/D nằm TRÊN DÒNG RIÊNG
+        (không ghép 2 đáp án chung 1 dòng). Tải file mẫu bên dưới để soạn theo đúng cấu trúc này, giảm
+        tối đa lỗi cắt ảnh sai vị trí.
+        <a href="../templates/mau-de-trac-nghiem-pdf.docx" download style="display:inline-block;margin-top:6px;">⬇️ Tải file mẫu Word (.docx)</a>
+      </div>
+      <div class="hint">
+        <strong>Lưu ý bắt buộc:</strong> file không kèm sẵn đáp án đúng nào cả — sau khi nạp, vào
+        <strong>"📋 Sửa câu hỏi trắc nghiệm"</strong>, các câu vừa nạp sẽ hiện sẵn 4 nút A/B/C/D để bấm
+        chọn nhanh đáp án đúng (không cần mở form sửa từng câu). Câu hỏi kiểu này cũng KHÔNG bị xáo thứ
+        tự A/B/C/D khi thi thật (để khớp đúng ảnh).
       </div>
       <input type="file" id="quizPdfFileInput" accept=".pdf" style="display:none;" />
       <button class="btn primary block" id="quizPdfBtn" style="margin-top:10px;">+ Chọn file .pdf</button>

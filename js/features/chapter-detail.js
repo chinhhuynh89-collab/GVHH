@@ -1068,11 +1068,20 @@
   function renderQuizManager() {
     const box = $('#quizManagerBody');
     const items = getAllQuizItems();
-    box.innerHTML = items.length ? items.map((item) => `
+    box.innerHTML = items.length ? items.map((item) => {
+      const qType = getQuestionType(item);
+      // Câu nạp từ PDF (cắt ảnh) luôn thiếu đáp án đúng (correct: null) — cho bấm chọn nhanh NGAY tại
+      // đây thay vì bắt giáo viên mở form "Sửa" từng câu một, đỡ mất công khi nạp hàng chục/trăm câu.
+      const needsQuickPick = (qType === 'abcd' || qType === 'truefalse') && (item.correct === null || item.correct === undefined) && Array.isArray(item.options);
+      return `
       <div class="quiz-review-item" style="text-align:left;">
         ${item.qImage ? `<img src="${item.qImage}" alt="${escapeHtml(item.q)}" style="max-width:100%;display:block;border-radius:8px;margin-bottom:6px;">` : ''}
         <div class="qi-q">${escapeHtml(item.q)}</div>
-        <div class="hint">[${QUIZ_TYPE_LABELS[getQuestionType(item)]}] Đúng: ${formatCorrectAnswerDisplay(item) ? escapeHtml(formatCorrectAnswerDisplay(item)) : '⚠️ chưa có đáp án đúng'}</div>
+        <div class="hint">[${QUIZ_TYPE_LABELS[qType]}] Đúng: ${formatCorrectAnswerDisplay(item) ? escapeHtml(formatCorrectAnswerDisplay(item)) : '⚠️ chưa có đáp án đúng'}</div>
+        ${needsQuickPick ? `
+        <div class="btn-row" style="margin-top:6px;flex-wrap:wrap;gap:6px;">
+          ${item.options.map((opt, i) => `<button type="button" class="btn quiz-quickpick" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}" data-i="${i}">✓ ${escapeHtml(opt)}</button>`).join('')}
+        </div>` : ''}
         <div class="hint" style="margin-top:4px;">
           ${item.kind === 'builtin' ? (item.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
           · <a href="#" class="quiz-edit" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">Sửa</a>
@@ -1081,7 +1090,35 @@
           ${bankShareLinkHtml('quiz', item)}
         </div>
       </div>
-    `).join('') : '<div class="hint">Chưa có câu hỏi nào.</div>';
+    `;
+    }).join('') : '<div class="hint">Chưa có câu hỏi nào.</div>';
+
+    $$('.quiz-quickpick', box).forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const kind = btn.dataset.kind;
+        const key = btn.dataset.key;
+        const i = parseInt(btn.dataset.i, 10);
+        $$('.quiz-quickpick', btn.closest('.quiz-review-item')).forEach((b) => { b.disabled = true; });
+        try {
+          if (kind === 'custom') {
+            await updateCustomQuiz(key, { correct: i });
+            const it = customQuizCache.find((x) => x.id === key);
+            if (it) it.correct = i;
+          } else {
+            const item = getAllQuizItems().find((it) => it.kind === 'builtin' && String(it.index) === key);
+            const question = { q: item.q, type: getQuestionType(item), options: item.options, correct: i, explain: item.explain || '' };
+            await setChapterMeta(chapter.id, { ['quizOverrides.' + key]: question });
+            chapterMeta.quizOverrides = Object.assign({}, chapterMeta.quizOverrides, { [key]: question });
+          }
+          rebuildEffectiveQuiz();
+          renderQuizManager();
+          renderQuiz();
+        } catch (err) {
+          showToast('Không lưu được: ' + err.message);
+          $$('.quiz-quickpick', box).forEach((b) => { b.disabled = false; });
+        }
+      });
+    });
 
     $$('.quiz-edit', box).forEach((a) => {
       a.addEventListener('click', (e) => {

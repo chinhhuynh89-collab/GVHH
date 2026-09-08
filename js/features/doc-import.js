@@ -606,26 +606,30 @@ async function extractQuizFromPdf(arrayBuffer) {
       // Có mốc "PHẦN" trước mốc "Câu" đầu tiên trên trang -> KHÔNG nối câu đang mở với phần mới này.
       const lineHeight = estimateLineHeight(lines);
       const partBeforeFirstMarker = events.some((e) => e.kind === 'part' && e.y < markers[0].y);
-      const leadingSplit = (openQuestion && !partBeforeFirstMarker)
-        ? (() => {
-            const prevY = findPrevRealLineY(lines, markers[0].idx, lineHeight);
-            return prevY !== null ? (prevY + markers[0].y) / 2 : 0;
-          })()
-        : 0;
+      // Ranh giới TRƯỚC mốc "Câu" đầu tiên trên trang: LUÔN tính bằng dòng chữ thật đứng ngay trước nó
+      // (có thể chính là dòng "PHẦN ..." nếu có) — dùng CHUNG 1 cách dù trang có mốc "PHẦN" hay không,
+      // để tiêu đề/hướng dẫn/dòng "PHẦN ..." KHÔNG bị nuốt vào ảnh câu đầu tiên. Biến `partBeforeFirstMarker`
+      // chỉ dùng để quyết định có NỐI vùng này vào câu đang mở dở từ trang trước hay không (xem bên dưới).
+      const boundary0 = (() => {
+        const prevY = findPrevRealLineY(lines, markers[0].idx, lineHeight);
+        return prevY !== null ? (prevY + markers[0].y) / 2 : 0;
+      })();
       const boundaries = new Array(markers.length + 1);
-      boundaries[0] = leadingSplit;
+      boundaries[0] = boundary0;
       for (let i = 1; i < markers.length; i++) {
         const prevY = findPrevRealLineY(lines, markers[i].idx, lineHeight);
         boundaries[i] = prevY !== null ? (prevY + markers[i].y) / 2 : Math.max(boundaries[i - 1], markers[i].y - QUIZ_MARKER_VERTICAL_PAD);
       }
       boundaries[markers.length] = canvas.height;
 
-      // Phần TRƯỚC mốc "Câu" đầu tiên trên trang (nếu có) là phần cuối của câu đang mở từ trang trước.
+      // Phần TRƯỚC mốc "Câu" đầu tiên trên trang CHỈ được nối vào câu đang mở khi THẬT SỰ có câu đang mở
+      // (tràn trang từ trang trước) — nếu đây là mốc "Câu" đầu tiên của CẢ FILE (chưa mở câu nào), phần
+      // trước đó (tiêu đề/hướng dẫn đầu file) không thuộc câu nào, bỏ qua không nạp vào đâu cả.
       if (openQuestion && !partBeforeFirstMarker && markers[0].y > 4) {
-        const cropped = cropPageCanvasVertical(canvas, 0, leadingSplit);
+        const cropped = cropPageCanvasVertical(canvas, 0, boundary0);
         if (cropped) {
           openQuestion.canvases.push(cropped);
-          openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, leadingSplit);
+          openQuestion.hasOptions = openQuestion.hasOptions || hasOptionsBetween(0, boundary0);
         }
       }
       flushQuestion();
