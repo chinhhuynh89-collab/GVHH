@@ -613,27 +613,55 @@ function padOuterEdges(strips) {
 // nguyên màu đó khi cắt vào app, học sinh nhìn thấy ngay đáp án mà không cần suy nghĩ. 1 pixel coi là
 // "có màu" khi lệch giữa kênh màu lớn nhất/nhỏ nhất (r,g,b) đủ lớn — chữ/nền đen-trắng-xám bình thường
 // luôn có r≈g≈b, không bị tính nhầm.
-// Gộp 2 việc vào CHUNG 1 lượt đọc/ghi pixel: (1) đo tỉ lệ pixel "có màu" TRƯỚC khi xoá (dùng để so
-// sánh đáp án nào được tô sẵn — xem detectAndStripHighlight), (2) xoá luôn màu đó NGAY trong cùng lượt
-// duyệt — pixel có màu chuyển thành ĐEN (chữ tô màu) hoặc TRẮNG (nền tô màu/highlight) tuỳ độ sáng gốc,
-// giữ nguyên hình dạng chữ/nét. Giảm 1 nửa số lần đọc/ghi pixel so với tách riêng 2 bước — đáng kể vì
-// hàm này chạy cho MỌI ảnh câu hỏi/đáp án cắt ra, ảnh hưởng trực tiếp tốc độ nạp cả đề dài. Sửa TRỰC
-// TIẾP trên canvas truyền vào.
+//
+// Tô ĐEN (chữ tô màu) hay TRẮNG (nền tô màu/highlight) dựa THEO ĐỘ SÁNG GỐC từng pixel — nhưng nếu áp
+// dụng mù quáng cho highlight NỀN tông màu tối/trung bình (VD cam, xanh lá đậm — không hiếm trong các
+// bộ màu highlight có sẵn của Word), CẢ DẢI NỀN đó biến thành 1 KHỐI ĐEN đặc xấu xí, LỘ RÕ hơn hẳn màu
+// gốc thay vì ẩn đi (lỗi thực tế đã gặp: 1 cụm từ được tô nền màu tối bị in đè thành thanh đen giữa
+// câu). Khắc phục: xét THEO TỪNG DÒNG NGANG (row) — dòng nào có tỉ lệ pixel màu VƯỢT NGƯỠNG (dấu hiệu
+// nguyên 1 dải NỀN bị tô, không phải vài nét chữ rời rạc) thì LUÔN tô TRẮNG cho cả dòng đó bất kể độ
+// sáng gốc, khớp màu nền trang thay vì tạo khối đen. Dòng có màu RẢI RÁC (vài chữ tô màu xen giữa chữ
+// đen bình thường) vẫn giữ nguyên quy tắc cũ (đen/trắng theo độ sáng) vì không phải là 1 khối nền.
+const HIGHLIGHT_ROW_BG_RATIO = 0.25;
 function analyzeAndStripHighlight(canvas) {
   if (!canvas || !canvas.width || !canvas.height) return 0;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imgData.data;
+  const w = canvas.width, h = canvas.height;
+
+  const rowColoredCount = new Uint32Array(h);
+  for (let y = 0; y < h; y++) {
+    const rowStart = y * w * 4;
+    let cnt = 0;
+    for (let x = 0; x < w; x++) {
+      const i = rowStart + x * 4;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 30) cnt++;
+    }
+    rowColoredCount[y] = cnt;
+  }
+
   let colored = 0;
   let sampled = 0;
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
-    const isColored = Math.max(r, g, b) - Math.min(r, g, b) > 30;
-    if ((i >> 2) % 3 === 0) { sampled++; if (isColored) colored++; } // lấy mẫu 1/3 pixel để tính tỉ lệ, đủ chính xác mà nhanh hơn quét hết
-    if (isColored) {
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      const v = lum > 150 ? 255 : 0;
-      data[i] = v; data[i + 1] = v; data[i + 2] = v;
+  for (let y = 0; y < h; y++) {
+    const rowIsBackgroundBlock = (rowColoredCount[y] / w) > HIGHLIGHT_ROW_BG_RATIO;
+    const rowStart = y * w * 4;
+    for (let x = 0; x < w; x++) {
+      const i = rowStart + x * 4;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const isColored = Math.max(r, g, b) - Math.min(r, g, b) > 30;
+      if ((i >> 2) % 3 === 0) { sampled++; if (isColored) colored++; } // lấy mẫu 1/3 pixel để tính tỉ lệ, đủ chính xác mà nhanh hơn quét hết
+      if (isColored) {
+        let v;
+        if (rowIsBackgroundBlock) {
+          v = 255;
+        } else {
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          v = lum > 150 ? 255 : 0;
+        }
+        data[i] = v; data[i + 1] = v; data[i + 2] = v;
+      }
     }
   }
   ctx.putImageData(imgData, 0, 0);
@@ -765,8 +793,10 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   padOuterEdges(stemStrips);
   const stemCanvas = cropRegionStrips(canvas, stemStrips);
   if (!stemCanvas) return null;
-  analyzeAndStripHighlight(stemCanvas);
-
+  // KHÔNG xoá màu ở đề — mục đích xoá màu chỉ để ẩn dấu vết đáp án ĐÚNG (nằm trong vùng đáp án), đề
+  // không có thông tin đó nên xoá màu ở đây chỉ có hại: từng làm mất/biến dạng chữ tô màu hợp lệ trong
+  // đề gốc (VD 1 cụm từ được tô đậm để nhấn mạnh) thành khối đen/trắng xấu xí không liên quan gì tới
+  // đáp án (lỗi thực tế đã gặp).
   if (firstOptionLineIdx === -1) {
     return { stemCanvas, hasOptions: false, optionCanvases: null, optionsCanvas: null, detectedCorrect: null, stemMultiline };
   }
