@@ -386,6 +386,18 @@ const QUIZ_PART_MARKER_RE = /^PH[ẦA]N\s+([IVXLCDM]+)\s*[.:]?\s*(.*)$/i;
 // qua chữ "tự luận" trong dòng PHẦN đó (không đoán cứng luôn là phần cuối/phần số mấy, để còn đúng cả
 // khi thứ tự các phần trong 1 file khác đổi khác đi).
 const QUIZ_ESSAY_PART_RE = /tự\s*luận/i;
+// Phương án dự phòng CUỐI CÙNG khi hoàn toàn không có dòng thật nào đứng trước mốc để tính điểm giữa
+// (cực hiếm — trang chỉ có đúng 1 dòng duy nhất là chính dòng mốc) — lùi 1 khoảng cố định thay vì để
+// ranh giới trùng khớp mốc (sẽ cắt mất chính dòng đó).
+const QUIZ_MARKER_VERTICAL_PAD = 24;
+// Ranh giới tính theo điểm GIỮA 2 dòng (xem findPrevRealLineY/computeLineBands) đôi khi sát ngay đỉnh
+// dấu tiếng Việt cao (ệ, ẫ, ữ...) của dòng phía dưới, hụt mất vài pixel đỉnh dấu — CHỈ xảy ra ở 2 MÉP
+// NGOÀI CÙNG của 1 cụm cắt (đầu dòng đầu tiên/cuối dòng cuối cùng của đề hay 1 đáp án), không phải ở
+// ranh giới NỘI BỘ giữa các dòng tràn trong CÙNG 1 đề/đáp án (nới rộng ở đó dễ dính lặp nội dung dòng
+// bên cạnh). Nới thêm 1 tỉ lệ nhỏ so với chiều cao dòng đó ở 2 mép ngoài LUÔN AN TOÀN vì
+// cropPageCanvasRect tự bỏ lề trắng thừa lại — nới ra mà không có gì để hụt thì phần nới chỉ là
+// khoảng trắng, tự bị cắt bỏ ngay sau đó — xem padOuterEdges.
+const QUIZ_CROP_EDGE_PAD_RATIO = 0.22;
 // Toạ độ 1 mốc "Câu N." là VỊ TRÍ DÒNG CƠ SỞ (baseline) của dòng chữ đó — dấu tiếng Việt (ệ, ẫ, ỡ...)
 // và các nét chữ vươn lên đều nằm PHÍA TRÊN baseline, cao thấp KHÁC NHAU tuỳ cỡ chữ/kiểu chữ từng câu.
 // Từng thử trừ lùi 1 khoảng PIXEL CỐ ĐỊNH cho ranh giới — không ổn (đã kiểm chứng bằng file giả lập).
@@ -599,6 +611,18 @@ function cropRegionStrips(canvas, strips) {
   return stackCanvasesVertically(pieces);
 }
 
+// Nới thêm mép NGOÀI CÙNG của 1 nhóm dải cắt (đầu dòng đầu tiên, cuối dòng cuối cùng) — xem
+// QUIZ_CROP_EDGE_PAD_RATIO. Chỉ đụng tới strips[0]/strips[cuối], KHÔNG đụng ranh giới nội bộ giữa các
+// dòng tràn ở giữa (đã đúng vị trí, nới thêm ở đó dễ dính lặp nội dung dòng bên cạnh).
+function padOuterEdges(strips) {
+  if (!strips.length) return strips;
+  const first = strips[0];
+  first.top -= (first.bottom - first.top) * QUIZ_CROP_EDGE_PAD_RATIO;
+  const last = strips[strips.length - 1];
+  last.bottom += (last.bottom - last.top) * QUIZ_CROP_EDGE_PAD_RATIO;
+  return strips;
+}
+
 // Giáo viên thường TÔ SẴN màu (nền vàng/xanh highlight, hoặc chữ đỏ/xanh) để tự đánh dấu đáp án đúng
 // trong file gốc lúc soạn đề — đã kiểm chứng thực tế trên file thật (đáp án đúng tô nền vàng). Nếu giữ
 // nguyên màu đó khi cắt vào app, học sinh nhìn thấy ngay đáp án mà không cần suy nghĩ. 1 pixel coi là
@@ -749,6 +773,7 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   for (let i = markerLineIdx + 1; i <= stemLastLineIdx; i++) {
     stemStrips.push({ top: bands[i].top, bottom: bands[i].bottom, left: 0, right: canvas.width });
   }
+  padOuterEdges(stemStrips);
   const stemCanvas = cropRegionStrips(canvas, stemStrips);
   if (!stemCanvas) return null;
   analyzeAndStripHighlight(stemCanvas);
@@ -766,7 +791,11 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
   // Vẫn xoá màu tô sẵn (nếu có) dù không xác định được CHÍNH XÁC đáp án nào — ít nhất học sinh không
   // nhìn thấy dấu vết màu, dù trường hợp này giáo viên vẫn cần tự chọn đáp án đúng bằng tay.
   const getOptionsCanvasFallback = () => {
-    const c = cropPageCanvasVertical(canvas, bands[firstOptionLineIdx].top, bands[optionLinesIdx[optionLinesIdx.length - 1]].bottom);
+    const optTop = bands[firstOptionLineIdx];
+    const optBottom = bands[optionLinesIdx[optionLinesIdx.length - 1]];
+    const top = optTop.top - (optTop.bottom - optTop.top) * QUIZ_CROP_EDGE_PAD_RATIO;
+    const bottom = optBottom.bottom + (optBottom.bottom - optBottom.top) * QUIZ_CROP_EDGE_PAD_RATIO;
+    const c = cropPageCanvasVertical(canvas, top, bottom);
     if (c) analyzeAndStripHighlight(c);
     return c;
   };
@@ -808,6 +837,7 @@ function buildTieredQuestionImages(canvas, lines, bands, bottom, markerLineIdx) 
         strips.push({ top: bands[nextMark.lineIdx].top, bottom: bands[nextMark.lineIdx].bottom, left: 0, right: nextMark.x });
       }
     }
+    padOuterEdges(strips);
     const cropped = cropRegionStrips(canvas, strips);
     if (!cropped) return { stemCanvas, hasOptions: true, optionCanvases: null, optionsCanvas: getOptionsCanvasFallback(), detectedCorrect: null };
     optionCanvases.push(cropped);
@@ -989,10 +1019,14 @@ async function extractQuizFromPdf(arrayBuffer) {
       }
       flushQuestion();
 
+      // Nới thêm mép trên/dưới 1 khoảng nhỏ (tính theo 1 dòng, KHÔNG theo cả khối) trước khi cắt — xem
+      // QUIZ_CROP_EDGE_PAD_RATIO/padOuterEdges — tránh hụt đỉnh dấu tiếng Việt cao ở dòng đầu tiên của
+      // câu. cropPageCanvasVertical tự bỏ lề trắng thừa lại nên nới ra không hại gì nếu không cần đến.
+      const edgePad = (lineHeight || 10) * QUIZ_CROP_EDGE_PAD_RATIO;
       for (let i = 0; i < markers.length; i++) {
         const top = boundaries[i];
         const bottom = boundaries[i + 1];
-        const cropped = cropPageCanvasVertical(canvas, top, bottom);
+        const cropped = cropPageCanvasVertical(canvas, top - edgePad, bottom + edgePad);
         if (!cropped) {
           warnings.push(`Câu ${markers[i].num} (trang ${pageNum}): không cắt được ảnh — có thể trang này bị lỗi hiển thị, cần bổ sung thủ công.`);
           continue;
