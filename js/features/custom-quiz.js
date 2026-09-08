@@ -81,3 +81,22 @@ async function deleteCustomQuiz(id) {
   const { db } = ensureFirebase();
   await db.collection('teachers').doc(teacher.uid).collection('customQuiz').doc(id).delete();
 }
+
+// Xoá TOÀN BỘ câu hỏi tự thêm/nạp từ file trong 1 chương — giống hệt deleteAllCustomLessons (xem
+// custom-lessons.js): cần khi 1 lần nạp cũ đã lưu sai (VD do lỗi vừa sửa) và giáo viên muốn nạp lại từ
+// đầu, thay vì xoá tay từng câu một khi đề có hàng chục/hàng trăm câu. KHÔNG đụng câu hỏi có sẵn trong
+// app (builtin). Firestore giới hạn 500 thao tác/batch — chia nhỏ 400/lần cho an toàn.
+async function deleteAllCustomQuiz(chapterId) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+  const { db } = ensureFirebase();
+  const col = db.collection('teachers').doc(teacher.uid).collection('customQuiz');
+  const snap = await col.where('chapterId', '==', chapterId).get();
+  const docs = snap.docs;
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = db.batch();
+    docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+  return docs.length;
+}

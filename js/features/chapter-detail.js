@@ -1059,6 +1059,12 @@
   }
 
   // ---------- Quản lý câu hỏi trắc nghiệm (mặc định + tự thêm, gộp chung) ----------
+  function refreshQuizDeleteAllRow() {
+    const row = $('#quizDeleteAllRow');
+    if (!row) return;
+    row.style.display = (owner.isOwner && customQuizCache.length) ? 'flex' : 'none';
+  }
+
   function renderQuizManager() {
     const box = $('#quizManagerBody');
     const items = getAllQuizItems();
@@ -1133,6 +1139,7 @@
       });
     });
     wireBankShareLinks(box, 'quiz', customQuizCache, renderQuizManager);
+    refreshQuizDeleteAllRow();
   }
 
   // Hiện đúng khối field tương ứng loại câu hỏi đang chọn (ABCD / Đúng-Sai / Nhập đáp án) — 3 khối
@@ -1178,6 +1185,26 @@
     $('#quizFormType').addEventListener('change', updateQuizFormTypeFields);
 
     $('#quizFormAddBtn').addEventListener('click', () => openQuizForm(null));
+    $('#quizDeleteAllBtn').addEventListener('click', async () => {
+      if (!customQuizCache.length) return;
+      if (!confirm(`Xoá toàn bộ ${customQuizCache.length} câu hỏi tự thêm/nạp từ file của chương này? Không thể hoàn tác. Câu hỏi có sẵn trong app KHÔNG bị ảnh hưởng.`)) return;
+      const btn = $('#quizDeleteAllBtn');
+      btn.disabled = true;
+      btn.textContent = 'Đang xoá...';
+      try {
+        await deleteAllCustomQuiz(chapter.id);
+        customQuizCache = [];
+        rebuildEffectiveQuiz();
+        renderQuizManager();
+        renderQuiz();
+        showToast('Đã xoá toàn bộ câu hỏi tự thêm — nạp lại file để cập nhật bản mới.', false);
+      } catch (err) {
+        showToast('Không xoá được: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🗑️ Xoá tất cả câu hỏi tự thêm';
+      }
+    });
     $('#quizFormCancel').addEventListener('click', () => { $('#quizForm').style.display = 'none'; });
     $('#quizFormSave').addEventListener('click', async () => {
       const q = $('#quizFormQ').value.trim();
