@@ -108,6 +108,42 @@
     return result;
   }
 
+  // Nạp file câu hỏi (PDF/txt/Word/Excel): 1 file = 1 "Bài" giống hệt bài giảng ở trên — KHÁC 1 điểm:
+  // mỗi câu hỏi vẫn cần Sửa/Xoá/chọn đáp án RIÊNG (không nối phẳng như "points" của bài giảng), nên
+  // nhóm chỉ giữ nguyên mảng `groupItems` (từng câu hỏi gốc) thay vì gộp nội dung lại.
+  function groupCustomQuizByFile(items) {
+    const groups = new Map();
+    const singles = [];
+    items.forEach((it) => {
+      if (it.sourceFileName) {
+        if (!groups.has(it.sourceFileName)) groups.set(it.sourceFileName, []);
+        groups.get(it.sourceFileName).push(it);
+      } else {
+        singles.push(it);
+      }
+    });
+    const result = singles.slice();
+    groups.forEach((group, fileName) => {
+      result.push({
+        kind: 'custom',
+        isGroup: group.length > 1,
+        id: group[0].id,
+        groupIds: group.map((g) => g.id),
+        groupItems: group,
+        title: fileName.replace(/\.[^.]+$/, ''),
+        order: group[0].order,
+        addedAt: group[0].addedAt
+      });
+    });
+    result.sort((a, b) => {
+      const ao = typeof a.order === 'number' ? a.order : Infinity;
+      const bo = typeof b.order === 'number' ? b.order : Infinity;
+      if (ao !== bo) return ao - bo;
+      return (a.addedAt || '').localeCompare(b.addedAt || '');
+    });
+    return result;
+  }
+
   function getAllLessons() {
     return mergeBuiltinWithOverrides(chapter.lessons, chapterMeta.lessonOverrides)
       .concat(groupCustomLessonsByFile(customLessonsCache.map((it) => Object.assign({ kind: 'custom' }, it))));
@@ -116,9 +152,16 @@
     return mergeBuiltinWithOverrides(chapter.flashcards, chapterMeta.flashcardOverrides)
       .concat(customFlashcardsCache.map((it) => Object.assign({ kind: 'custom' }, it)));
   }
+  // Câu hỏi builtin KHÔNG gộp theo bài (giống lesson builtin) — chỉ câu tự thêm/nạp file mới có
+  // `sourceFileName` để gộp. `getAllQuizItems()` vẫn trả về DANH SÁCH PHẲNG như trước (dùng ở
+  // renderQuizStats, quiz-taking, exam-creator...) — grouping CHỈ áp dụng lúc VẼ ở renderQuizManager.
   function getAllQuizItems() {
     return mergeBuiltinWithOverrides(chapter.quiz, chapterMeta.quizOverrides)
       .concat(customQuizCache.map((it) => Object.assign({ kind: 'custom' }, it)));
+  }
+  function getGroupedQuizItems() {
+    return mergeBuiltinWithOverrides(chapter.quiz, chapterMeta.quizOverrides)
+      .concat(groupCustomQuizByFile(customQuizCache.map((it) => Object.assign({ kind: 'custom' }, it))));
   }
 
   // ---------- Kho chung: chia sẻ/nhập bài giảng-câu hỏi-flashcard giữa các giáo viên ----------
@@ -1065,15 +1108,14 @@
     row.style.display = (owner.isOwner && customQuizCache.length) ? 'flex' : 'none';
   }
 
-  function renderQuizManager() {
-    const box = $('#quizManagerBody');
-    const items = getAllQuizItems();
-    box.innerHTML = items.length ? items.map((item) => {
-      const qType = getQuestionType(item);
-      // Câu nạp từ PDF (cắt ảnh) luôn thiếu đáp án đúng (correct: null) — cho bấm chọn nhanh NGAY tại
-      // đây thay vì bắt giáo viên mở form "Sửa" từng câu một, đỡ mất công khi nạp hàng chục/trăm câu.
-      const needsQuickPick = (qType === 'abcd' || qType === 'truefalse') && (item.correct === null || item.correct === undefined) && Array.isArray(item.options);
-      return `
+  // 1 câu hỏi — dùng lại được cho CẢ mục đơn lẻ LẪN từng câu bên trong 1 "Bài" đang mở (xem
+  // groupCustomQuizByFile) — tách riêng khỏi renderQuizManager để không viết trùng markup 2 chỗ.
+  function renderQuizItemCard(item) {
+    const qType = getQuestionType(item);
+    // Câu nạp từ PDF (cắt ảnh) luôn thiếu đáp án đúng (correct: null) — cho bấm chọn nhanh NGAY tại
+    // đây thay vì bắt giáo viên mở form "Sửa" từng câu một, đỡ mất công khi nạp hàng chục/trăm câu.
+    const needsQuickPick = (qType === 'abcd' || qType === 'truefalse') && (item.correct === null || item.correct === undefined) && Array.isArray(item.options);
+    return `
       <div class="quiz-review-item" style="text-align:left;">
         ${item.qImage ? `<img src="${item.qImage}" alt="${escapeHtml(item.q)}" style="max-width:100%;display:block;border-radius:8px;margin-bottom:6px;">` : ''}
         <div class="qi-q">${escapeHtml(item.q)}</div>
@@ -1091,7 +1133,54 @@
         </div>
       </div>
     `;
+  }
+
+  const expandedQuizKeys = new Set();
+  function quizGroupKey(item) { return 'g' + item.id; }
+
+  function renderQuizManager() {
+    const box = $('#quizManagerBody');
+    const items = getGroupedQuizItems();
+    box.innerHTML = items.length ? items.map((item) => {
+      if (!item.isGroup) return renderQuizItemCard(item);
+      const key = quizGroupKey(item);
+      const expanded = expandedQuizKeys.has(key);
+      return `
+      <div class="lesson-block">
+        <h3 class="lesson-toggle quiz-group-toggle" data-key="${key}">
+          <span class="lesson-toggle-arrow">${expanded ? '▾' : '▸'}</span> 📁 ${escapeHtml(item.title)}
+        </h3>
+        <div class="hint" style="margin:2px 0 8px;">
+          Tự thêm (${item.groupItems.length} câu) · <a href="#" class="quiz-delete-group" data-ids="${item.groupIds.join(',')}">Xoá cả bài</a>
+        </div>
+        ${expanded ? item.groupItems.map(renderQuizItemCard).join('') : ''}
+      </div>
+    `;
     }).join('') : '<div class="hint">Chưa có câu hỏi nào.</div>';
+
+    $$('.quiz-group-toggle', box).forEach((h) => {
+      h.addEventListener('click', () => {
+        const key = h.dataset.key;
+        if (expandedQuizKeys.has(key)) expandedQuizKeys.delete(key); else expandedQuizKeys.add(key);
+        renderQuizManager();
+      });
+    });
+    $$('.quiz-delete-group', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const ids = a.dataset.ids.split(',').filter(Boolean);
+        if (!confirm(`Xoá cả ${ids.length} câu hỏi trong bài này? Không thể hoàn tác.`)) return;
+        try {
+          await Promise.all(ids.map((id) => deleteCustomQuiz(id)));
+          customQuizCache = customQuizCache.filter((it) => !ids.includes(it.id));
+          rebuildEffectiveQuiz();
+          renderQuizManager();
+          renderQuiz();
+        } catch (err) {
+          showToast('Không xoá được: ' + err.message);
+        }
+      });
+    });
 
     $$('.quiz-quickpick', box).forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -1302,6 +1391,9 @@
           ? await extractDocxPlainText(await file.arrayBuffer())
           : await file.text();
         const questions = parseQuizTemplate(text);
+        // Gắn tên file gốc để nhóm thành 1 "Bài" trong danh sách quản lý — giống hệt cách bài giảng
+        // đang gộp theo sourceFileName (xem groupCustomLessonsByFile/groupCustomQuizByFile).
+        questions.forEach((q) => { q.sourceFileName = file.name; });
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
         box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>`;
@@ -1323,6 +1415,7 @@
       box.innerHTML = `<div class="result-box show">⏳ Đang cắt ảnh từng câu trong "${escapeHtml(file.name)}"...</div>`;
       try {
         const { questions, warnings } = await extractQuizFromPdf(await file.arrayBuffer());
+        questions.forEach((q) => { q.sourceFileName = file.name; });
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
         // Báo NGAY mọi cảnh báo gặp phải lúc nạp (thiếu/trùng số câu, trang lỗi...) — giáo viên cần biết
@@ -1368,6 +1461,7 @@
       box.innerHTML = `<div class="result-box show">⏳ Đang xử lý "${escapeHtml(file.name)}"...</div>`;
       try {
         const questions = await parseQuizExcelFile(file);
+        questions.forEach((q) => { q.sourceFileName = file.name; });
         await addCustomQuizBatch(chapter.id, questions);
         customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
         box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>`;
