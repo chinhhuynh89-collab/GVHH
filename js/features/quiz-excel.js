@@ -21,8 +21,24 @@ function downloadQuizTemplateCSV() {
     QUIZ_TEMPLATE_HEADERS,
     ['Nguyên tử trung hoà về điện vì:', 'Số proton = số neutron', 'Số electron = số neutron', 'Số electron = số proton', 'Nguyên tử không có electron', 'C', 'Điện tích proton và electron cân bằng khi số lượng hai loại hạt bằng nhau.', ''],
     ['Kim loại nào ở thể lỏng tại nhiệt độ thường?', 'Sắt', 'Thuỷ ngân', 'Nhôm', 'Kẽm', 'B', '', ''],
+    ['Công thức hoá học của khí oxi là:', 'O', 'O2', 'O3', '2O', 'B', '', ''],
+    ['Trong bảng tuần hoàn, các nguyên tố được sắp xếp theo chiều tăng dần của:', 'Số khối', 'Số neutron', 'Điện tích hạt nhân', 'Khối lượng nguyên tử', 'C', '', ''],
+    ['Liên kết hoá học trong phân tử NaCl là:', 'Liên kết cộng hoá trị', 'Liên kết ion', 'Liên kết kim loại', 'Liên kết hydrogen', 'B', '', ''],
+    ['Chất nào sau đây là oxit axit?', 'CaO', 'Na2O', 'CO2', 'Fe2O3', 'C', '', ''],
+    ['Dung dịch nào làm quỳ tím chuyển sang màu đỏ?', 'NaOH', 'HCl', 'NaCl', 'Ca(OH)2', 'B', '', ''],
+    ['Ở điều kiện tiêu chuẩn, 22,4 lít khí CO2 tương ứng với số mol là:', '0,5 mol', '1 mol', '2 mol', '1,5 mol', 'B', '', ''],
+    ['Kim loại nào tác dụng được với nước ở nhiệt độ thường?', 'Fe', 'Cu', 'Na', 'Ag', 'C', '', ''],
+    ['Công thức phân tử của methane (khí thiên nhiên) là:', 'CH4', 'C2H6', 'C2H4', 'C2H2', 'A', '', ''],
+    ['Dãy chất nào sau đây đều là muối?', 'NaCl, CaCO3, KNO3', 'NaOH, HCl, H2SO4', 'CO2, SO2, NO2', 'Fe, Cu, Zn', 'A', '', ''],
+    ['Hiện tượng nào sau đây là hiện tượng hoá học?', 'Nước đá tan chảy', 'Đinh sắt bị gỉ trong không khí ẩm', 'Hoà tan đường vào nước', 'Cồn bay hơi', 'B', 'Gỉ sắt tạo ra chất mới (oxit sắt), khác các hiện tượng còn lại chỉ đổi trạng thái.', ''],
+    ['Chất xúc tác có vai trò gì trong phản ứng hoá học?', 'Làm tăng khối lượng sản phẩm', 'Làm thay đổi bản chất phản ứng', 'Làm tăng tốc độ phản ứng nhưng không bị biến đổi', 'Làm giảm tốc độ phản ứng', 'C', '', ''],
+    ['Trong công nghiệp, ammonia (NH3) được điều chế chủ yếu bằng phương pháp nào?', 'Điện phân', 'Tổng hợp trực tiếp từ N2 và H2', 'Nhiệt phân muối amoni', 'Cho kim loại tác dụng với axit', 'B', '', ''],
     ['NaOH là 1 bazơ mạnh.', '', '', '', '', 'Đúng', '', 'DungSai'],
-    ['Công thức hoá học của muối ăn?', '', '', '', '', 'NaCl | natri clorua', '', 'TuLuan']
+    ['Kim loại đồng (Cu) tác dụng được với dung dịch HCl loãng, giải phóng khí H2.', '', '', '', '', 'Sai', 'Cu đứng sau H trong dãy hoạt động hoá học nên không phản ứng với HCl loãng.', 'DungSai'],
+    ['Phản ứng oxi hoá - khử luôn có sự thay đổi số oxi hoá của các nguyên tố.', '', '', '', '', 'Đúng', '', 'DungSai'],
+    ['Công thức hoá học của muối ăn?', '', '', '', '', 'NaCl | natri clorua', '', 'TuLuan'],
+    ['Kí hiệu hoá học của nguyên tố sắt là gì?', '', '', '', '', 'Fe', '', 'TuLuan'],
+    ['Chất khí sinh ra khi cho kim loại kẽm (Zn) tác dụng với dung dịch axit clohydric (HCl) là gì?', '', '', '', '', 'H2 | khí hidro | khí hydro | hidro | hydro', '', 'TuLuan']
   ];
   const csv = rows.map((r) => r.map(csvEscapeField).join(',')).join('\r\n');
   // \uFEFF (BOM) để Excel nhận đúng bảng mã UTF-8, không lỗi font tiếng Việt khi mở lại.

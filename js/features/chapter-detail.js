@@ -1444,34 +1444,6 @@
       }
     });
 
-    $('#quizBulkBtn').addEventListener('click', () => $('#quizBulkFileInput').click());
-    $('#quizBulkFileInput').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      e.target.value = '';
-      if (!file) return;
-      const box = $('#quizBulkResult');
-      box.innerHTML = `<div class="result-box show">⏳ Đang xử lý "${escapeHtml(file.name)}"...</div>`;
-      try {
-        const text = file.name.toLowerCase().endsWith('.docx')
-          ? await extractDocxPlainText(await file.arrayBuffer())
-          : await file.text();
-        const questions = parseQuizTemplate(text);
-        // Gắn tên file gốc để nhóm thành 1 "Bài" trong danh sách quản lý — giống hệt cách bài giảng
-        // đang gộp theo sourceFileName (xem groupCustomLessonsByFile/groupCustomQuizByFile).
-        questions.forEach((q) => { q.sourceFileName = file.name; });
-        await addCustomQuizBatch(chapter.id, questions);
-        customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
-        box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>${quizImportConfirmBtnHtml()}`;
-        wireQuizImportConfirmBtn(box);
-        rebuildEffectiveQuiz();
-        renderQuizManager();
-        renderQuiz();
-        $('#quizManagerBody').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } catch (err) {
-        box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(err.message)}</div>`;
-      }
-    });
-
     $('#quizPdfBtn').addEventListener('click', () => $('#quizPdfFileInput').click());
     $('#quizPdfFileInput').addEventListener('change', async (e) => {
       const file = e.target.files[0];
@@ -1550,6 +1522,7 @@
     });
 
     $('#quizTemplateBtn').addEventListener('click', () => downloadQuizTemplateCSV());
+    if ($('#quizExcelTemplateBtn')) $('#quizExcelTemplateBtn').addEventListener('click', () => downloadQuizTemplateCSV());
     $('#quizExcelBtn').addEventListener('click', () => $('#quizExcelFileInput').click());
     $('#quizExcelFileInput').addEventListener('change', async (e) => {
       const file = e.target.files[0];
@@ -1577,7 +1550,7 @@
 
   // ---------- Menu tab Trắc nghiệm: bấm vào mới hiện đúng 1 khung tương ứng, có nút "Quay lại" ----------
   // Học sinh thấy 2 lối vào (Ôn tập / Kiểm tra thử); giáo viên thấy 5 thao tác quản lý câu hỏi.
-  const QUIZ_SECTION_IDS = ['quizEditSection', 'quizTxtCard', 'quizPdfCard', 'quizExcelCard', 'quizBankSection', 'selfTestCard', 'quizReviewSection'];
+  const QUIZ_SECTION_IDS = ['quizEditSection', 'quizPdfCard', 'quizExcelCard', 'quizBankSection', 'selfTestCard', 'quizReviewSection'];
 
   function showQuizSection(sectionId) {
     $('#quizStudentMenu').style.display = 'none';
@@ -1628,7 +1601,6 @@
     if (owner.isOwner) {
       $('#quizMenuEditBtn').addEventListener('click', () => showQuizSection('quizEditSection'));
       $('#quizMenuManualBtn').addEventListener('click', () => { showQuizSection('quizEditSection'); openQuizForm(null); });
-      $('#quizMenuTxtBtn').addEventListener('click', () => showQuizSection('quizTxtCard'));
       $('#quizMenuPdfBtn').addEventListener('click', () => showQuizSection('quizPdfCard'));
       $('#quizMenuExcelBtn').addEventListener('click', () => showQuizSection('quizExcelCard'));
     }

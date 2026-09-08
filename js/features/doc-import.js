@@ -1,9 +1,8 @@
 // Trích xuất nội dung từ file ngay trên trình duyệt (không cần server).
 // - Nạp bài giảng (extractFileToLessons): CHỈ nhận .pdf — vẽ mỗi trang thành 1 ảnh bằng pdf.js (đóng
 //   gói sẵn trong app, js/vendor/pdfjs) để giữ đúng 100% hình thức bản in, vẫn hoạt động offline.
-// - Nạp câu hỏi trắc nghiệm từ Word (extractDocxPlainText, dùng ở chapter-detail.js): vẫn đọc .docx —
-//   tự đọc cấu trúc ZIP + XML bằng API sẵn có của trình duyệt (DecompressionStream, DOMParser), vì chỉ
-//   cần trích chữ thô theo dòng, không cần giữ định dạng phức tạp như bài giảng.
+// - Nạp câu hỏi trắc nghiệm: từ .pdf (extractQuizFromPdf, cắt ảnh) hoặc .xlsx (quiz-excel.js, dùng lại
+//   bộ đọc ZIP/XML bên dưới — readZipEntryText — để đọc .xlsx mà không cần thư viện ngoài).
 
 const ZIP_EOCD_SIG = 0x06054b50;
 const ZIP_CEN_SIG = 0x02014b50;
@@ -226,20 +225,6 @@ function downloadXlsx(rows, filename) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   return filename;
-}
-
-// Trích xuất TOÀN BỘ văn bản trong file .docx thành các dòng thuần — mỗi đoạn văn Word (kể cả đoạn
-// TRỐNG) thành đúng 1 dòng, nối lại bởi "\n". Dùng để nạp câu hỏi trắc nghiệm từ file Word theo ĐÚNG
-// mẫu .txt đã có sẵn (parseQuizTemplate — các câu cách nhau bởi 1 dòng trống): giữ nguyên đoạn trống
-// mới tách đúng được từng câu.
-async function extractDocxPlainText(arrayBuffer) {
-  const xmlText = await readZipEntryText(arrayBuffer, 'word/document.xml');
-  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
-  if (doc.getElementsByTagName('parsererror').length) {
-    throw new Error('Không đọc được nội dung XML bên trong file .docx.');
-  }
-  const paragraphs = Array.from(doc.getElementsByTagName('w:p'));
-  return paragraphs.map((p) => Array.from(p.getElementsByTagName('w:t')).map((t) => t.textContent).join('')).join('\n');
 }
 
 // ---------- Nạp bài giảng: CHỈ còn nhận file .pdf (xem extractFileToLessons bên dưới) ----------
