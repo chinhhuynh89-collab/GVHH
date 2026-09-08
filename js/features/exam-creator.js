@@ -59,10 +59,19 @@ function answerKeyLabel(question) {
   return ['A', 'B', 'C', 'D'][question.correct] || '?';
 }
 
+// Câu nạp từ PDF (cắt ảnh) không có nội dung THẬT trong question.q/question.options (chỉ là nhãn/chữ
+// cái giữ chỗ, xem doc-import.js) — PHẢI vẽ ảnh qua getQuizVisual() giống hệt exam-taker.js/renderQuiz()
+// đang làm, nếu không đề in ra giấy in ra trống trơn không có nội dung câu hỏi/đáp án (đã gặp thực tế).
 function renderQuestionBlockHtml(question, idx) {
   const type = getQuestionType(question);
+  const visual = getQuizVisual(question);
   let optsHtml;
-  if (type === 'abcd') {
+  if (visual && visual.optionSrcs) {
+    const letters = ['A', 'B', 'C', 'D'];
+    optsHtml = `<div class="opts">${visual.optionSrcs.map((src, i) => `<div class="opt-img"><strong>${letters[i]}.</strong> <img src="${src}" alt="Đáp án ${letters[i]}"></div>`).join('')}</div>`;
+  } else if (visual && visual.combinedOptionsSrc) {
+    optsHtml = `<div class="opts"><img src="${visual.combinedOptionsSrc}" alt="Đáp án" class="q-opts-img"></div>`;
+  } else if (type === 'abcd') {
     const letters = ['A', 'B', 'C', 'D'];
     optsHtml = `<div class="opts">${question.options.map((opt, i) => `<div>${letters[i]}. ${escapeHtml(opt)}</div>`).join('')}</div>`;
   } else if (type === 'truefalse') {
@@ -70,7 +79,8 @@ function renderQuestionBlockHtml(question, idx) {
   } else {
     optsHtml = '<div class="opts blank-line">Trả lời: ....................................................................</div>';
   }
-  return `<div class="q"><p><strong>Câu ${idx + 1}:</strong> ${escapeHtml(question.q)}</p>${optsHtml}</div>`;
+  const stemImgHtml = visual ? `<img src="${visual.stemSrc}" alt="Ảnh câu hỏi" class="q-stem-img${visual.stemMultiline ? ' multiline' : ''}">` : '';
+  return `<div class="q">${stemImgHtml}<p><strong>Câu ${idx + 1}:</strong> ${escapeHtml(question.q)}</p>${optsHtml}</div>`;
 }
 
 function buildExamPrintHtml(variants, examTitle, durationMinutes) {
@@ -101,6 +111,10 @@ function buildExamPrintHtml(variants, examTitle, durationMinutes) {
   .opts { margin-left: 18px; }
   .opts div { margin: 2px 0; }
   .blank-line { margin-top: 6px; }
+  .q-stem-img, .q-opts-img { display: block; max-width: 100%; margin: 4px 0; }
+  .q-stem-img.multiline { max-width: none; max-height: 160px; }
+  .opts .opt-img { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0; }
+  .opts .opt-img img { max-width: 65%; max-height: 120px; }
 </style>
 </head><body>${variantsHtml}${answerKeyHtml}</body></html>`;
 }

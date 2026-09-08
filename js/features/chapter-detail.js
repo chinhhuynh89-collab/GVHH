@@ -895,12 +895,18 @@
     const total = stQuestions.length;
     const item = stQuestions[stIndex];
     const answered = stAnswers[stIndex] !== null && stAnswers[stIndex] !== undefined;
+    // Câu nạp từ PDF (cắt ảnh) không có nội dung THẬT trong item.q/item.options (chỉ là nhãn/chữ cái
+    // giữ chỗ, xem doc-import.js) — PHẢI vẽ ảnh qua getQuizVisual() giống hệt renderQuiz() (chế độ Ôn
+    // tập) đang làm, nếu không câu hỏi hiện trống trơn không có gì để làm bài (đã xảy ra thực tế).
+    const visual = getQuizVisual(item);
     $('#selfTestRunning').innerHTML = `
       <div class="quiz-progress" style="display:flex;justify-content:space-between;">
         <span>Câu ${stIndex + 1}/${total}</span>
         <span id="selfTestTimer" style="font-weight:700;color:var(--brand);">${formatCountdown(stDeadline - Date.now())}</span>
       </div>
+      ${visual ? `<div class="quiz-question-image${visual.stemMultiline ? ' multiline' : ''}"><img src="${visual.stemSrc}" alt="Ảnh câu hỏi"></div>` : ''}
       <div class="quiz-question">${escapeHtml(item.q)}</div>
+      ${visual && visual.combinedOptionsSrc ? `<div class="quiz-question-image"><img src="${visual.combinedOptionsSrc}" alt="Ảnh đáp án"></div>` : ''}
       <div class="quiz-options" id="selfTestOptions"></div>
       <div class="btn-row" style="margin-top:10px;">
         <button class="btn" id="stPrevBtn" ${stIndex === 0 ? 'disabled' : ''}>← Câu trước</button>
@@ -921,6 +927,16 @@
       // lại được ngay không sao).
       input.addEventListener('input', () => { stAnswers[stIndex] = input.value.trim() || null; });
       optWrap.appendChild(input);
+    } else if (visual && visual.optionSrcs) {
+      // Đáp án tách riêng thành ảnh (Tầng 1) — nhãn A/B/C/D TỰ VẼ, giống hệt renderQuiz().
+      const labels = ['A', 'B', 'C', 'D'];
+      visual.optionSrcs.forEach((src, i) => {
+        const b = document.createElement('button');
+        b.className = 'quiz-option quiz-option-image' + (answered && i === stAnswers[stIndex] ? ' selected' : '');
+        b.innerHTML = `<span class="quiz-option-label">${labels[i]}.</span><img src="${src}" alt="Đáp án ${labels[i]}">`;
+        b.addEventListener('click', () => { stAnswers[stIndex] = i; renderSelfTestQuestion(); });
+        optWrap.appendChild(b);
+      });
     } else {
       item.options.forEach((opt, i) => {
         const b = document.createElement('button');
