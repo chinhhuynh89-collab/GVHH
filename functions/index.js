@@ -121,9 +121,13 @@ function buildContentParts(points, lessonTitle) {
   return parts;
 }
 
+// Đổi sang app môn khác (VD Toán, Lý) CHỈ cần sửa đúng 1 dòng này — xem HUONG-DAN-NHAN-BAN-MON-HOC.md
+// ở thư mục gốc để biết đầy đủ các chỗ khác cần đổi khi nhân bản app sang môn học mới.
+const SUBJECT_NAME = 'Hoá học';
+
 function buildSystemPrompt(mode, count) {
   const kindText = mode === 'quiz' ? `${count} câu hỏi trắc nghiệm 4 đáp án` : `${count} flashcard (mặt trước/mặt sau)`;
-  return `Bạn là trợ lý soạn học liệu cho giáo viên Hoá học phổ thông tại Việt Nam. Dựa ĐÚNG vào nội dung bài giảng được cung cấp — KHÔNG bịa thêm kiến thức ngoài nội dung đó — hãy soạn ra CHÍNH XÁC ${kindText} bằng tiếng Việt, đúng chương trình phổ thông Việt Nam, độ khó phù hợp học sinh. Nội dung câu hỏi/flashcard phải bám sát bài giảng đã cho, không hỏi kiến thức không xuất hiện trong bài.`;
+  return `Bạn là trợ lý soạn học liệu cho giáo viên ${SUBJECT_NAME} phổ thông tại Việt Nam. Dựa ĐÚNG vào nội dung bài giảng được cung cấp — KHÔNG bịa thêm kiến thức ngoài nội dung đó — hãy soạn ra CHÍNH XÁC ${kindText} bằng tiếng Việt, đúng chương trình phổ thông Việt Nam, độ khó phù hợp học sinh. Nội dung câu hỏi/flashcard phải bám sát bài giảng đã cho, không hỏi kiến thức không xuất hiện trong bài.`;
 }
 
 exports.generateFromLesson = onCall({
