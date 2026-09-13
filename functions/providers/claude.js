@@ -183,5 +183,6 @@ async function generate({ apiKey, model, systemPrompt, parts, mode }) {
 module.exports = {
   generate,
   secretName: 'ANTHROPIC_API_KEY',
+  firestoreKeyField: 'anthropicApiKey',
   defaultModel: 'claude-haiku-4-5-20251001'
 };

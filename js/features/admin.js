@@ -100,6 +100,7 @@ function normalizeZaloUrl(v) {
       locked: buildLockedFeaturesSection,
       plans: buildPlansSection,
       payment: buildPaymentSection,
+      aiConfig: buildAiConfigSection,
       commissions: buildCommissionsSection,
       feedback: buildFeedbackSection,
       resetAccount: buildResetAccountSection
@@ -628,6 +629,103 @@ function normalizeZaloUrl(v) {
           });
           cfg = await getMonetizationConfig();
           showResult(box, '✅ Đã lưu.');
+        } catch (e) {
+          showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+        }
+      });
+    }
+
+    // ---------- 🤖 Cấu hình AI ----------
+    // Cho phép đổi nhà cung cấp/model/API key AI ngay trong app — không cần CLI/terminal. Ghi thẳng
+    // vào Firestore (config/aiProvider + secureConfig/aiKeys), Cloud Function generateFromLesson đọc
+    // lại 2 tài liệu này ở MỖI lượt gọi (xem getApiKeyForProvider/getActiveProviderConfig,
+    // functions/index.js) nên có hiệu lực NGAY, không cần deploy lại. Ô API key CHỈ hiện trống/gợi ý
+    // "đã lưu" — KHÔNG BAO GIỜ hiện lại giá trị key thật đã lưu, tránh lộ key khi mở trang này.
+    const AI_MODEL_PRESETS = {
+      gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+      claude: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-5-20250929']
+    };
+    async function buildAiConfigSection(panel) {
+      panel.innerHTML = `
+        <div class="card">
+          <h2><span class="icon">🤖</span>Cấu hình AI</h2>
+          <p class="hint" style="margin-top:-4px;">Dùng cho tính năng "Tạo bằng AI" (trắc nghiệm/tự luận/flashcard/giáo án). Lưu xong có hiệu lực ngay, không cần đợi deploy.</p>
+          <div id="aiConfigBody"><p class="hint">⏳ Đang tải...</p></div>
+        </div>
+      `;
+      const body = $('#aiConfigBody');
+      let providerDoc = {};
+      let keysDoc = {};
+      try {
+        const [pSnap, kSnap] = await Promise.all([
+          db.collection('config').doc('aiProvider').get(),
+          db.collection('secureConfig').doc('aiKeys').get()
+        ]);
+        providerDoc = pSnap.exists ? pSnap.data() : {};
+        keysDoc = kSnap.exists ? kSnap.data() : {};
+      } catch (e) {
+        body.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+        return;
+      }
+      const provider = providerDoc.provider === 'claude' ? 'claude' : 'gemini';
+      body.innerHTML = `
+        <div class="field">
+          <label for="aiCfgProvider">Nhà cung cấp đang dùng</label>
+          <select id="aiCfgProvider">
+            <option value="gemini" ${provider === 'gemini' ? 'selected' : ''}>Google Gemini</option>
+            <option value="claude" ${provider === 'claude' ? 'selected' : ''}>Anthropic Claude</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="aiCfgModel">Model</label>
+          <input type="text" id="aiCfgModel" list="aiCfgModelList" value="${escapeHtml(providerDoc.model || '')}" placeholder="Để trống = dùng model mặc định" />
+          <datalist id="aiCfgModelList"></datalist>
+        </div>
+        <div class="field">
+          <label for="aiCfgGeminiKey">API key Gemini ${keysDoc.geminiApiKey ? '<span class="hint">(✓ đã lưu — để trống nếu không đổi)</span>' : ''}</label>
+          <input type="password" id="aiCfgGeminiKey" placeholder="${keysDoc.geminiApiKey ? '•••• đã lưu' : 'Dán API key Gemini (aistudio.google.com)'}" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="aiCfgClaudeKey">API key Claude ${keysDoc.anthropicApiKey ? '<span class="hint">(✓ đã lưu — để trống nếu không đổi)</span>' : ''}</label>
+          <input type="password" id="aiCfgClaudeKey" placeholder="${keysDoc.anthropicApiKey ? '•••• đã lưu' : 'Dán API key Claude (console.anthropic.com)'}" autocomplete="off" />
+        </div>
+        <button class="btn primary block" id="saveAiConfigBtn">Lưu</button>
+        <div class="result-box" id="saveAiConfigResult"></div>
+      `;
+      function fillModelPresets() {
+        const list = $('#aiCfgModelList');
+        const sel = $('#aiCfgProvider').value;
+        list.innerHTML = AI_MODEL_PRESETS[sel].map((m) => `<option value="${escapeHtml(m)}"></option>`).join('');
+      }
+      fillModelPresets();
+      $('#aiCfgProvider').addEventListener('change', fillModelPresets);
+
+      $('#saveAiConfigBtn').addEventListener('click', async () => {
+        const box = $('#saveAiConfigResult');
+        showResult(box, '⏳ Đang lưu...');
+        try {
+          const newProvider = $('#aiCfgProvider').value;
+          const newModel = $('#aiCfgModel').value.trim();
+          const geminiKey = $('#aiCfgGeminiKey').value.trim();
+          const claudeKey = $('#aiCfgClaudeKey').value.trim();
+
+          // Để trống ô Model -> ghi chuỗi rỗng (không phải xoá field): getActiveProviderConfig() phía
+          // Cloud Function coi rỗng là falsy nên tự dùng lại defaultModel của provider, không cần
+          // FieldValue.delete() (client Firestore compat SDK cũng không có sẵn tiện nhắc kiểu đó ở
+          // đây, tránh phụ thuộc thêm).
+          await db.collection('config').doc('aiProvider').set(
+            { provider: newProvider, model: newModel },
+            { merge: true }
+          );
+          const keyPatch = {};
+          if (geminiKey) keyPatch.geminiApiKey = geminiKey;
+          if (claudeKey) keyPatch.anthropicApiKey = claudeKey;
+          if (Object.keys(keyPatch).length) {
+            await db.collection('secureConfig').doc('aiKeys').set(keyPatch, { merge: true });
+          }
+          showResult(box, '✅ Đã lưu — có hiệu lực từ lượt tạo AI kế tiếp.');
+          $('#aiCfgGeminiKey').value = '';
+          $('#aiCfgClaudeKey').value = '';
         } catch (e) {
           showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
         }

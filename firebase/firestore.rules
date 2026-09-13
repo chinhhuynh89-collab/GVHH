@@ -34,6 +34,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // API key AI (Gemini/Claude) giáo viên tự dán ở trang Quản trị (xem admin.js
+    // buildAiConfigSection + functions/index.js getApiKeyForProvider) — KHÁC "config" ở trên vì đây là
+    // dữ liệu NHẠY CẢM (key trả phí), TUYỆT ĐỐI không cho đọc công khai, chỉ admin đọc/ghi được từ
+    // trình duyệt. Cloud Function vẫn đọc được bình thường vì Admin SDK bỏ qua rule này.
+    match /secureConfig/{doc} {
+      allow read, write: if isAdmin();
+    }
+
     // Trạng thái gói trả phí — TÁCH RIÊNG khỏi "teachers"/"studentSubscriptions" khỏi bản ghi khác vì
     // rule "teachers" bên dưới cho phép chính giáo viên ghi toàn bộ doc của họ: nếu lưu chung, giáo
     // viên có thể tự sửa field để tự cấp gói Pro. Ở đây CHỈ ADMIN ghi được, sau khi duyệt thanh toán

@@ -181,5 +181,6 @@ async function generate({ apiKey, model, systemPrompt, parts, mode }) {
 module.exports = {
   generate,
   secretName: 'GEMINI_API_KEY',
+  firestoreKeyField: 'geminiApiKey',
   defaultModel: 'gemini-2.5-flash'
 };

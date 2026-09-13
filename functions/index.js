@@ -9,15 +9,18 @@
 // (custom-quiz.js/custom-flashcards.js/custom-lessonplans.js) như nạp PDF/Excel bình thường — không
 // trùng lặp logic ghi, không mất bước duyệt của giáo viên trước khi lưu.
 //
-// ---------- Đổi nhà cung cấp AI KHÔNG cần sửa code/deploy lại ----------
-// 1. Set secret của hãng muốn dùng (1 lần):    firebase functions:secrets:set GEMINI_API_KEY
-//    (hoặc ANTHROPIC_API_KEY — tên secret xem field "secretName" trong từng file providers/*.js)
-// 2. Trong Firestore Console, sửa/tạo tài liệu config/aiProvider:
-//      { "provider": "gemini" }   hoặc   { "provider": "claude" }
-//    (có thể thêm field "model" để ép model cụ thể, không có thì dùng defaultModel của adapter đó)
-// 3. Deploy CHỈ cần làm lại khi thêm 1 hãng MỚI hoàn toàn (tạo thêm 1 file trong providers/ theo đúng
-//    interface generate({apiKey, model, systemPrompt, parts, mode}) rồi đăng ký vào PROVIDERS bên
-//    dưới) — đổi qua lại giữa các hãng ĐÃ có sẵn thì chỉ cần bước 1-2, không đụng tới code.
+// ---------- Đổi nhà cung cấp/model/API key AI KHÔNG cần sửa code/deploy lại ----------
+// Cách 1 (khuyến nghị) — ngay trong app: trang Quản trị → "🤖 Cấu hình AI" (admin.js
+// buildAiConfigSection) → chọn nhà cung cấp, gõ model, dán API key → Lưu. Ghi thẳng vào Firestore
+// (config/aiProvider + secureConfig/aiKeys — xem getApiKeyForProvider ở trên), có hiệu lực NGAY từ
+// lượt tạo AI kế tiếp, không cần CLI/terminal.
+// Cách 2 (dự phòng, không bắt buộc) — Secret Manager qua CLI, y hệt thiết kế ban đầu:
+// 1. firebase functions:secrets:set GEMINI_API_KEY (hoặc ANTHROPIC_API_KEY)
+// 2. Sửa tài liệu config/aiProvider trong Firestore Console: { "provider": "gemini", "model": "..." }
+// getApiKeyForProvider() luôn ưu tiên Cách 1, chỉ dùng Cách 2 khi Firestore chưa có key.
+// Thêm hẳn 1 hãng AI MỚI (chưa từng hỗ trợ) mới cần sửa code: tạo 1 file trong providers/ theo đúng
+// interface generate({apiKey, model, systemPrompt, parts, mode}) rồi đăng ký vào PROVIDERS bên dưới,
+// deploy lại 1 lần.
 
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
@@ -86,6 +89,22 @@ async function getActiveProviderConfig() {
   const data = snap.exists ? snap.data() : {};
   const name = PROVIDERS[data.provider] ? data.provider : DEFAULT_PROVIDER;
   return { name, adapter: PROVIDERS[name], model: data.model || PROVIDERS[name].defaultModel };
+}
+
+// Lấy API key: ƯU TIÊN key giáo viên tự dán qua trang Quản trị (Firestore secureConfig/aiKeys — xem
+// admin.js buildAiConfigSection) vì có hiệu lực NGAY, không cần deploy lại. Nếu chưa dán qua đó thì
+// dự phòng sang Secret Manager (firebase functions:secrets:set — cách cũ, vẫn hỗ trợ song song cho ai
+// muốn bảo mật chặt hơn). secureConfig CHỈ admin đọc/ghi được từ trình duyệt (xem firestore.rules),
+// nhưng Cloud Function dùng Admin SDK nên luôn đọc được bất kể rule.
+async function getApiKeyForProvider(adapter) {
+  try {
+    const snap = await admin.firestore().collection('secureConfig').doc('aiKeys').get();
+    const data = snap.exists ? snap.data() : {};
+    const fsKey = data[adapter.firestoreKeyField];
+    if (fsKey && String(fsKey).trim()) return String(fsKey).trim();
+  } catch (e) { /* rơi xuống Secret Manager bên dưới */ }
+  const secret = SECRETS_BY_NAME[adapter.secretName];
+  return secret && secret.value();
 }
 
 // Bỏ thẻ HTML thô (points[].html có thể chứa <strong>/<sub>/<sup> từ lúc nạp Word/PDF cũ) thành chữ
@@ -259,11 +278,10 @@ exports.generateFromLesson = onCall({
   }
 
   const { name: providerName, adapter, model } = await getActiveProviderConfig();
-  const secret = SECRETS_BY_NAME[adapter.secretName];
-  const apiKey = secret && secret.value();
+  const apiKey = await getApiKeyForProvider(adapter);
   if (!apiKey) {
-    logger.error(`Chưa set secret ${adapter.secretName} cho provider "${providerName}"`);
-    throw new HttpsError('failed-precondition', `Chưa cấu hình API key cho nhà cung cấp AI "${providerName}".`);
+    logger.error(`Chưa có API key (Firestore lẫn Secret Manager) cho provider "${providerName}"`);
+    throw new HttpsError('failed-precondition', `Chưa cấu hình API key cho nhà cung cấp AI "${providerName}" — vào trang Quản trị → Cấu hình AI để dán key.`);
   }
 
   let rawItems;
