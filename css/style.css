@@ -521,6 +521,11 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   vertical-align: middle;
 }
 .tab-btn .dot.done { background: var(--ok); }
+/* ✏️ đổi tên khối lớp — mờ ẩn mặc định, chỉ hiện rõ khi rê chuột vào ĐÚNG tab đó, tránh rối mắt khi
+   không cần đổi tên (xem renderTabBar, chapter-overview.js). */
+.tab-rename-icon { opacity: 0; margin-left: 5px; transition: opacity 0.15s; }
+.tab-btn:hover .tab-rename-icon { opacity: 0.7; }
+.tab-rename-icon:hover { opacity: 1 !important; }
 
 /* ---------- Periodic table ---------- */
 .pt-legend {

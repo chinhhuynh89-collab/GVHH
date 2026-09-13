@@ -289,14 +289,39 @@
     if (!currentTabKey || !tabs.some((t) => tabKey(t) === currentTabKey)) currentTabKey = tabKey(tabs[0]);
   }
 
+  // Rê chuột vào tên 1 khối lớp mặc định (chỉ giáo viên, chỉ tab dạng "grade") mới hiện biểu tượng
+  // ✏️ để đổi tên — thay cho link "Đổi tên" tách riêng bên dưới trước đây (dễ bị bỏ sót, không rõ
+  // đang đổi tên ĐÚNG lớp nào nếu có nhiều tab). Bấm ✏️ mở hộp thoại đổi tên ngay tại chỗ.
   function renderTabBar() {
-    const tabsHtml = tabs.map((t) => `
-      <button class="tab-btn ${tabKey(t) === currentTabKey ? 'active' : ''}" data-key="${tabKey(t)}">${t.icon ? t.icon + ' ' : ''}${escapeHtml(t.label)}</button>
-    `).join('');
+    const tabsHtml = tabs.map((t) => {
+      const canRename = viewerMode === 'teacher' && t.type === 'grade';
+      const renameIcon = canRename ? `<span class="tab-rename-icon" data-grade="${t.value}" title="Đổi tên">✏️</span>` : '';
+      return `
+        <button class="tab-btn ${tabKey(t) === currentTabKey ? 'active' : ''}" data-key="${tabKey(t)}">${t.icon ? t.icon + ' ' : ''}${escapeHtml(t.label)}${renameIcon}</button>
+      `;
+    }).join('');
     const addBtn = viewerMode === 'teacher' ? `<button class="tab-btn" id="addProgramTabBtn" style="border:1px dashed var(--border);">+ Thêm chương trình</button>` : '';
     $('#gradeTabs').innerHTML = tabsHtml + addBtn;
     $$('.tab-btn[data-key]', $('#gradeTabs')).forEach((btn) => {
       btn.addEventListener('click', () => { currentTabKey = btn.dataset.key; renderCurrentTab(); });
+    });
+    $$('.tab-rename-icon', $('#gradeTabs')).forEach((icon) => {
+      icon.addEventListener('click', async (e) => {
+        e.stopPropagation(); // không được kích hoạt luôn việc chuyển tab của nút cha
+        const grade = parseInt(icon.dataset.grade, 10);
+        const currentLabel = tabs.find((t) => t.type === 'grade' && t.value === grade).label;
+        const next = prompt('Đổi tên hiển thị cho khối lớp này (để trống = dùng lại tên mặc định):', currentLabel);
+        if (next === null) return;
+        try {
+          await setGradeLabel(grade, next.trim());
+          gradeLabels = await getGradeLabels(gradeLabelsOwnerUid);
+          buildTabs();
+          renderTabBar();
+          await renderCurrentTab();
+        } catch (err) {
+          showToast('Không lưu được: ' + err.message);
+        }
+      });
     });
     if (viewerMode === 'teacher') {
       $('#addProgramTabBtn').addEventListener('click', () => {
@@ -355,28 +380,9 @@
 
   function renderChapterList(data) {
     const chapters = data.chapters;
-    const canRenameGrade = viewerMode === 'teacher' && data.type === 'grade';
-    $('#chapterListLabel').innerHTML = data.type === 'grade'
-      ? `Danh sách chương${canRenameGrade ? ` · <a href="#" id="renameGradeBtn">✏️ Đổi tên "${escapeHtml(tabs.find((t) => tabKey(t) === currentTabKey).label)}"</a>` : ''}`
-      : `Danh sách chương — ${escapeHtml(data.program ? data.program.name : '')}`;
-    if (canRenameGrade) {
-      $('#renameGradeBtn').addEventListener('click', async (e) => {
-        e.preventDefault();
-        const current = tabs.find((t) => tabKey(t) === currentTabKey).label;
-        const next = prompt('Đổi tên hiển thị cho khối lớp này (để trống = dùng lại tên mặc định):', current);
-        if (next === null) return;
-        const trimmed = next.trim();
-        try {
-          await setGradeLabel(data.grade, trimmed);
-          gradeLabels = await getGradeLabels(gradeLabelsOwnerUid);
-          buildTabs();
-          renderTabBar();
-          await renderCurrentTab();
-        } catch (err) {
-          showToast('Không lưu được: ' + err.message);
-        }
-      });
-    }
+    // Đổi tên khối lớp giờ làm ngay trên thanh tab (rê chuột vào tên lớp hiện ✏️ — xem renderTabBar),
+    // không còn link riêng ở đây nữa.
+    $('#chapterListLabel').textContent = data.type === 'grade' ? 'Danh sách chương' : `Danh sách chương — ${data.program ? data.program.name : ''}`;
     $('#addProgramChapterBtn').style.display = (viewerMode === 'teacher' && data.type === 'program') ? 'block' : 'none';
 
     if (!chapters.length) {
