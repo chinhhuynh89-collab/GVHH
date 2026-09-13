@@ -22,6 +22,12 @@
   let groupPrograms = [];
   let groupGrades = [];
   let currentMembership = null; // membership ĐANG dùng để dựng trang (null khi teacher/preview) — xem renderGroupPicker()
+  // Giáo viên đổi tên hiển thị 1 khối lớp mặc định (VD "Lớp 10" -> "Khối 10 nâng cao") — xem
+  // grade-labels.js. gradeLabelsOwnerUid = UID của giáo viên SỞ HỮU chương trình đang xem (chính
+  // mình nếu viewerMode='teacher'/xem thử, hoặc giáo viên của nhóm nếu là học sinh) — học sinh vẫn
+  // cần thấy ĐÚNG tên giáo viên đã đổi, chỉ giáo viên đó mới sửa được (xem firestore.rules).
+  let gradeLabels = {};
+  let gradeLabelsOwnerUid = null;
 
   let tabs = [];
   let currentTabKey = null;
@@ -68,6 +74,7 @@
         const effectiveTeacherUid = typeof resolveEffectiveTeacherUid === 'function' ? await resolveEffectiveTeacherUid() : null;
         if (effectiveTeacherUid && role !== 'student') {
           viewerMode = 'teacher';
+          gradeLabelsOwnerUid = effectiveTeacherUid;
           try { ownPrograms = await listProgramsForCurrentTeacher(); } catch (e) { ownPrograms = []; }
           try { chapterActivity = await getTeacherChapterActivity(); } catch (e) { chapterActivity = {}; }
           return;
@@ -134,6 +141,7 @@
   // group.chapterIds thành danh sách khối lớp/chương trình riêng được giao, xác định viewerMode.
   async function applyGroupData(group) {
     const { db } = ensureFirebase();
+    gradeLabelsOwnerUid = group.teacherUid || null;
     setGroupFreeModeOverride(!!group.freeMode);
     freeModeLockedByGroup = true;
     const chapterIds = group.chapterIds || [];
@@ -271,10 +279,10 @@
   // ---------- Tab (khối lớp mặc định + chương trình riêng) ----------
   function buildTabs() {
     if (viewerMode === 'teacher') {
-      tabs = GRADES.map((g) => ({ type: 'grade', value: g.grade, label: g.label }))
+      tabs = GRADES.map((g) => ({ type: 'grade', value: g.grade, label: gradeLabels[g.grade] || g.label }))
         .concat(ownPrograms.map((p) => ({ type: 'program', value: p.id, label: p.name, icon: p.icon || '🎓' })));
     } else {
-      tabs = groupGrades.map((g) => ({ type: 'grade', value: g, label: 'Lớp ' + g }))
+      tabs = groupGrades.map((g) => ({ type: 'grade', value: g, label: gradeLabels[g] || ('Lớp ' + g) }))
         .concat(groupPrograms.map((p) => ({ type: 'program', value: p.id, label: p.name, icon: p.icon || '🎓' })));
     }
     if (!tabs.length) return;
@@ -347,7 +355,28 @@
 
   function renderChapterList(data) {
     const chapters = data.chapters;
-    $('#chapterListLabel').textContent = data.type === 'grade' ? 'Danh sách chương' : `Danh sách chương — ${data.program ? data.program.name : ''}`;
+    const canRenameGrade = viewerMode === 'teacher' && data.type === 'grade';
+    $('#chapterListLabel').innerHTML = data.type === 'grade'
+      ? `Danh sách chương${canRenameGrade ? ` · <a href="#" id="renameGradeBtn">✏️ Đổi tên "${escapeHtml(tabs.find((t) => tabKey(t) === currentTabKey).label)}"</a>` : ''}`
+      : `Danh sách chương — ${escapeHtml(data.program ? data.program.name : '')}`;
+    if (canRenameGrade) {
+      $('#renameGradeBtn').addEventListener('click', async (e) => {
+        e.preventDefault();
+        const current = tabs.find((t) => tabKey(t) === currentTabKey).label;
+        const next = prompt('Đổi tên hiển thị cho khối lớp này (để trống = dùng lại tên mặc định):', current);
+        if (next === null) return;
+        const trimmed = next.trim();
+        try {
+          await setGradeLabel(data.grade, trimmed);
+          gradeLabels = await getGradeLabels(gradeLabelsOwnerUid);
+          buildTabs();
+          renderTabBar();
+          await renderCurrentTab();
+        } catch (err) {
+          showToast('Không lưu được: ' + err.message);
+        }
+      });
+    }
     $('#addProgramChapterBtn').style.display = (viewerMode === 'teacher' && data.type === 'program') ? 'block' : 'none';
 
     if (!chapters.length) {
@@ -472,6 +501,7 @@
   (async function init() {
     await initContext();
     if (viewerMode === 'guest' || viewerMode === 'no-firebase' || viewerMode === 'locked') { renderGate(); return; }
+    try { gradeLabels = await getGradeLabels(gradeLabelsOwnerUid); } catch (e) { gradeLabels = {}; }
     applyHeaderTitle();
     $('#overviewWrap').style.display = 'block';
     buildTabs();

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v249';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v250';
 const ASSETS = [
   './',
   './index.html',
@@ -27,6 +27,7 @@ const ASSETS = [
   './js/features/balancer.js',
   './js/features/formula-parser.js',
   './js/features/progress.js',
+  './js/features/grade-labels.js',
   './js/features/chapter-overview.js',
   './js/features/chapter-detail.js',
   './js/features/custom-lessons.js',

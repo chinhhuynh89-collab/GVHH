@@ -141,6 +141,12 @@ service cloud.firestore {
         allow read: if true;
         allow write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
       }
+      // Đổi tên hiển thị 1 khối lớp mặc định (VD "Lớp 10" -> tên riêng) — xem grade-labels.js. Công
+      // khai đọc (học sinh trong nhóm cần thấy đúng tên), chỉ giáo viên/admin ghi được.
+      match /gradeLabels/{grade} {
+        allow read: if true;
+        allow write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
+      }
     }
 
     // ---------- Nhóm học sinh ----------

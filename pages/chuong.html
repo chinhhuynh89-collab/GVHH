@@ -90,6 +90,9 @@
         <textarea id="manualLessonPoints" rows="6"></textarea>
         <p class="hint" id="manualLessonRichNotice" style="display:none;margin-top:4px;">ℹ️ Bài giảng này có bảng/hình ảnh (nạp từ file) — phần đó vẫn được giữ nguyên, chỉ chưa sửa được ở khung này.</p>
       </div>
+      <button class="btn" id="manualLessonUploadBtn" type="button" style="margin-bottom:12px;">📎 Thay bằng nội dung từ file PDF</button>
+      <input type="file" id="manualLessonFileInput" accept=".pdf" style="display:none;" />
+      <p class="hint" style="margin:-6px 0 12px;">📎 Chỉ nạp được file <strong>.pdf</strong>. File PDF sẽ THAY THẾ TOÀN BỘ nội dung hiện có ở trên (tiêu đề giữ nguyên) — chỉ dùng khi muốn nạp lại từ đầu.</p>
       <div class="btn-row">
         <button class="btn primary" id="manualLessonSave">Lưu bài giảng</button>
         <button class="btn" id="manualLessonCancel">Huỷ</button>

@@ -1019,6 +1019,32 @@
     if (!owner.isOwner) return;
     $('#manualLessonAddBtn').addEventListener('click', () => openLessonForm(null));
     $('#manualLessonCancel').addEventListener('click', () => { $('#manualLessonForm').style.display = 'none'; });
+    // Nạp file PDF để THAY nội dung 1 bài đang sửa (kể cả bài mặc định có sẵn) — tái dùng đúng
+    // extractFileToLessons() của luồng "📎 Nạp file PDF" chính (tạo bài mới), nhưng gộp mọi trang/phần
+    // trích được vào chung 1 bài đang mở thay vì tạo thêm bài riêng: đổ thẳng vào ô "Nội dung" + biến
+    // rememberedRichPoints — nút "Lưu bài giảng" xử lý y hệt như gõ tay, không cần thêm nhánh lưu riêng.
+    $('#manualLessonUploadBtn').addEventListener('click', () => $('#manualLessonFileInput').click());
+    $('#manualLessonFileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      const btn = $('#manualLessonUploadBtn');
+      btn.disabled = true;
+      btn.textContent = `⏳ Đang xử lý "${file.name}"...`;
+      try {
+        const sections = await extractFileToLessons(file);
+        const points = [];
+        sections.forEach((s) => points.push(...s.points));
+        rememberedRichPoints = points.filter((p) => typeof p !== 'string');
+        $('#manualLessonPoints').value = points.filter((p) => typeof p === 'string').join('\n');
+        $('#manualLessonRichNotice').style.display = rememberedRichPoints.length ? 'block' : 'none';
+      } catch (err) {
+        showToast('Không đọc được file: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '📎 Thay bằng nội dung từ file PDF';
+      }
+    });
     $('#manualLessonSave').addEventListener('click', async () => {
       const title = $('#manualLessonTitle').value.trim();
       const textPoints = $('#manualLessonPoints').value.split('\n').map((s) => s.trim()).filter(Boolean);
