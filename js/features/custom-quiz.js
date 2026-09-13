@@ -75,6 +75,15 @@ async function getCustomQuiz(ownerUid, chapterId) {
   return items;
 }
 
+// Lấy TOÀN BỘ câu hỏi của 1 giáo viên, gộp từ MỌI chương — dùng cho trang "Kho câu hỏi"
+// (question-bank.js), khác getCustomQuiz ở trên vốn chỉ lấy đúng 1 chương cho chapter-detail.js.
+async function getAllCustomQuizForTeacher(ownerUid) {
+  if (!ownerUid) return [];
+  const { db } = ensureFirebase();
+  const snap = await db.collection('teachers').doc(ownerUid).collection('customQuiz').get();
+  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+}
+
 async function deleteCustomQuiz(id) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');

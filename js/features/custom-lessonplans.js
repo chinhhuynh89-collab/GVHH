@@ -21,6 +21,16 @@ async function getCustomLessonPlans(ownerUid, chapterId) {
   return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
 }
 
+// Lấy TOÀN BỘ giáo án của 1 giáo viên, gộp từ MỌI chương — dùng cho trang "Kho giáo án"
+// (lessonplan-bank.js), khác getCustomLessonPlans ở trên vốn chỉ lấy đúng 1 chương cho
+// chapter-detail.js.
+async function getAllCustomLessonPlansForTeacher(ownerUid) {
+  if (!ownerUid) return [];
+  const { db } = ensureFirebase();
+  const snap = await db.collection('teachers').doc(ownerUid).collection('customLessonPlans').get();
+  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+}
+
 async function deleteCustomLessonPlan(id) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v246';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v247';
 const ASSETS = [
   './',
   './index.html',
@@ -33,6 +33,9 @@ const ASSETS = [
   './js/features/custom-quiz.js',
   './js/features/custom-flashcards.js',
   './js/features/custom-lessonplans.js',
+  './js/features/lessonplan-format.js',
+  './js/features/question-bank.js',
+  './js/features/lessonplan-bank.js',
   './js/features/chapter-meta.js',
   './js/features/quiz-excel.js',
   './js/features/quiz-common.js',
@@ -81,6 +84,8 @@ const ASSETS = [
   './pages/tao-de-kiem-tra.html',
   './pages/kiem-tra.html',
   './pages/thong-ke.html',
+  './pages/kho-cau-hoi.html',
+  './pages/kho-giao-an.html',
   './templates/mau-de-trac-nghiem-pdf.docx',
   './icons/icon-192.png',
   './icons/icon-512.png',
