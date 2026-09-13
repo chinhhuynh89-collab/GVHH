@@ -2373,9 +2373,12 @@
         if (!file) return;
         if (!confirmIfDuplicateSourceFile(file.name)) return;
         const box = $('#quizAiResult');
-        box.innerHTML = `<div class="result-box show">⏳ AI đang đọc từng trang trong "${escapeHtml(file.name)}"... có thể mất khoảng 1 phút.</div>`;
+        box.innerHTML = `<div class="result-box show">⏳ AI đang đọc từng trang trong "${escapeHtml(file.name)}"...</div>`;
         try {
-          const { items, totalPages, usedPages, truncated } = await recognizeQuizFromPdfClient(await file.arrayBuffer());
+          const onProgress = (chunkIndex, totalChunks) => {
+            box.innerHTML = `<div class="result-box show">⏳ AI đang đọc trang... (nhóm ${chunkIndex}/${totalChunks})</div>`;
+          };
+          const { items, totalPages, usedPages, truncated, quotaExceeded } = await recognizeQuizFromPdfClient(await file.arrayBuffer(), onProgress);
           items.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
           await addCustomQuizBatch(chapter.id, items);
           customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
@@ -2384,7 +2387,10 @@
             ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ File có ${totalPages} trang, AI chỉ xử lý được ${usedPages} trang đầu (giới hạn cấu hình ở Quản trị) — trang sau chưa được nạp.</div>`
             : '';
           const truncatedHtml = truncated
-            ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ Phản hồi AI bị cắt cụt vì quá dài (đề có thể có nhiều câu) — chỉ cứu lại được ${items.length} câu ĐÃ HOÀN CHỈNH, có thể vẫn còn thiếu vài câu cuối. Kiểm tra lại số câu, nạp lại phần thiếu nếu cần.</div>`
+            ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ Phản hồi AI bị cắt cụt ở 1 vài nhóm trang — chỉ cứu lại được các câu ĐÃ HOÀN CHỈNH ở nhóm đó, có thể vẫn thiếu vài câu. Kiểm tra lại số câu, nạp lại file nếu cần.</div>`
+            : '';
+          const quotaExceededHtml = quotaExceeded
+            ? `<div class="result-box show error" style="margin-bottom:8px;"><strong>⚠️ Đã hết lượt dùng AI giữa chừng</strong> — chỉ xử lý được 1 phần file này. Đã nạp phần đã xử lý, thử lại phần còn thiếu vào ngày/tháng sau (xem trần dùng ở Quản trị).</div>`
             : '';
           // Đếm TRONG "items" (đúng lượt nạp này) — không lọc theo customQuizCache như dưới đây (cắt ảnh)
           // vì nạp lại CÙNG tên file (VD lượt trước bị cắt cụt, nạp lại để bổ sung) sẽ đếm dồn CẢ câu
@@ -2395,6 +2401,7 @@
             : '';
           box.innerHTML = `
             ${pageWarningHtml}
+            ${quotaExceededHtml}
             ${truncatedHtml}
             ${unverifiedHtml}
             <div class="result-box show">✓ Đã nạp ${items.length} câu hỏi (chữ thật, không phải ảnh).</div>

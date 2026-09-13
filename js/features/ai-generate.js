@@ -37,6 +37,10 @@ function aiMaxOutputTokensFor(mode) {
 }
 const AI_LIMITS_DEFAULT = {
   monthlyCallCap: 100, dailyCallCap: 20, maxPointsPerRequest: 15, maxQuestionsPerRequest: 20,
+  // Riêng cho "Nhận diện câu hỏi từ PDF" — số TRANG ĐỀ THI tối đa xử lý/lượt (khác maxPointsPerRequest ở
+  // trên, dùng cho "điểm" bài giảng) — giờ xử lý theo NHÓM vài trang/lượt gọi API (xem
+  // AI_QUIZRECOGNIZE_PAGES_PER_CALL) nên chịu được số trang lớn hơn hẳn mà không lo cắt cụt.
+  maxPdfPagesForRecognize: 40,
   dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3, quizrecognize: 5 }
 };
 // gemini-2.5-flash bị Google ngừng cấp cho user mới (2026) -> đổi mặc định sang gemini-3.6-flash.
@@ -664,47 +668,85 @@ async function generateFromLessonClient(data) {
   return { items };
 }
 
+// Mỗi lượt GỌI API chỉ gửi kèm TỐI ĐA từng này trang — thay vì gửi nguyên cả đề (có thể 40-50 câu) làm
+// 1 lượt DUY NHẤT, dễ chạm trần token và bị cắt cụt (xem lỗi thực tế đã gặp). Chia nhỏ theo nhóm trang
+// giữ output MỖI lượt luôn nhỏ (vài trang ~ vài chục câu), gần như không bao giờ bị cắt cụt dù đề dài
+// bao nhiêu trang — đánh đổi: nhiều lượt gọi API hơn (chậm hơn 1 chút, tốn nhiều lượt trong trần dùng
+// hơn vì tính phí THEO LƯỢT GỌI THẬT, không phải theo 1 lần bấm nút).
+const AI_QUIZRECOGNIZE_PAGES_PER_CALL = 3;
+
 // ---------- Nhận diện câu hỏi trắc nghiệm từ ẢNH các trang PDF bằng AI — thay cho cách "cắt ảnh"
 // (doc-import.js: extractQuizFromPdf) khi giáo viên muốn có CHỮ THẬT thay vì ảnh: q/options là text
 // thường, câu hỏi sau khi nạp có đầy đủ tính năng như câu tự gõ tay (tìm kiếm được, đọc bằng TTS, trộn
 // được cả câu lẫn đáp án khi thi) — đánh đổi là độ chính xác phụ thuộc khả năng AI đọc ảnh, không còn
 // đảm bảo 100% pixel như cắt ảnh. Được giữ SONG SONG với cắt ảnh (không thay thế) — giáo viên tự chọn
-// cách nào cho từng file (xem chapter-detail.js). Trả về { items, totalPages, usedPages } — usedPages <
-// totalPages nghĩa là file dài hơn giới hạn, chỉ xử lý được usedPages trang đầu. ----------
-async function recognizeQuizFromPdfClient(arrayBuffer) {
+// cách nào cho từng file (xem chapter-detail.js). Trả về { items, totalPages, usedPages, truncated,
+// quotaExceeded } — usedPages < totalPages nghĩa là file dài hơn giới hạn, chỉ xử lý được usedPages
+// trang đầu; quotaExceeded=true nghĩa là hết lượt dùng AI giữa chừng (vẫn trả về phần đã xử lý được).
+// onProgress(chunkIndex, totalChunks) tuỳ chọn — báo tiến độ cho UI khi đề dài nhiều nhóm trang. ----------
+async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
 
-  // Khoá tính năng (Pro/miễn phí) + trần lượt dùng — dùng CHUNG hệ thống với "Tạo bằng AI" (cùng chi
-  // phí API thật), mode riêng "quizrecognize" để admin đặt trần riêng nếu muốn (Quản trị → Giới hạn dùng AI).
+  // Khoá tính năng (Pro/miễn phí) — dùng CHUNG hệ thống với "Tạo bằng AI" (cùng chi phí API thật).
   if (typeof enforceFeatureLock === 'function') await enforceFeatureLock(teacher.uid, 'aiGenerate');
 
   const cfg = typeof getMonetizationConfig === 'function' ? await getMonetizationConfig() : null;
   const aiLimits = (cfg && cfg.aiLimits) || AI_LIMITS_DEFAULT;
-  await aiCheckAndIncrementUsage(teacher.uid, 'quizrecognize', aiLimits);
+  const maxPages = aiLimits.maxPdfPagesForRecognize || AI_LIMITS_DEFAULT.maxPdfPagesForRecognize;
 
-  const { parts: pageParts, totalPages, usedPages } = await renderPdfPagesForAiRecognition(arrayBuffer, aiLimits.maxPointsPerRequest);
+  const { parts: pageParts, totalPages, usedPages } = await renderPdfPagesForAiRecognition(arrayBuffer, maxPages);
   if (!pageParts.length) throw new Error('Không đọc được trang nào từ file PDF này.');
-  const contentParts = [
-    { type: 'text', text: `Đây là ${usedPages} trang (theo đúng thứ tự) của 1 đề thi trắc nghiệm ${AI_SUBJECT_NAME} dạng ảnh chụp:` },
-    ...pageParts
-  ];
 
   const { provider, model, apiKey } = await aiGetActiveProviderAndKey();
   if (!apiKey) {
     throw new Error(`Chưa cấu hình API key cho nhà cung cấp AI "${provider}" — báo admin vào trang Quản trị → Cấu hình AI để dán key.`);
   }
 
-  let rawItems;
-  try {
-    rawItems = await aiCallProvider(provider, { apiKey, model, systemPrompt: aiBuildSystemPrompt('quizrecognize', {}), parts: contentParts, mode: 'quizrecognize' });
-  } catch (err) {
-    throw new Error('Không gọi được AI lúc này: ' + err.message);
-  }
-  if (!Array.isArray(rawItems) || !rawItems.length) throw new Error('AI không nhận diện được câu hỏi nào trong file này.');
-  const truncated = !!rawItems.aiTruncated;
+  const allItems = [];
+  let anyTruncated = false;
+  let quotaExceeded = false;
+  let quotaError = null;
+  const totalChunks = Math.ceil(pageParts.length / AI_QUIZRECOGNIZE_PAGES_PER_CALL);
+  for (let c = 0; c < totalChunks; c++) {
+    if (typeof onProgress === 'function') onProgress(c + 1, totalChunks);
 
-  const items = aiNormalizeItems('quizrecognize', rawItems);
+    // Tính lượt dùng cho TỪNG lượt gọi API thật (không phải từng lần bấm nút) — đúng chi phí thật, tránh
+    // 1 file dài "né" được trần dùng chỉ vì tính gộp theo lượt bấm. Hết lượt giữa chừng vẫn giữ lại các
+    // câu đã nhận diện được ở các nhóm trang TRƯỚC đó thay vì mất trắng.
+    try {
+      await aiCheckAndIncrementUsage(teacher.uid, 'quizrecognize', aiLimits);
+    } catch (err) {
+      quotaExceeded = true;
+      quotaError = err;
+      break;
+    }
+
+    const chunkStart = c * AI_QUIZRECOGNIZE_PAGES_PER_CALL;
+    const chunkParts = pageParts.slice(chunkStart, chunkStart + AI_QUIZRECOGNIZE_PAGES_PER_CALL);
+    const contentParts = [
+      { type: 'text', text: `Đây là trang ${chunkStart + 1}-${chunkStart + chunkParts.length} (trong tổng số ${usedPages} trang, theo đúng thứ tự) của 1 đề thi trắc nghiệm ${AI_SUBJECT_NAME} dạng ảnh chụp:` },
+      ...chunkParts
+    ];
+
+    let rawItems;
+    try {
+      rawItems = await aiCallProvider(provider, { apiKey, model, systemPrompt: aiBuildSystemPrompt('quizrecognize', {}), parts: contentParts, mode: 'quizrecognize' });
+    } catch (err) {
+      throw new Error(`Không gọi được AI ở nhóm trang ${c + 1}/${totalChunks}: ` + err.message);
+    }
+    if (Array.isArray(rawItems)) {
+      if (rawItems.aiTruncated) anyTruncated = true;
+      allItems.push(...rawItems);
+    }
+  }
+
+  if (!allItems.length) {
+    if (quotaExceeded && quotaError) throw quotaError;
+    throw new Error('AI không nhận diện được câu hỏi nào trong file này.');
+  }
+
+  const items = aiNormalizeItems('quizrecognize', allItems);
   if (!items.length) throw new Error('AI trả về kết quả không đúng định dạng, thử lại.');
-  return { items, totalPages, usedPages, truncated };
+  return { items, totalPages, usedPages, truncated: anyTruncated, quotaExceeded };
 }

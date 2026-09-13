@@ -64,6 +64,7 @@ const MONETIZATION_DEFAULTS = {
     dailyCallCap: 20,
     maxPointsPerRequest: 15,
     maxQuestionsPerRequest: 20,
+    maxPdfPagesForRecognize: 40,
     dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3, quizrecognize: 5 }
   }
 };
@@ -154,6 +155,7 @@ async function getMonetizationConfig() {
         dailyCallCap: (data.aiLimits && data.aiLimits.dailyCallCap) || MONETIZATION_DEFAULTS.aiLimits.dailyCallCap,
         maxPointsPerRequest: (data.aiLimits && data.aiLimits.maxPointsPerRequest) || MONETIZATION_DEFAULTS.aiLimits.maxPointsPerRequest,
         maxQuestionsPerRequest: (data.aiLimits && data.aiLimits.maxQuestionsPerRequest) || MONETIZATION_DEFAULTS.aiLimits.maxQuestionsPerRequest,
+        maxPdfPagesForRecognize: (data.aiLimits && data.aiLimits.maxPdfPagesForRecognize) || MONETIZATION_DEFAULTS.aiLimits.maxPdfPagesForRecognize,
         dailyCapByMode: Object.assign({}, MONETIZATION_DEFAULTS.aiLimits.dailyCapByMode, data.aiLimits && data.aiLimits.dailyCapByMode)
       }
     };
