@@ -1,6 +1,8 @@
 // Cloud Function DUY NHẤT của app — tạo trắc nghiệm/tự luận/flashcard/giáo án bằng AI từ nội dung bài
-// giảng đã nạp, CHỈ dành cho giáo viên gói Pro. Đây là backend đầu tiên của app (trước giờ 100% tĩnh
-// trên GitHub Pages) — tồn tại DUY NHẤT để giấu kín API key AI + chặn người không trả phí, 2 việc
+// giảng đã nạp. Mặc định chỉ giáo viên gói Pro dùng được — admin bật/tắt được ở Quản trị → Khoá tính
+// năng (xem assertAllowedToUseAi bên dưới, khớp LOCKABLE_FEATURES/enforceFeatureLock của
+// monetization.js). Đây là backend đầu tiên của app (trước giờ 100% tĩnh trên GitHub Pages) — tồn
+// tại DUY NHẤT để giấu kín API key AI + chặn người không trả phí (khi đang khoá), 2 việc
 // không làm được ở phía trình duyệt (xem chapter-detail.js: gọi qua
 // firebase.functions().httpsCallable('generateFromLesson')).
 //
@@ -50,20 +52,50 @@ const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 const ANTHROPIC_API_KEY = defineSecret('ANTHROPIC_API_KEY');
 const SECRETS_BY_NAME = { GEMINI_API_KEY, ANTHROPIC_API_KEY };
 
-// Trần chi phí CỨNG — xem giải thích đầy đủ trong kế hoạch đã thống nhất với giáo viên (dazzling-
-// mapping-haven.md lúc soạn tính năng này): 15 trang/lượt, 100 lượt/giáo viên/tháng, độc lập với công
-// tắc bật/tắt gói Pro chung (config/monetization) để chi phí AI luôn có trần dù có đổi gì khác. Áp
-// dụng chung cho MỌI nhà cung cấp lẫn MỌI loại ("mode"), không đổi theo provider/mode.
-const MAX_POINTS_PER_REQUEST = 15;
-const MONTHLY_CALL_CAP = 100;
+// Trần chi phí MẶC ĐỊNH (dùng khi admin chưa cấu hình gì ở Quản trị → Cấu hình AI) — admin chỉnh
+// được ở config/monetization.aiLimits, đọc lại MỖI LƯỢT GỌI (xem getMonetizationConfigServer), có
+// hiệu lực ngay không cần deploy lại. dailyCapByMode giới hạn RIÊNG theo loại (giáo án tốn nhiều
+// token hơn hẳn nên mặc định thấp hơn) — CỘNG DỒN với dailyCallCap/monthlyCallCap, không loại nào
+// thay thế loại nào.
+const AI_LIMITS_DEFAULT = {
+  monthlyCallCap: 100,
+  dailyCallCap: 20,
+  maxPointsPerRequest: 15,
+  dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3 }
+};
+const MODE_LABELS = { quiz: 'trắc nghiệm', essay: 'tự luận', truefalse: 'Đúng/Sai', flashcard: 'flashcard', lessonplan: 'giáo án' };
 
 // Đổi sang app môn khác (VD Toán, Lý) CHỈ cần sửa đúng 1 dòng này — xem HUONG-DAN-NHAN-BAN-MON-HOC.md
 // ở thư mục gốc để biết đầy đủ các chỗ khác cần đổi khi nhân bản app sang môn học mới.
 const SUBJECT_NAME = 'Hoá học';
 
-// ---------- Kiểm tra gói Pro — LẶP LẠI ĐÚNG logic getTeacherSubscription() (monetization.js) vì Cloud
-// Function không load được file JS phía trình duyệt, phải viết lại 1 bản dùng Admin SDK. ----------
-async function assertProTier(uid) {
+// ---------- Đọc config/monetization (bật/tắt kinh doanh + khoá tính năng + giới hạn AI) — LẶP LẠI
+// ĐÚNG logic getMonetizationConfig()/LOCKABLE_FEATURES (monetization.js) vì Cloud Function không tải
+// được file JS phía trình duyệt, phải viết lại 1 bản dùng Admin SDK. Đọc MỖI LƯỢT GỌI (không cache)
+// để admin đổi ở Quản trị có hiệu lực ngay. ----------
+async function getMonetizationConfigServer() {
+  const snap = await admin.firestore().collection('config').doc('monetization').get();
+  const data = snap.exists ? snap.data() : {};
+  const aiLimitsData = data.aiLimits || {};
+  return {
+    enabled: !!data.enabled,
+    lockedFeatures: data.lockedFeatures || {},
+    aiLimits: {
+      monthlyCallCap: aiLimitsData.monthlyCallCap || AI_LIMITS_DEFAULT.monthlyCallCap,
+      dailyCallCap: aiLimitsData.dailyCallCap || AI_LIMITS_DEFAULT.dailyCallCap,
+      maxPointsPerRequest: aiLimitsData.maxPointsPerRequest || AI_LIMITS_DEFAULT.maxPointsPerRequest,
+      dailyCapByMode: Object.assign({}, AI_LIMITS_DEFAULT.dailyCapByMode, aiLimitsData.dailyCapByMode)
+    }
+  };
+}
+
+// ---------- Kiểm tra được phép dùng AI hay không — LẶP LẠI ĐÚNG logic enforceFeatureLock()
+// (monetization.js): không khoá (chưa bật kinh doanh HOẶC admin đã tắt khoá riêng cho "aiGenerate")
+// thì AI ĐÚNG cũng dùng được, ngược lại bắt buộc gói Pro. Mặc định lockedFeatures.aiGenerate=true
+// (xem MONETIZATION_DEFAULTS, monetization.js) nên hành vi mặc định vẫn y hệt trước đây (chỉ Pro)
+// cho tới khi admin chủ động mở ở Quản trị → Khoá tính năng. ----------
+async function assertAllowedToUseAi(uid, cfg) {
+  if (!cfg.enabled || !cfg.lockedFeatures.aiGenerate) return;
   const snap = await admin.firestore().collection('subscriptions').doc(uid).get();
   const data = snap.exists ? snap.data() : { tier: 'free' };
   const notExpired = !data.expiresAt || new Date(data.expiresAt) >= new Date();
@@ -72,19 +104,40 @@ async function assertProTier(uid) {
   }
 }
 
-// ---------- Đếm + chặn vượt trần lượt dùng/tháng — 1 doc/giáo viên (aiUsage/{uid}), reset tự nhiên
-// mỗi khi sang tháng mới nhờ so sánh monthKey (không cần cron dọn dẹp riêng). ----------
-async function checkAndIncrementUsage(uid) {
-  const monthKey = new Date().toISOString().slice(0, 7); // "2026-09"
+// ---------- Đếm + chặn vượt trần lượt dùng — 1 doc/giáo viên (aiUsage/{uid}), theo dõi CẢ tháng lẫn
+// ngày lẫn từng loại ("mode") riêng, mỗi mốc tự reset khi sang tháng/ngày mới (so sánh monthKey/dayKey,
+// không cần cron dọn dẹp riêng). ----------
+async function checkAndIncrementUsage(uid, mode, aiLimits) {
+  const now = new Date();
+  const monthKey = now.toISOString().slice(0, 7); // "2026-09"
+  const dayKey = now.toISOString().slice(0, 10); // "2026-09-13"
   const ref = admin.firestore().collection('aiUsage').doc(uid);
   await admin.firestore().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const data = snap.exists ? snap.data() : {};
-    const current = data.monthKey === monthKey ? (data.count || 0) : 0;
-    if (current >= MONTHLY_CALL_CAP) {
-      throw new HttpsError('resource-exhausted', `Đã dùng hết ${MONTHLY_CALL_CAP} lượt tạo bằng AI trong tháng này — thử lại vào tháng sau.`);
+    const monthCount = data.monthKey === monthKey ? (data.count || 0) : 0;
+    const sameDayData = data.dayKey === dayKey;
+    const dayCount = sameDayData ? (data.dailyCount || 0) : 0;
+    const dayByMode = sameDayData ? (data.dailyCountByMode || {}) : {};
+    const modeCount = dayByMode[mode] || 0;
+
+    if (monthCount >= aiLimits.monthlyCallCap) {
+      throw new HttpsError('resource-exhausted', `Đã dùng hết ${aiLimits.monthlyCallCap} lượt tạo bằng AI trong tháng này — thử lại vào tháng sau.`);
     }
-    tx.set(ref, { monthKey, count: current + 1, updatedAt: new Date().toISOString() }, { merge: true });
+    if (dayCount >= aiLimits.dailyCallCap) {
+      throw new HttpsError('resource-exhausted', `Đã dùng hết ${aiLimits.dailyCallCap} lượt tạo bằng AI hôm nay — thử lại vào ngày mai.`);
+    }
+    const modeCap = aiLimits.dailyCapByMode[mode];
+    if (typeof modeCap === 'number' && modeCount >= modeCap) {
+      throw new HttpsError('resource-exhausted', `Đã dùng hết ${modeCap} lượt tạo ${MODE_LABELS[mode] || mode} hôm nay — thử lại vào ngày mai hoặc chọn loại khác.`);
+    }
+
+    tx.set(ref, {
+      monthKey, count: monthCount + 1,
+      dayKey, dailyCount: dayCount + 1,
+      dailyCountByMode: Object.assign({}, dayByMode, { [mode]: modeCount + 1 }),
+      updatedAt: now.toISOString()
+    }, { merge: true });
   });
 }
 
@@ -272,10 +325,11 @@ exports.generateFromLesson = onCall({
     params = { lop, soTiet };
   }
 
-  await assertProTier(uid);
-  await checkAndIncrementUsage(uid);
+  const monetizationCfg = await getMonetizationConfigServer();
+  await assertAllowedToUseAi(uid, monetizationCfg);
+  await checkAndIncrementUsage(uid, mode, monetizationCfg.aiLimits);
 
-  const cappedPoints = points.slice(0, MAX_POINTS_PER_REQUEST);
+  const cappedPoints = points.slice(0, monetizationCfg.aiLimits.maxPointsPerRequest);
   const contentParts = buildContentParts(cappedPoints, lessonTitle);
   const hasRealContent = contentParts.some((p) => (p.type === 'text' && p.text.trim()) || p.type === 'image');
   if (!hasRealContent) {

@@ -93,7 +93,7 @@ function normalizeZaloUrl(v) {
     // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
     // Gắn nút bấm NGAY LẬP TỨC (đồng bộ, không chờ await nào ở trên) — đây là phần quan trọng nhất
     // của trang nên phải chắc chắn hoạt động dù mạng chậm hay cfg tải lỗi.
-    const NEEDS_CFG = { plans: true, payment: true, locked: true, commissions: true };
+    const NEEDS_CFG = { plans: true, payment: true, locked: true, commissions: true, aiConfig: true };
     const SECTION_BUILDERS = {
       stats: buildStatsSection,
       roster: buildRosterSection,
@@ -652,7 +652,13 @@ function normalizeZaloUrl(v) {
           <p class="hint" style="margin-top:-4px;">Dùng cho tính năng "Tạo bằng AI" (trắc nghiệm/tự luận/flashcard/giáo án). Lưu xong có hiệu lực ngay, không cần đợi deploy.</p>
           <div id="aiConfigBody"><p class="hint">⏳ Đang tải...</p></div>
         </div>
+        <div class="card">
+          <h2><span class="icon">📊</span>Giới hạn dùng AI</h2>
+          <p class="hint" style="margin-top:-4px;">Kiểm soát chi phí — áp dụng cho MỌI giáo viên đang dùng được tính năng AI (dù Pro hay đã mở cho miễn phí ở mục "Khoá tính năng"). Đổi xong có hiệu lực ngay từ lượt tạo kế tiếp.</p>
+          <div id="aiLimitsBody"><p class="hint">⏳ Đang tải...</p></div>
+        </div>
       `;
+      renderAiLimitsBody();
       const body = $('#aiConfigBody');
       let providerDoc = {};
       let keysDoc = {};
@@ -749,6 +755,50 @@ function normalizeZaloUrl(v) {
         } catch (e) {
           showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
           saveBtn.disabled = false;
+        }
+      });
+    }
+
+    // Trần chi phí "Tạo bằng AI" — tách riêng khỏi form provider/key ở trên vì không cần bước "kiểm
+    // tra kết nối" (chỉ là số, lưu thẳng vào config/monetization.aiLimits qua saveMonetizationConfig
+    // đã có sẵn — xem MONETIZATION_DEFAULTS.aiLimits, monetization.js).
+    function renderAiLimitsBody() {
+      const lim = cfg.aiLimits;
+      const box = $('#aiLimitsBody');
+      box.innerHTML = `
+        <div class="field"><label for="aiLimMonthly">Tối đa/giáo viên/tháng (tổng mọi loại)</label><input type="number" id="aiLimMonthly" min="1" step="1" value="${lim.monthlyCallCap}" /></div>
+        <div class="field"><label for="aiLimDaily">Tối đa/giáo viên/ngày (tổng mọi loại)</label><input type="number" id="aiLimDaily" min="1" step="1" value="${lim.dailyCallCap}" /></div>
+        <div class="field"><label for="aiLimPoints">Số trang bài giảng tối đa/lượt tạo</label><input type="number" id="aiLimPoints" min="1" step="1" value="${lim.maxPointsPerRequest}" /></div>
+        <p class="hint" style="font-weight:700;margin:14px 0 6px;">Giới hạn riêng theo từng loại (mỗi giáo viên/ngày)</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="field"><label for="aiLimQuiz">Trắc nghiệm</label><input type="number" id="aiLimQuiz" min="0" step="1" value="${lim.dailyCapByMode.quiz}" /></div>
+          <div class="field"><label for="aiLimEssay">Tự luận</label><input type="number" id="aiLimEssay" min="0" step="1" value="${lim.dailyCapByMode.essay}" /></div>
+          <div class="field"><label for="aiLimFlashcard">Flashcard</label><input type="number" id="aiLimFlashcard" min="0" step="1" value="${lim.dailyCapByMode.flashcard}" /></div>
+          <div class="field"><label for="aiLimLessonplan">Giáo án</label><input type="number" id="aiLimLessonplan" min="0" step="1" value="${lim.dailyCapByMode.lessonplan}" /></div>
+        </div>
+        <button class="btn primary block" id="saveAiLimitsBtn" style="margin-top:12px;">Lưu giới hạn</button>
+        <div class="result-box" id="saveAiLimitsResult"></div>
+      `;
+      $('#saveAiLimitsBtn').addEventListener('click', async () => {
+        const resultBox = $('#saveAiLimitsResult');
+        showResult(resultBox, '⏳ Đang lưu...');
+        try {
+          const aiLimits = {
+            monthlyCallCap: Math.max(1, Number($('#aiLimMonthly').value) || 1),
+            dailyCallCap: Math.max(1, Number($('#aiLimDaily').value) || 1),
+            maxPointsPerRequest: Math.max(1, Number($('#aiLimPoints').value) || 1),
+            dailyCapByMode: {
+              quiz: Math.max(0, Number($('#aiLimQuiz').value) || 0),
+              essay: Math.max(0, Number($('#aiLimEssay').value) || 0),
+              flashcard: Math.max(0, Number($('#aiLimFlashcard').value) || 0),
+              lessonplan: Math.max(0, Number($('#aiLimLessonplan').value) || 0)
+            }
+          };
+          await saveMonetizationConfig({ aiLimits });
+          cfg.aiLimits = aiLimits;
+          showResult(resultBox, '✅ Đã lưu.');
+        } catch (e) {
+          showResult(resultBox, `⚠️ ${escapeHtml(e.message)}`, true);
         }
       });
     }

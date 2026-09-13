@@ -1169,8 +1169,9 @@
     });
   }
 
-  // ---------- Tạo trắc nghiệm/tự luận/flashcard/giáo án bằng AI từ 1 bài giảng Tự thêm — CHỈ gói Pro
-  // ----------
+  // ---------- Tạo trắc nghiệm/tự luận/flashcard/giáo án bằng AI từ 1 bài giảng Tự thêm — mặc định
+  // chỉ gói Pro, admin bật/tắt được ở trang Quản trị → Khoá tính năng (xem enforceFeatureLock bên
+  // dưới) ----------
   // Cloud Function generateFromLesson (functions/index.js) KHÔNG tự ghi Firestore, chỉ trả về nội
   // dung đã soạn — giáo viên xem trước (bỏ tích câu không ưng, hoặc xem/in giáo án) rồi mới lưu bằng
   // ĐÚNG addCustomQuizBatch/addCustomFlashcard/addCustomLessonPlan đã dùng cho nạp PDF/Excel (không
@@ -1183,22 +1184,16 @@
     const body = $('#aiGenerateBody');
     panel.style.display = 'block';
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    body.innerHTML = '<p class="hint">⏳ Đang kiểm tra gói Pro...</p>';
+    body.innerHTML = '<p class="hint">⏳ Đang kiểm tra quyền sử dụng...</p>';
 
-    let sub;
+    // Dùng ĐÚNG cơ chế "Khoá tính năng" chung của app (monetization.js: LOCKABLE_FEATURES/
+    // enforceFeatureLock) — admin bật/tắt được ở trang Quản trị, không còn hard-code "chỉ Pro" riêng
+    // cho mỗi tính năng AI như trước. Mặc định tính năng này VẪN khoá (chỉ Pro) cho tới khi admin chủ
+    // động mở cho gói miễn phí — xem MONETIZATION_DEFAULTS.lockedFeatures.aiGenerate.
     try {
-      sub = await getTeacherSubscription(owner.uid);
+      if (typeof enforceFeatureLock === 'function') await enforceFeatureLock(owner.uid, 'aiGenerate');
     } catch (e) {
-      body.innerHTML = `<div class="result-box show error">⚠️ Không kiểm tra được gói Pro: ${escapeHtml(e.message)}</div>`;
-      return;
-    }
-    const isPro = sub.tier === 'pro' && (!sub.expiresAt || new Date(sub.expiresAt) >= new Date());
-    if (!isPro) {
-      body.innerHTML = `
-        <div class="result-box show">
-          🔒 Tính năng tạo bằng AI chỉ dành cho gói <strong>Pro</strong>. Nâng cấp Pro để dùng thử.
-        </div>
-      `;
+      body.innerHTML = `<div class="result-box show">🔒 ${escapeHtml(e.message)}</div>`;
       return;
     }
     renderAiGenerateForm(lessonItem);

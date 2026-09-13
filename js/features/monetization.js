@@ -44,10 +44,26 @@ const MONETIZATION_DEFAULTS = {
   // Tính năng CHỈ dùng được khi có gói trả phí, bật/tắt từng cái ở trang quản trị (đổi được bất cứ
   // lúc nào, không cần deploy lại) — khác giới hạn SỐ LƯỢNG ở teacherPlan phía trên (đây là khoá
   // HẲN cả tính năng). Mặc định TẤT CẢ đang tắt (false). Khớp với LOCKABLE_FEATURES bên dưới.
+  // aiGenerate mặc định TRUE (khoá — chỉ Pro) dù mọi feature khác mặc định false — khác biệt CÓ CHỦ
+  // ĐÍCH: đây là tính năng duy nhất tốn tiền THẬT (gọi API Gemini/Claude do admin tự trả phí) mỗi lượt
+  // dùng, không giống các tính năng khác (bảng tuần hoàn, tạo đề...) vốn không tốn thêm chi phí biên
+  // khi mở cho giáo viên miễn phí. Mặc định true giữ nguyên hành vi cũ (chỉ Pro) cho tới khi admin
+  // CHỦ ĐỘNG vào Quản trị bật mở cho giáo viên miễn phí — tránh lộ ra ngoài ý muốn ngay khi vừa thêm.
   lockedFeatures: {
     periodicTable: false, calculator: false, equationBalancer: false,
     chemistryStories: false, formulasLaws: false, referenceTables: false, organicNomenclature: false,
-    customPrograms: false, examCreator: false, advancedStats: false
+    customPrograms: false, examCreator: false, advancedStats: false, aiGenerate: true
+  },
+  // Giới hạn chi phí tính năng "Tạo bằng AI" — admin chỉnh được ở Quản trị → Cấu hình AI (KHÔNG cần
+  // deploy lại Cloud Function, functions/index.js đọc lại đúng field này mỗi lượt gọi). dailyCapByMode
+  // giới hạn riêng theo từng loại (giáo án thường tốn nhiều token hơn hẳn trắc nghiệm/flashcard nên
+  // mặc định thấp hơn nhiều) — CỘNG DỒN với dailyCallCap/monthlyCallCap (đều phải thoả, không loại nào
+  // thay thế loại nào).
+  aiLimits: {
+    monthlyCallCap: 100,
+    dailyCallCap: 20,
+    maxPointsPerRequest: 15,
+    dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3 }
   }
 };
 
@@ -68,7 +84,8 @@ const LOCKABLE_FEATURES = [
   { id: 'organicNomenclature', label: 'Danh pháp hữu cơ', audience: 'any' },
   { id: 'customPrograms', label: 'Tạo chương trình giảng dạy riêng (ngoài lớp 6-12 mặc định)', audience: 'teacher' },
   { id: 'examCreator', label: 'Tạo đề kiểm tra tự động', audience: 'teacher' },
-  { id: 'advancedStats', label: 'Thống kê điểm theo từng đợt kiểm tra', audience: 'teacher' }
+  { id: 'advancedStats', label: 'Thống kê điểm theo từng đợt kiểm tra', audience: 'teacher' },
+  { id: 'aiGenerate', label: 'Tạo bằng AI (trắc nghiệm/tự luận/flashcard/giáo án)', audience: 'teacher' }
 ];
 
 function isAdminUser(user) {
@@ -106,7 +123,8 @@ function cloneDefaults() {
     studentPlans: clonePlans(MONETIZATION_DEFAULTS.studentPlans),
     commission: Object.assign({}, MONETIZATION_DEFAULTS.commission),
     payment: Object.assign({}, MONETIZATION_DEFAULTS.payment),
-    lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures)
+    lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures),
+    aiLimits: Object.assign({}, MONETIZATION_DEFAULTS.aiLimits, { dailyCapByMode: Object.assign({}, MONETIZATION_DEFAULTS.aiLimits.dailyCapByMode) })
   };
 }
 
@@ -129,7 +147,13 @@ async function getMonetizationConfig() {
       studentPlans: Object.assign({}, MONETIZATION_DEFAULTS.studentPlans, data.studentPlans),
       commission: Object.assign({}, MONETIZATION_DEFAULTS.commission, data.commission),
       payment: Object.assign({}, MONETIZATION_DEFAULTS.payment, data.payment),
-      lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures, data.lockedFeatures)
+      lockedFeatures: Object.assign({}, MONETIZATION_DEFAULTS.lockedFeatures, data.lockedFeatures),
+      aiLimits: {
+        monthlyCallCap: (data.aiLimits && data.aiLimits.monthlyCallCap) || MONETIZATION_DEFAULTS.aiLimits.monthlyCallCap,
+        dailyCallCap: (data.aiLimits && data.aiLimits.dailyCallCap) || MONETIZATION_DEFAULTS.aiLimits.dailyCallCap,
+        maxPointsPerRequest: (data.aiLimits && data.aiLimits.maxPointsPerRequest) || MONETIZATION_DEFAULTS.aiLimits.maxPointsPerRequest,
+        dailyCapByMode: Object.assign({}, MONETIZATION_DEFAULTS.aiLimits.dailyCapByMode, data.aiLimits && data.aiLimits.dailyCapByMode)
+      }
     };
   } catch (e) {
     return cloneDefaults();
