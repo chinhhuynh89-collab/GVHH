@@ -135,14 +135,23 @@ function sumLevels(levels) {
 }
 
 function buildSystemPrompt(mode, params) {
-  if (mode === 'quiz' || mode === 'essay') {
+  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
     const total = sumLevels(params.levels);
     const breakdown = LEVEL_KEYS
       .filter((k) => (parseInt(params.levels[k], 10) || 0) > 0)
       .map((k) => `${params.levels[k]} câu mức "${LEVEL_LABELS[k]}"`)
       .join(', ');
-    const kindText = mode === 'quiz' ? 'câu hỏi trắc nghiệm 4 đáp án' : 'câu hỏi tự luận ngắn (kèm đáp án/các cách diễn đạt đáp án được chấp nhận)';
-    return `Bạn là trợ lý soạn học liệu cho giáo viên ${SUBJECT_NAME} phổ thông tại Việt Nam. Dựa ĐÚNG vào nội dung bài giảng được cung cấp — KHÔNG bịa thêm kiến thức ngoài nội dung đó — hãy soạn ĐÚNG ${total} ${kindText} bằng tiếng Việt, đúng chương trình phổ thông Việt Nam, phân bố CHÍNH XÁC theo mức độ nhận thức (Thông tư 22/2021/TT-BGDĐT): ${breakdown}. Mỗi câu phải gắn đúng field "level" tương ứng đúng như số lượng đã yêu cầu ở trên. Nội dung câu hỏi phải bám sát bài giảng đã cho, không hỏi kiến thức không xuất hiện trong bài.`;
+    const kindText = mode === 'quiz'
+      ? 'câu hỏi trắc nghiệm 4 đáp án'
+      : mode === 'truefalse'
+        ? 'câu hỏi dạng mệnh đề Đúng/Sai (học sinh nhận định mệnh đề đó đúng hay sai)'
+        : 'câu hỏi tự luận dạng bài tập nhiều bước giải (không phải hỏi ngắn 1 dòng) — học sinh phải tự trình bày các bước giải rồi ra đáp số cuối cùng, giống 1 bài tập tính toán/vận dụng thật sự';
+    const extra = mode === 'essay'
+      ? ' Với mỗi câu, field "explain" PHẢI là lời giải chi tiết đầy đủ TỪNG BƯỚC (đánh số Bước 1, Bước 2, ... rồi tới "Đáp số:") để học sinh đối chiếu sau khi tự giải, KHÔNG viết giải thích ngắn 1 câu; field "acceptedAnswers" chỉ chứa đáp số CUỐI CÙNG (và các cách viết tương đương) để chấm nhanh, không chứa cả lời giải.'
+      : mode === 'truefalse'
+        ? ' field "correct": 0 nếu mệnh đề ĐÚNG, 1 nếu mệnh đề SAI.'
+        : '';
+    return `Bạn là trợ lý soạn học liệu cho giáo viên ${SUBJECT_NAME} phổ thông tại Việt Nam. Dựa ĐÚNG vào nội dung bài giảng được cung cấp — KHÔNG bịa thêm kiến thức ngoài nội dung đó — hãy soạn ĐÚNG ${total} ${kindText} bằng tiếng Việt, đúng chương trình phổ thông Việt Nam, phân bố CHÍNH XÁC theo mức độ nhận thức (Thông tư 22/2021/TT-BGDĐT): ${breakdown}. Mỗi câu phải gắn đúng field "level" tương ứng đúng như số lượng đã yêu cầu ở trên.${extra} Nội dung câu hỏi phải bám sát bài giảng đã cho, không hỏi kiến thức không xuất hiện trong bài.`;
   }
   if (mode === 'flashcard') {
     return `Bạn là trợ lý soạn học liệu cho giáo viên ${SUBJECT_NAME} phổ thông tại Việt Nam. Dựa ĐÚNG vào nội dung bài giảng được cung cấp — KHÔNG bịa thêm kiến thức ngoài nội dung đó — hãy soạn ra CHÍNH XÁC ${params.count} flashcard (mặt trước/mặt sau) bằng tiếng Việt, đúng chương trình phổ thông Việt Nam, độ khó phù hợp học sinh. Nội dung flashcard phải bám sát bài giảng đã cho, không hỏi kiến thức không xuất hiện trong bài.`;
@@ -177,6 +186,15 @@ function normalizeItems(mode, rawItems) {
         return q;
       });
   }
+  if (mode === 'truefalse') {
+    return rawItems
+      .filter((it) => it && typeof it.q === 'string' && Number.isInteger(it.correct) && (it.correct === 0 || it.correct === 1))
+      .map((it) => {
+        const q = { q: it.q, type: 'truefalse', options: ['Đúng', 'Sai'], correct: it.correct, explain: typeof it.explain === 'string' ? it.explain : '' };
+        if (isValidLevel(it.level)) q.level = it.level;
+        return q;
+      });
+  }
   if (mode === 'flashcard') {
     return rawItems.filter((it) => it && typeof it.front === 'string' && typeof it.back === 'string')
       .map((it) => ({ front: it.front, back: it.back }));
@@ -202,8 +220,8 @@ exports.generateFromLesson = onCall({
   const uid = request.auth.uid;
   const { mode, points, lessonTitle } = request.data || {};
 
-  if (!['quiz', 'essay', 'flashcard', 'lessonplan'].includes(mode)) {
-    throw new HttpsError('invalid-argument', 'Thiếu hoặc sai "mode" (phải là "quiz", "essay", "flashcard" hoặc "lessonplan").');
+  if (!['quiz', 'essay', 'truefalse', 'flashcard', 'lessonplan'].includes(mode)) {
+    throw new HttpsError('invalid-argument', 'Thiếu hoặc sai "mode" (phải là "quiz", "essay", "truefalse", "flashcard" hoặc "lessonplan").');
   }
   if (!Array.isArray(points) || !points.length) {
     throw new HttpsError('invalid-argument', 'Thiếu nội dung bài giảng để tạo nội dung.');
@@ -212,7 +230,7 @@ exports.generateFromLesson = onCall({
   // Chuẩn hoá tham số riêng theo từng mode NGAY từ đầu — validate lỗi sai tham số trước khi tốn lượt
   // Pro/gọi AI, đỡ giáo viên mất lượt oan vì gửi thiếu field.
   let params;
-  if (mode === 'quiz' || mode === 'essay') {
+  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
     const levels = request.data.levels || {};
     const safeLevels = {};
     LEVEL_KEYS.forEach((k) => { safeLevels[k] = Math.min(Math.max(parseInt(levels[k], 10) || 0, 0), 15); });

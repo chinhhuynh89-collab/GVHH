@@ -1,7 +1,7 @@
 // Adapter cho Google Gemini API. Interface CHUNG mọi adapter phải theo (xem claude.js để đối chiếu):
 //   generate({ apiKey, model, systemPrompt, parts, mode }) -> Promise<rawItems[]>
 //   parts: mảng trung lập [{type:'text', text} | {type:'image', mimeType, data(base64)}]
-//   mode: 'quiz' | 'essay' | 'flashcard' | 'lessonplan'
+//   mode: 'quiz' | 'essay' | 'truefalse' | 'flashcard' | 'lessonplan'
 //   rawItems: mảng thô (chưa lọc field) — với "lessonplan" là mảng 1 phần tử (cả giáo án) — index.js
 //   tự lọc/map lại cho khớp khuôn addCustomQuizBatch/addCustomFlashcard/addCustomLessonPlan, adapter
 //   không cần biết khuôn dữ liệu cuối của app.
@@ -70,6 +70,26 @@ function buildSchemas(Type) {
     required: ['questions']
   };
 
+  const TRUEFALSE_SCHEMA = {
+    type: Type.OBJECT,
+    properties: {
+      questions: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            q: { type: Type.STRING, description: 'Mệnh đề cần nhận định đúng/sai, tiếng Việt' },
+            correct: { type: Type.INTEGER, description: '0 nếu mệnh đề ĐÚNG, 1 nếu mệnh đề SAI' },
+            explain: { type: Type.STRING, description: 'Giải thích ngắn gọn vì sao đúng/sai' },
+            level: { type: Type.STRING, enum: LEVEL_ENUM, description: 'Mức độ nhận thức của câu hỏi theo Thông tư 22/2021' }
+          },
+          required: ['q', 'correct', 'explain', 'level']
+        }
+      }
+    },
+    required: ['questions']
+  };
+
   const FLASHCARD_SCHEMA = {
     type: Type.OBJECT,
     properties: {
@@ -124,12 +144,13 @@ function buildSchemas(Type) {
     required: ['tenBai', 'monHoc', 'lop', 'soTiet', 'mucTieu', 'thietBiDayHoc', 'tienTrinh']
   };
 
-  return { QUIZ_SCHEMA, ESSAY_SCHEMA, FLASHCARD_SCHEMA, LESSONPLAN_SCHEMA };
+  return { QUIZ_SCHEMA, ESSAY_SCHEMA, TRUEFALSE_SCHEMA, FLASHCARD_SCHEMA, LESSONPLAN_SCHEMA };
 }
 
 function pickSchema(schemas, mode) {
   if (mode === 'quiz') return schemas.QUIZ_SCHEMA;
   if (mode === 'essay') return schemas.ESSAY_SCHEMA;
+  if (mode === 'truefalse') return schemas.TRUEFALSE_SCHEMA;
   if (mode === 'flashcard') return schemas.FLASHCARD_SCHEMA;
   return schemas.LESSONPLAN_SCHEMA;
 }
@@ -152,7 +173,7 @@ async function generate({ apiKey, model, systemPrompt, parts, mode }) {
     }
   });
   const parsed = JSON.parse(response.text);
-  if (mode === 'quiz' || mode === 'essay') return parsed.questions;
+  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') return parsed.questions;
   if (mode === 'flashcard') return parsed.flashcards;
   return [parsed]; // lessonplan: 1 giáo án duy nhất, bọc mảng cho khớp interface chung
 }

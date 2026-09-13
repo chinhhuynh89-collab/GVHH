@@ -63,6 +63,30 @@ const ESSAY_TOOL = {
   }
 };
 
+const TRUEFALSE_TOOL = {
+  name: 'return_truefalse_questions',
+  description: 'Trả về danh sách câu hỏi dạng mệnh đề Đúng/Sai đã soạn từ nội dung bài giảng.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      questions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            q: { type: 'string', description: 'Mệnh đề cần nhận định đúng/sai, tiếng Việt' },
+            correct: { type: 'integer', minimum: 0, maximum: 1, description: '0 nếu mệnh đề ĐÚNG, 1 nếu mệnh đề SAI' },
+            explain: { type: 'string', description: 'Giải thích ngắn gọn vì sao đúng/sai' },
+            level: { type: 'string', enum: LEVEL_ENUM, description: 'Mức độ nhận thức theo Thông tư 22/2021' }
+          },
+          required: ['q', 'correct', 'explain', 'level']
+        }
+      }
+    },
+    required: ['questions']
+  }
+};
+
 const FLASHCARD_TOOL = {
   name: 'return_flashcards',
   description: 'Trả về danh sách flashcard (mặt trước/mặt sau) đã soạn từ nội dung bài giảng.',
@@ -128,6 +152,7 @@ const LESSONPLAN_TOOL = {
 function pickTool(mode) {
   if (mode === 'quiz') return QUIZ_TOOL;
   if (mode === 'essay') return ESSAY_TOOL;
+  if (mode === 'truefalse') return TRUEFALSE_TOOL;
   if (mode === 'flashcard') return FLASHCARD_TOOL;
   return LESSONPLAN_TOOL;
 }
@@ -150,7 +175,7 @@ async function generate({ apiKey, model, systemPrompt, parts, mode }) {
   });
   const toolUse = (response.content || []).find((b) => b.type === 'tool_use' && b.name === tool.name);
   if (!toolUse || !toolUse.input) throw new Error('Claude không trả tool_use hợp lệ');
-  if (mode === 'quiz' || mode === 'essay') return toolUse.input.questions;
+  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') return toolUse.input.questions;
   if (mode === 'flashcard') return toolUse.input.flashcards;
   return [toolUse.input]; // lessonplan: 1 giáo án duy nhất, bọc mảng cho khớp interface chung
 }

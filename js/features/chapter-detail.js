@@ -863,7 +863,7 @@
               · <a href="#" class="lesson-delete" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">${l.kind === 'builtin' ? 'Ẩn' : (l.isGroup ? 'Xoá cả bài' : 'Xoá')}</a>
               ${l.kind === 'builtin' && l.edited ? ` · <a href="#" class="lesson-restore" data-key="${l.index}">Khôi phục mặc định</a>` : ''}
               ${l.isGroup ? '' : bankShareLinkHtml('lesson', l)}
-              ${l.kind === 'custom' ? `· <a href="#" class="lesson-ai-generate" data-key="${key}">🤖 Tạo bằng AI</a>` : ''}
+              ${l.kind === 'custom' ? `<a href="#" class="lesson-ai-generate ai-generate-link" data-key="${key}">🤖 Tạo bằng AI</a>` : ''}
             </div>
             ${l.kind === 'custom' ? savedLessonPlansHtml(key) : ''}
           ` : ''}
@@ -1181,7 +1181,7 @@
   // Khung nhập riêng theo từng loại — "tập trung đúng chuyên môn" thay vì chỉ 1 ô "số lượng" chung:
   // trắc nghiệm/tự luận chia theo 4 mức độ nhận thức (Thông tư 22/2021), giáo án hỏi rõ Lớp/Số tiết.
   function aiModeFieldsHtml(mode) {
-    if (mode === 'quiz' || mode === 'essay') {
+    if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
       return `
         <p class="hint" style="margin:0 0 6px;">Số câu theo từng mức độ (Thông tư 22/2021):</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -1226,7 +1226,8 @@
         <label for="aiGenerateMode">Loại muốn tạo</label>
         <select id="aiGenerateMode">
           <option value="quiz">Trắc nghiệm (4 đáp án)</option>
-          <option value="essay">Tự luận (câu trả lời ngắn)</option>
+          <option value="truefalse">Đúng/Sai</option>
+          <option value="essay">Tự luận (bài tập nhiều bước giải)</option>
           <option value="flashcard">Flashcard</option>
           <option value="lessonplan">Giáo án (theo mẫu Công văn 5512)</option>
         </select>
@@ -1244,7 +1245,7 @@
 
   function buildAiRequestData(mode, lessonItem) {
     const data = { mode, lessonTitle: lessonItem.title, points: lessonItem.points };
-    if (mode === 'quiz' || mode === 'essay') {
+    if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
       data.levels = {
         biet: parseInt($('#aiLevelBiet').value, 10) || 0,
         hieu: parseInt($('#aiLevelHieu').value, 10) || 0,
@@ -1305,9 +1306,11 @@
       const levelBadge = it.level ? `<span style="font-weight:600;">[${AI_LEVEL_LABELS[it.level] || it.level}]</span> ` : '';
       const detail = mode === 'quiz'
         ? it.options.map((o, oi) => `${oi === it.correct ? '✓ ' : ''}${escapeHtml(o)}`).join(' · ')
-        : mode === 'essay'
-          ? `Đáp án: ${escapeHtml(String(it.acceptedAnswers || '').split('|').join(' / '))}`
-          : escapeHtml(it.back);
+        : mode === 'truefalse'
+          ? `Mệnh đề này: <strong>${it.correct === 0 ? 'ĐÚNG' : 'SAI'}</strong>`
+          : mode === 'essay'
+            ? `Đáp số: ${escapeHtml(String(it.acceptedAnswers || '').split('|').join(' / '))}${it.explain ? `<div style="margin-top:4px;white-space:pre-line;">${escapeHtml(it.explain)}</div>` : ''}`
+            : escapeHtml(it.back);
       const title = mode === 'flashcard' ? it.front : it.q;
       return `
         <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;cursor:pointer;">
@@ -1319,7 +1322,7 @@
         </label>
       `;
     }).join('');
-    const kindLabel = mode === 'quiz' ? 'câu hỏi trắc nghiệm' : mode === 'essay' ? 'câu hỏi tự luận' : 'flashcard';
+    const kindLabel = mode === 'quiz' ? 'câu hỏi trắc nghiệm' : mode === 'truefalse' ? 'câu hỏi Đúng/Sai' : mode === 'essay' ? 'câu hỏi tự luận' : 'flashcard';
     body.innerHTML = `
       <p class="hint" style="margin-top:-4px;">AI đã tạo ${aiGeneratedItems.length} ${kindLabel} — bỏ tích mục không ưng, rồi bấm "Lưu vào chương".</p>
       ${rows}
@@ -1352,11 +1355,12 @@
       const chosen = $$('.ai-item-check', body).filter((c) => c.checked).map((c) => aiGeneratedItems[parseInt(c.dataset.idx, 10)]);
       if (!chosen.length) { saveBtn.disabled = false; saveBtn.textContent = 'Lưu vào chương'; return; }
 
-      if (mode === 'quiz' || mode === 'essay') {
+      if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
         const questions = chosen.map((it) => {
-          const q = it.type === 'abcd'
-            ? { q: it.q, type: 'abcd', options: it.options, correct: it.correct, explain: it.explain || '' }
-            : { q: it.q, type: 'text', acceptedAnswers: it.acceptedAnswers, explain: it.explain || '' };
+          let q;
+          if (it.type === 'abcd') q = { q: it.q, type: 'abcd', options: it.options, correct: it.correct, explain: it.explain || '' };
+          else if (it.type === 'truefalse') q = { q: it.q, type: 'truefalse', options: ['Đúng', 'Sai'], correct: it.correct, explain: it.explain || '' };
+          else q = { q: it.q, type: 'text', acceptedAnswers: it.acceptedAnswers, explain: it.explain || '' };
           if (lessonItem.unitId) q.unitId = lessonItem.unitId;
           return q;
         });
