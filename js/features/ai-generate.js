@@ -27,7 +27,8 @@ const AI_LIMITS_DEFAULT = {
   monthlyCallCap: 100, dailyCallCap: 20, maxPointsPerRequest: 15,
   dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3 }
 };
-const AI_DEFAULT_MODEL_BY_PROVIDER = { gemini: 'gemini-2.5-flash', claude: 'claude-haiku-4-5-20251001' };
+// gemini-2.5-flash bị Google ngừng cấp cho user mới (2026) -> đổi mặc định sang gemini-3.6-flash.
+const AI_DEFAULT_MODEL_BY_PROVIDER = { gemini: 'gemini-3.6-flash', claude: 'claude-haiku-4-5-20251001' };
 
 function aiSumLevels(levels) {
   return AI_LEVEL_KEYS.reduce((s, k) => s + (parseInt(levels && levels[k], 10) || 0), 0);

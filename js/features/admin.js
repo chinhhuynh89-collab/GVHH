@@ -642,7 +642,7 @@ function normalizeZaloUrl(v) {
     // functions/index.js) nên có hiệu lực NGAY, không cần deploy lại. Ô API key CHỈ hiện trống/gợi ý
     // "đã lưu" — KHÔNG BAO GIỜ hiện lại giá trị key thật đã lưu, tránh lộ key khi mở trang này.
     const AI_MODEL_PRESETS = {
-      gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+      gemini: ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'],
       claude: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-5-20250929']
     };
     async function buildAiConfigSection(panel) {
