@@ -24,7 +24,7 @@ const AI_MODE_LABELS_VI = { quiz: 'trắc nghiệm', essay: 'tự luận', truef
 const AI_MAX_OUTPUT_TOKENS = 4000;
 const AI_MAX_OUTPUT_TOKENS_LESSONPLAN = 8000;
 const AI_LIMITS_DEFAULT = {
-  monthlyCallCap: 100, dailyCallCap: 20, maxPointsPerRequest: 15,
+  monthlyCallCap: 100, dailyCallCap: 20, maxPointsPerRequest: 15, maxQuestionsPerRequest: 20,
   dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3 }
 };
 // gemini-2.5-flash bị Google ngừng cấp cho user mới (2026) -> đổi mặc định sang gemini-3.6-flash.
@@ -449,16 +449,23 @@ async function generateFromLessonClient(data) {
     throw new Error('Thiếu nội dung bài giảng để tạo nội dung.');
   }
 
+  // Khoá tính năng (Pro/miễn phí) — dùng CHUNG enforceFeatureLock đã có cho mọi tính năng khác.
+  if (typeof enforceFeatureLock === 'function') await enforceFeatureLock(teacher.uid, 'aiGenerate');
+
+  const cfg = typeof getMonetizationConfig === 'function' ? await getMonetizationConfig() : null;
+  const aiLimits = (cfg && cfg.aiLimits) || AI_LIMITS_DEFAULT;
+  const maxQ = aiLimits.maxQuestionsPerRequest || AI_LIMITS_DEFAULT.maxQuestionsPerRequest;
+
   let params;
   if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
     const levels = data.levels || {};
     const safeLevels = {};
     AI_LEVEL_KEYS.forEach((k) => { safeLevels[k] = Math.min(Math.max(parseInt(levels[k], 10) || 0, 0), 15); });
     const total = aiSumLevels(safeLevels);
-    if (total < 1 || total > 20) throw new Error('Tổng số câu theo các mức độ phải từ 1 đến 20.');
+    if (total < 1 || total > maxQ) throw new Error(`Tổng số câu theo các mức độ phải từ 1 đến ${maxQ}.`);
     params = { levels: safeLevels };
   } else if (mode === 'flashcard') {
-    params = { count: Math.min(Math.max(parseInt(data.count, 10) || 10, 1), 20) };
+    params = { count: Math.min(Math.max(parseInt(data.count, 10) || 10, 1), maxQ) };
   } else {
     const lop = String(data.lop || '').trim();
     const soTiet = Math.min(Math.max(parseInt(data.soTiet, 10) || 1, 1), 10);
@@ -466,11 +473,6 @@ async function generateFromLessonClient(data) {
     params = { lop, soTiet };
   }
 
-  // Khoá tính năng (Pro/miễn phí) — dùng CHUNG enforceFeatureLock đã có cho mọi tính năng khác.
-  if (typeof enforceFeatureLock === 'function') await enforceFeatureLock(teacher.uid, 'aiGenerate');
-
-  const cfg = typeof getMonetizationConfig === 'function' ? await getMonetizationConfig() : null;
-  const aiLimits = (cfg && cfg.aiLimits) || AI_LIMITS_DEFAULT;
   await aiCheckAndIncrementUsage(teacher.uid, mode, aiLimits);
 
   const cappedPoints = points.slice(0, aiLimits.maxPointsPerRequest);

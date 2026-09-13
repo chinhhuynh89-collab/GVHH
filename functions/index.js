@@ -61,6 +61,7 @@ const AI_LIMITS_DEFAULT = {
   monthlyCallCap: 100,
   dailyCallCap: 20,
   maxPointsPerRequest: 15,
+  maxQuestionsPerRequest: 20,
   dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3 }
 };
 const MODE_LABELS = { quiz: 'trắc nghiệm', essay: 'tự luận', truefalse: 'Đúng/Sai', flashcard: 'flashcard', lessonplan: 'giáo án' };
@@ -84,6 +85,7 @@ async function getMonetizationConfigServer() {
       monthlyCallCap: aiLimitsData.monthlyCallCap || AI_LIMITS_DEFAULT.monthlyCallCap,
       dailyCallCap: aiLimitsData.dailyCallCap || AI_LIMITS_DEFAULT.dailyCallCap,
       maxPointsPerRequest: aiLimitsData.maxPointsPerRequest || AI_LIMITS_DEFAULT.maxPointsPerRequest,
+      maxQuestionsPerRequest: aiLimitsData.maxQuestionsPerRequest || AI_LIMITS_DEFAULT.maxQuestionsPerRequest,
       dailyCapByMode: Object.assign({}, AI_LIMITS_DEFAULT.dailyCapByMode, aiLimitsData.dailyCapByMode)
     }
   };
@@ -304,6 +306,10 @@ exports.generateFromLesson = onCall({
     throw new HttpsError('invalid-argument', 'Thiếu nội dung bài giảng để tạo nội dung.');
   }
 
+  const monetizationCfg = await getMonetizationConfigServer();
+  await assertAllowedToUseAi(uid, monetizationCfg);
+  const maxQ = monetizationCfg.aiLimits.maxQuestionsPerRequest || AI_LIMITS_DEFAULT.maxQuestionsPerRequest;
+
   // Chuẩn hoá tham số riêng theo từng mode NGAY từ đầu — validate lỗi sai tham số trước khi tốn lượt
   // Pro/gọi AI, đỡ giáo viên mất lượt oan vì gửi thiếu field.
   let params;
@@ -312,12 +318,12 @@ exports.generateFromLesson = onCall({
     const safeLevels = {};
     LEVEL_KEYS.forEach((k) => { safeLevels[k] = Math.min(Math.max(parseInt(levels[k], 10) || 0, 0), 15); });
     const total = sumLevels(safeLevels);
-    if (total < 1 || total > 20) {
-      throw new HttpsError('invalid-argument', 'Tổng số câu theo các mức độ phải từ 1 đến 20.');
+    if (total < 1 || total > maxQ) {
+      throw new HttpsError('invalid-argument', `Tổng số câu theo các mức độ phải từ 1 đến ${maxQ}.`);
     }
     params = { levels: safeLevels, total };
   } else if (mode === 'flashcard') {
-    params = { count: Math.min(Math.max(parseInt(request.data.count, 10) || 10, 1), 20) };
+    params = { count: Math.min(Math.max(parseInt(request.data.count, 10) || 10, 1), maxQ) };
   } else {
     const lop = String(request.data.lop || '').trim();
     const soTiet = Math.min(Math.max(parseInt(request.data.soTiet, 10) || 1, 1), 10);
@@ -325,8 +331,6 @@ exports.generateFromLesson = onCall({
     params = { lop, soTiet };
   }
 
-  const monetizationCfg = await getMonetizationConfigServer();
-  await assertAllowedToUseAi(uid, monetizationCfg);
   await checkAndIncrementUsage(uid, mode, monetizationCfg.aiLimits);
 
   const cappedPoints = points.slice(0, monetizationCfg.aiLimits.maxPointsPerRequest);

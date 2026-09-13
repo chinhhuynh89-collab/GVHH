@@ -786,6 +786,7 @@ function normalizeZaloUrl(v) {
         <div class="field"><label for="aiLimMonthly">Tối đa/giáo viên/tháng (tổng mọi loại)</label><input type="number" id="aiLimMonthly" min="1" step="1" value="${lim.monthlyCallCap}" /></div>
         <div class="field"><label for="aiLimDaily">Tối đa/giáo viên/ngày (tổng mọi loại)</label><input type="number" id="aiLimDaily" min="1" step="1" value="${lim.dailyCallCap}" /></div>
         <div class="field"><label for="aiLimPoints">Số trang bài giảng tối đa/lượt tạo</label><input type="number" id="aiLimPoints" min="1" step="1" value="${lim.maxPointsPerRequest}" /></div>
+        <div class="field"><label for="aiLimQuestions">Số câu/flashcard tối đa/lượt tạo (trắc nghiệm, tự luận, flashcard)</label><input type="number" id="aiLimQuestions" min="1" step="1" value="${lim.maxQuestionsPerRequest}" /></div>
         <p class="hint" style="font-weight:700;margin:14px 0 6px;">Giới hạn riêng theo từng loại (mỗi giáo viên/ngày)</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div class="field"><label for="aiLimQuiz">Trắc nghiệm</label><input type="number" id="aiLimQuiz" min="0" step="1" value="${lim.dailyCapByMode.quiz}" /></div>
@@ -804,6 +805,7 @@ function normalizeZaloUrl(v) {
             monthlyCallCap: Math.max(1, Number($('#aiLimMonthly').value) || 1),
             dailyCallCap: Math.max(1, Number($('#aiLimDaily').value) || 1),
             maxPointsPerRequest: Math.max(1, Number($('#aiLimPoints').value) || 1),
+            maxQuestionsPerRequest: Math.max(1, Number($('#aiLimQuestions').value) || 1),
             dailyCapByMode: {
               quiz: Math.max(0, Number($('#aiLimQuiz').value) || 0),
               essay: Math.max(0, Number($('#aiLimEssay').value) || 0),
