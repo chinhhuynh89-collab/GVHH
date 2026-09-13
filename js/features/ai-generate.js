@@ -29,7 +29,7 @@ const AI_MAX_OUTPUT_TOKENS_LESSONPLAN = 10000;
 // riêng lớn hơn để không bị cắt cụt giữa chừng khi nhận diện nguyên 1 đề dài. Chữ tiếng Việt có dấu tốn
 // nhiều token/ký tự hơn hẳn tiếng Anh (bộ mã hoá tách nhỏ theo byte UTF-8) nên vẫn có thể bị cắt với đề
 // rất dài — xem aiRecoverTruncatedArray bên dưới để cứu lại phần đã tạo được thay vì mất trắng cả lượt.
-const AI_MAX_OUTPUT_TOKENS_QUIZRECOGNIZE = 16000;
+const AI_MAX_OUTPUT_TOKENS_QUIZRECOGNIZE = 24000;
 function aiMaxOutputTokensFor(mode) {
   if (mode === 'lessonplan') return AI_MAX_OUTPUT_TOKENS_LESSONPLAN;
   if (mode === 'quizrecognize') return AI_MAX_OUTPUT_TOKENS_QUIZRECOGNIZE;
@@ -96,7 +96,7 @@ Yêu cầu bắt buộc:
 1. Chép lại NGUYÊN VĂN đề bài và 4 phương án A/B/C/D của MỖI câu hỏi tìm thấy trong ảnh — giữ đúng 100% số liệu, công thức hoá học (ký hiệu, chỉ số trên/dưới, mũi tên phản ứng, đơn vị đo...), không bỏ sót câu nào, không đổi thứ tự các phương án.
 2. Nếu 1 phương án được TÔ MÀU/GẠCH CHÂN/ĐÁNH DẤU sẵn trong ảnh (giáo viên đã tự đánh dấu đáp án đúng trước khi nạp) — field "correct" PHẢI lấy đúng theo dấu đó, field "correctSource" = "highlight".
 3. Nếu KHÔNG thấy dấu hiệu đánh dấu nào cho câu đó — tự giải bài toán/câu hỏi hoá học đó bằng kiến thức chuyên môn để xác định đáp án đúng nhất, field "correctSource" = "solved".
-4. Field "explain" giải thích ngắn gọn, chính xác vì sao đáp án đó đúng.
+4. Field "explain" PHẢI viết THẬT NGẮN (tối đa 1 câu, khoảng 10-15 từ) — chỉ nêu lý do cốt lõi, không viết dài dòng, để dành ngân sách phản hồi xử lý được NHIỀU câu hỏi hơn trong 1 lượt (đề dài có thể tới 40-50 câu).
 5. CHỈ trích các câu trắc nghiệm có ĐỦ 4 phương án A/B/C/D — bỏ qua câu tự luận, câu điền khuyết, trang bìa/trang trắng không có câu hỏi nào.`;
   }
   if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
