@@ -49,7 +49,7 @@
         </p>
         <div class="btn-row">
           <a class="btn primary" href="#" data-id="${p.id}" data-action="view" style="flex:1;">🖨️ Xem/In</a>
-          <a class="btn" href="chuong.html?id=${encodeURIComponent(p.chapterId)}" style="flex:1;">Mở chương</a>
+          <a class="btn" href="chuong.html?id=${encodeURIComponent(p.chapterId)}" style="flex:1;">📘 Mở chương</a>
           <a class="btn" href="#" data-id="${p.id}" data-action="delete" style="flex:1;">🗑️ Xoá</a>
         </div>
       </div>

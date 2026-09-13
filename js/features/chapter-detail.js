@@ -363,11 +363,11 @@
               </div>
               ${owner.isOwner ? `
               <div class="unit-owner-actions hint">
-                <a href="#" class="unit-rename" data-id="${u.id}">Đổi tên</a>
-                ${i > 0 ? `· <a href="#" class="unit-move-up" data-id="${u.id}">↑</a>` : ''}
-                ${i < units.length - 1 ? `· <a href="#" class="unit-move-down" data-id="${u.id}">↓</a>` : ''}
-                ${unitHasContentElsewhere(u.id) ? `· <a href="#" class="unit-detach" data-id="${u.id}" title="Bỏ nội dung ra khỏi Bài này (không xoá) — dùng khi lỡ tạo nhầm Bài">Gỡ Bài (giữ nội dung)</a>` : ''}
-                · <a href="#" class="unit-delete" data-id="${u.id}">Xoá cả Bài</a>
+                <a href="#" class="unit-rename" data-id="${u.id}" title="Đổi tên">✏️</a>
+                ${i > 0 ? `<a href="#" class="unit-move-up" data-id="${u.id}" title="Chuyển lên trên">↑</a>` : ''}
+                ${i < units.length - 1 ? `<a href="#" class="unit-move-down" data-id="${u.id}" title="Chuyển xuống dưới">↓</a>` : ''}
+                ${unitHasContentElsewhere(u.id) ? `<a href="#" class="unit-detach" data-id="${u.id}" title="Gỡ Bài (giữ nội dung) — bỏ nội dung ra khỏi Bài này, không xoá, dùng khi lỡ tạo nhầm Bài">📤</a>` : ''}
+                <a href="#" class="unit-delete" data-id="${u.id}" title="Xoá cả Bài">🗑️</a>
               </div>` : ''}
               ${unitHasContentElsewhere(u.id) ? '' : unitButtonsHtml(u.id)}
             </div>
@@ -569,6 +569,20 @@
       });
     }
     renderUnitsList();
+  }
+
+  // Cụm "Sửa/Xoá(Ẩn)/Khôi phục mặc định" DÙNG CHUNG cho bài giảng-flashcard-câu hỏi (3 nơi gọi: lesson/
+  // flash/quiz) — icon nhỏ + tooltip thay vì chữ đầy đủ lặp lại mỗi dòng, đỡ rối khi 1 chương có hàng
+  // chục mục. Giống đúng kiểu đã dùng cho nút xoá từng trang (renderLessonPagesHtml: "N/tổng 🗑️").
+  function editDeleteRestoreLinksHtml(opts) {
+    const { prefix, kind, key, isBuiltin, edited, showEdit = true, deleteTitle } = opts;
+    const parts = [];
+    if (showEdit) parts.push(`<a href="#" class="${prefix}-edit" data-kind="${kind}" data-key="${key}" title="Sửa">✏️</a>`);
+    const dTitle = deleteTitle || (isBuiltin ? 'Ẩn' : 'Xoá');
+    const dIcon = isBuiltin ? '🙈' : '🗑️';
+    parts.push(`<a href="#" class="${prefix}-delete" data-kind="${kind}" data-key="${key}" title="${escapeHtml(dTitle)}">${dIcon}</a>`);
+    if (isBuiltin && edited) parts.push(`<a href="#" class="${prefix}-restore" data-key="${key}" title="Khôi phục mặc định">↩️</a>`);
+    return parts.join(' ');
   }
 
   // ---------- Kho chung: chia sẻ/nhập bài giảng-câu hỏi-flashcard giữa các giáo viên ----------
@@ -859,9 +873,12 @@
           ${owner.isOwner ? `
             <div class="hint" style="margin-top:8px;">
               ${l.kind === 'builtin' ? (l.edited ? 'Đã sửa' : 'Có sẵn trong app') : (l.isGroup ? `Tự thêm (${l.groupIds.length} phần)` : 'Tự thêm')}
-              ${(l.kind === 'custom' && l.isGroup) ? '' : `· <a href="#" class="lesson-edit" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">Sửa</a>`}
-              · <a href="#" class="lesson-delete" data-kind="${l.kind}" data-key="${l.kind === 'builtin' ? l.index : l.id}">${l.kind === 'builtin' ? 'Ẩn' : (l.isGroup ? 'Xoá cả bài' : 'Xoá')}</a>
-              ${l.kind === 'builtin' && l.edited ? ` · <a href="#" class="lesson-restore" data-key="${l.index}">Khôi phục mặc định</a>` : ''}
+              · ${editDeleteRestoreLinksHtml({
+                prefix: 'lesson', kind: l.kind, key: l.kind === 'builtin' ? l.index : l.id,
+                isBuiltin: l.kind === 'builtin', edited: l.edited,
+                showEdit: !(l.kind === 'custom' && l.isGroup),
+                deleteTitle: l.kind === 'builtin' ? 'Ẩn' : (l.isGroup ? 'Xoá cả bài' : 'Xoá')
+              })}
               ${l.isGroup ? '' : bankShareLinkHtml('lesson', l)}
               ${l.kind === 'custom' ? `<a href="#" class="lesson-ai-generate ai-generate-link" data-key="${key}">🤖 Tạo bằng AI</a>` : ''}
             </div>
@@ -896,7 +913,7 @@
     return `
       <div class="hint" style="margin-top:4px;">
         📋 Giáo án đã tạo:
-        ${plans.map((p) => `${escapeHtml(p.tenBai || 'Giáo án')} (<a href="#" class="lessonplan-view" data-id="${p.id}">Xem/In</a> · <a href="#" class="lessonplan-delete" data-id="${p.id}">xoá</a>)`).join(' · ')}
+        ${plans.map((p) => `${escapeHtml(p.tenBai || 'Giáo án')} (<a href="#" class="lessonplan-view" data-id="${p.id}" title="Xem/In">🖨️</a> <a href="#" class="lessonplan-delete" data-id="${p.id}" title="Xoá">🗑️</a>)`).join(' · ')}
       </div>
     `;
   }
@@ -1458,9 +1475,7 @@
           <div class="hint">${escapeHtml(c.back)}</div>
           <div class="hint" style="margin-top:4px;">
             ${c.kind === 'builtin' ? (c.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
-            · <a href="#" class="flash-edit" data-kind="${c.kind}" data-key="${c.kind === 'builtin' ? c.index : c.id}">Sửa</a>
-            · <a href="#" class="flash-delete" data-kind="${c.kind}" data-key="${c.kind === 'builtin' ? c.index : c.id}">${c.kind === 'builtin' ? 'Ẩn' : 'Xoá'}</a>
-            ${c.kind === 'builtin' && c.edited ? ` · <a href="#" class="flash-restore" data-key="${c.index}">Khôi phục mặc định</a>` : ''}
+            · ${editDeleteRestoreLinksHtml({ prefix: 'flash', kind: c.kind, key: c.kind === 'builtin' ? c.index : c.id, isBuiltin: c.kind === 'builtin', edited: c.edited })}
             ${bankShareLinkHtml('flashcard', c)}
           </div>
         </div>
@@ -1990,9 +2005,7 @@
         ` : ''}
         <div class="hint" style="margin-top:4px;">
           ${item.kind === 'builtin' ? (item.edited ? 'Đã sửa' : 'Có sẵn trong app') : 'Tự thêm'}
-          · <a href="#" class="quiz-edit" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">Sửa</a>
-          · <a href="#" class="quiz-delete" data-kind="${item.kind}" data-key="${item.kind === 'builtin' ? item.index : item.id}">${item.kind === 'builtin' ? 'Ẩn' : 'Xoá'}</a>
-          ${item.kind === 'builtin' && item.edited ? ` · <a href="#" class="quiz-restore" data-key="${item.index}">Khôi phục mặc định</a>` : ''}
+          · ${editDeleteRestoreLinksHtml({ prefix: 'quiz', kind: item.kind, key: item.kind === 'builtin' ? item.index : item.id, isBuiltin: item.kind === 'builtin', edited: item.edited })}
           ${bankShareLinkHtml('quiz', item)}
         </div>
         ${extraFooterHtml || ''}

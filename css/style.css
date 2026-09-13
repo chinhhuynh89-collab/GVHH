@@ -1009,8 +1009,8 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   border-left: 3px solid var(--brand);
 }
 .unit-title { font-weight: 700; font-size: calc(16px * var(--font-scale)); margin-bottom: 6px; }
-.unit-owner-actions { margin-bottom: 10px; }
-.unit-owner-actions a { color: var(--brand); }
+.unit-owner-actions { margin-bottom: 10px; display: flex; gap: 10px; }
+.unit-owner-actions a { color: var(--brand); text-decoration: none; }
 .unit-owner-actions .unit-delete { color: var(--danger); }
 /* Gọn gàng, kiểu thanh biểu tượng nhỏ — LUÔN 4 cột 1 hàng (kể cả màn hẹp) thay vì xếp 2x2 to nặng
    nề, icon xếp TRÊN chữ (flex-direction: column) để mỗi nút hẹp lại, đọc vẫn rõ nhờ vẫn giữ chữ. */

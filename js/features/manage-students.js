@@ -336,10 +336,10 @@
                 <p class="hint">ℹ️ ${escapeHtml(s.email || '—')} · ${escapeHtml(s.school || '—')} · Lớp ${escapeHtml(s.className || '—')}</p>
                 <p class="hint">📍 ${escapeHtml(s.address || '—')} · ☎️ ${escapeHtml(s.phone || '—')}</p>
                 <div class="btn-row">
-                  ${zaloDigits ? `<a class="btn" href="https://zalo.me/${escapeHtml(zaloDigits)}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
-                  ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${uid}">🔑 Cấp mã thay thế</button>` : ''}
-                  ${unassignedGroup && groups.length ? `<button class="btn assign-group-toggle-btn" type="button" data-doc-id="${escapeHtml(unassignedGroup.docId)}" data-uid="${uid}">📥 Xếp vào nhóm</button>` : ''}
-                  <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" data-uid="${uid}" style="color:#dc2626;">🗑️ Xoá học sinh</button>
+                  ${zaloDigits ? `<a class="btn" href="https://zalo.me/${escapeHtml(zaloDigits)}" target="_blank" rel="noopener" title="Nhắn Zalo">💬</a>` : ''}
+                  ${s.loginCode ? `<button class="btn replace-login-btn" type="button" data-uid="${uid}" title="Cấp mã thay thế">🔑</button>` : ''}
+                  ${unassignedGroup && groups.length ? `<button class="btn assign-group-toggle-btn" type="button" data-doc-id="${escapeHtml(unassignedGroup.docId)}" data-uid="${uid}" title="Xếp vào nhóm">📥</button>` : ''}
+                  <button class="btn delete-student-btn" type="button" data-doc-ids="${escapeHtml(s.docIds.join(','))}" data-name="${escapeHtml(s.studentName || '')}" data-uid="${uid}" style="color:#dc2626;" title="Xoá học sinh">🗑️ Xoá</button>
                 </div>
                 ${unassignedGroup && groups.length ? `
                   <div class="assign-group-form" style="display:none;">

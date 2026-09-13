@@ -327,10 +327,10 @@ function normalizeZaloUrl(v) {
                         <p class="hint">📍 ${escapeHtml(r.workplace || '—')} · ☎️ ${escapeHtml(r.phone || '—')}</p>
                         <p class="hint">💰 Hoa hồng đã trả: ${formatVnd(r.comm.paid)} · Chưa trả: ${formatVnd(r.comm.pending)}</p>
                         <div class="btn-row">
-                          ${r.phone ? `<a class="btn" href="tel:${escapeHtml(r.phone)}">📞 Gọi điện</a>` : ''}
-                          ${normalizeZaloUrl(r.zaloLink) ? `<a class="btn" href="${escapeHtml(normalizeZaloUrl(r.zaloLink))}" target="_blank" rel="noopener">💬 Zalo</a>` : ''}
-                          <button class="btn roster-expand-btn" type="button" data-uid="${r.uid}">👥 Xem học sinh</button>
-                          <button class="btn referral-lock-btn" type="button" data-uid="${r.uid}" data-disabled="${r.referralDisabled ? '1' : '0'}">${r.referralDisabled ? '🔓 Mở lại mã' : '🔒 Khoá mã'}</button>
+                          ${r.phone ? `<a class="btn" href="tel:${escapeHtml(r.phone)}" title="Gọi điện">📞</a>` : ''}
+                          ${normalizeZaloUrl(r.zaloLink) ? `<a class="btn" href="${escapeHtml(normalizeZaloUrl(r.zaloLink))}" target="_blank" rel="noopener" title="Nhắn Zalo">💬</a>` : ''}
+                          <button class="btn roster-expand-btn" type="button" data-uid="${r.uid}" title="Xem học sinh">👥</button>
+                          <button class="btn referral-lock-btn" type="button" data-uid="${r.uid}" data-disabled="${r.referralDisabled ? '1' : '0'}">${r.referralDisabled ? '🔓 Mở' : '🔒 Khoá'}</button>
                         </div>
                         <div id="roster-students-${r.uid}" style="display:none;margin-top:10px;"></div>
                       </div>
@@ -361,9 +361,9 @@ function normalizeZaloUrl(v) {
             const uid = btn.dataset.uid;
             const row = document.getElementById(`roster-students-${uid}`);
             const open = row.style.display !== 'none';
-            if (open) { row.style.display = 'none'; btn.textContent = '👥 Xem học sinh'; return; }
+            if (open) { row.style.display = 'none'; btn.title = 'Xem học sinh'; return; }
             row.style.display = 'block';
-            btn.textContent = '👥 Ẩn học sinh';
+            btn.title = 'Ẩn học sinh';
             const cell = row;
             if (row.dataset.loaded) return;
             row.dataset.loaded = '1';
@@ -1010,7 +1010,7 @@ function normalizeZaloUrl(v) {
                       <td>${categoryLabel(f.category)}</td>
                       <td style="white-space:normal;min-width:260px;">${escapeHtml(f.content)}</td>
                       <td>${f.status === 'done' ? '✅ Đã xử lý' : '🆕 Chưa xử lý'}</td>
-                      <td><button class="btn feedback-status-btn" type="button" data-id="${f.id}" data-status="${f.status === 'done' ? 'new' : 'done'}">${f.status === 'done' ? '↩️ Bỏ đánh dấu' : '✅ Đánh dấu đã xử lý'}</button></td>
+                      <td><button class="btn feedback-status-btn" type="button" data-id="${f.id}" data-status="${f.status === 'done' ? 'new' : 'done'}" title="${f.status === 'done' ? 'Bỏ đánh dấu' : 'Đánh dấu đã xử lý'}">${f.status === 'done' ? '↩️' : '✅'}</button></td>
                     </tr>
                   `).join('')}
                 </tbody>
