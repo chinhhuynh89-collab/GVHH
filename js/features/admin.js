@@ -727,12 +727,20 @@ function normalizeZaloUrl(v) {
         saveBtn.disabled = true;
         showResult(box, '⏳ Đang kiểm tra kết nối...');
         try {
-          const { functions } = ensureFirebase();
-          if (!functions) throw new Error('Chưa tải được kết nối AI — thử tải lại trang.');
-          const test = functions.httpsCallable('testAiKey');
-          // typedKey rỗng (giáo viên không dán key mới, chỉ đổi model) -> Cloud Function tự lấy lại
-          // ĐÚNG key đang lưu cho provider này để kiểm tra (xem testAiKey, functions/index.js).
-          await test({ provider: newProvider, model: newModel, apiKey: typedKey || undefined });
+          // Kiểm tra kết nối THẬT bằng đúng đường gọi trực tiếp trình duyệt (ai-generate.js) — không
+          // qua Cloud Function testAiKey nữa (hàm đó vẫn còn trong repo, dự phòng sau này mua được
+          // Blaze). typedKey rỗng (chỉ đổi model, không dán key mới) -> lấy lại key ĐANG lưu để kiểm tra.
+          const testKey = typedKey || (newProvider === 'claude' ? keysDoc.anthropicApiKey : keysDoc.geminiApiKey);
+          if (!testKey) throw new Error('Chưa có API key nào để kiểm tra — dán key trước khi lưu.');
+          const testModel = newModel || AI_DEFAULT_MODEL_BY_PROVIDER[newProvider];
+          const callDirect = newProvider === 'claude' ? aiCallClaudeDirect : aiCallGeminiDirect;
+          await callDirect({
+            apiKey: testKey,
+            model: testModel,
+            systemPrompt: 'Đây là lượt kiểm tra kết nối nội bộ. Trả về đúng 1 flashcard bất kỳ.',
+            parts: [{ type: 'text', text: 'Kiểm tra kết nối API.' }],
+            mode: 'flashcard'
+          });
 
           showResult(box, '✅ Kết nối OK — đang lưu...');
           await db.collection('config').doc('aiProvider').set(

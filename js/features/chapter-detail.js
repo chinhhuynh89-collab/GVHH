@@ -1305,11 +1305,11 @@
     btn.disabled = true;
     btn.textContent = '⏳ Đang tạo (có thể mất 10-30 giây)...';
     try {
-      const { functions } = ensureFirebase();
-      if (!functions) throw new Error('Chưa tải được kết nối AI — thử tải lại trang.');
-      const call = functions.httpsCallable('generateFromLesson');
-      const res = await call(buildAiRequestData(mode, lessonItem));
-      aiGeneratedItems = (res.data && res.data.items) || [];
+      // Gọi thẳng Gemini/Claude từ trình duyệt (ai-generate.js) — KHÔNG qua Cloud Function nữa, để
+      // không bắt buộc nâng cấp gói Blaze. Cloud Function generateFromLesson (functions/index.js) vẫn
+      // giữ nguyên trong repo, chưa xoá — sau này mua được Blaze có thể đổi lại 1 dòng gọi ở đây.
+      const res = await generateFromLessonClient(buildAiRequestData(mode, lessonItem));
+      aiGeneratedItems = res.items || [];
       if (!aiGeneratedItems.length) throw new Error('AI không tạo được nội dung nào từ bài giảng này.');
       renderAiGenerateReview(lessonItem, mode);
     } catch (err) {

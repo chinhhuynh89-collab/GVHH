@@ -34,12 +34,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // API key AI (Gemini/Claude) giáo viên tự dán ở trang Quản trị (xem admin.js
-    // buildAiConfigSection + functions/index.js getApiKeyForProvider) — KHÁC "config" ở trên vì đây là
-    // dữ liệu NHẠY CẢM (key trả phí), TUYỆT ĐỐI không cho đọc công khai, chỉ admin đọc/ghi được từ
-    // trình duyệt. Cloud Function vẫn đọc được bình thường vì Admin SDK bỏ qua rule này.
+    // API key AI (Gemini/Claude) admin dán ở trang Quản trị (xem admin.js buildAiConfigSection) —
+    // KHÁC "config" ở trên vì đây là dữ liệu NHẠY CẢM (key trả phí). GHI vẫn chỉ admin làm được. ĐỌC
+    // cho phép MỌI người đã đăng nhập (không chỉ admin) — vì tính năng "Tạo bằng AI" giờ gọi thẳng
+    // Gemini/Claude TỪ TRÌNH DUYỆT giáo viên (không qua Cloud Function nữa, tránh phải nâng cấp gói
+    // Blaze), nên trình duyệt giáo viên cần tự đọc được key để gọi. Key vẫn được giới hạn CHỈ chạy từ
+    // đúng tên miền app (HTTP referrer restriction, cấu hình bên Google Cloud Console) — rủi ro tương
+    // đương việc học sinh có thể xem đáp án trắc nghiệm qua DevTools mà app đã chấp nhận từ trước, xem
+    // firebase/HUONG-DAN-TRIEN-KHAI.md.
     match /secureConfig/{doc} {
-      allow read, write: if isAdmin();
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Đếm lượt dùng AI/ngày/tháng — TỪNG giáo viên chỉ đọc/ghi được ĐÚNG bản ghi của chính mình (chặn
+    // sửa bản ghi người khác để giả mạo/xoá giới hạn). Gọi trực tiếp từ trình duyệt (xem
+    // js/features/ai-generate.js: checkAndIncrementAiUsage) từ khi tính năng AI bỏ Cloud Function.
+    match /aiUsage/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
     // Trạng thái gói trả phí — TÁCH RIÊNG khỏi "teachers"/"studentSubscriptions" khỏi bản ghi khác vì
