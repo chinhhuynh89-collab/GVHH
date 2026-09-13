@@ -668,6 +668,7 @@ function normalizeZaloUrl(v) {
         return;
       }
       const provider = providerDoc.provider === 'claude' ? 'claude' : 'gemini';
+      const keyFieldByProvider = { gemini: 'geminiApiKey', claude: 'anthropicApiKey' };
       body.innerHTML = `
         <div class="field">
           <label for="aiCfgProvider">Nhà cung cấp đang dùng</label>
@@ -681,14 +682,15 @@ function normalizeZaloUrl(v) {
           <input type="text" id="aiCfgModel" list="aiCfgModelList" value="${escapeHtml(providerDoc.model || '')}" placeholder="Để trống = dùng model mặc định" />
           <datalist id="aiCfgModelList"></datalist>
         </div>
-        <div class="field">
+        <div class="field" id="aiCfgGeminiKeyField">
           <label for="aiCfgGeminiKey">API key Gemini ${keysDoc.geminiApiKey ? '<span class="hint">(✓ đã lưu — để trống nếu không đổi)</span>' : ''}</label>
           <input type="password" id="aiCfgGeminiKey" placeholder="${keysDoc.geminiApiKey ? '•••• đã lưu' : 'Dán API key Gemini (aistudio.google.com)'}" autocomplete="off" />
         </div>
-        <div class="field">
+        <div class="field" id="aiCfgClaudeKeyField">
           <label for="aiCfgClaudeKey">API key Claude ${keysDoc.anthropicApiKey ? '<span class="hint">(✓ đã lưu — để trống nếu không đổi)</span>' : ''}</label>
           <input type="password" id="aiCfgClaudeKey" placeholder="${keysDoc.anthropicApiKey ? '•••• đã lưu' : 'Dán API key Claude (console.anthropic.com)'}" autocomplete="off" />
         </div>
+        <p class="hint" style="margin-top:-6px;">Bấm "Lưu" sẽ tự kiểm tra kết nối thật trước — key/model sai sẽ báo lỗi ngay, KHÔNG lưu.</p>
         <button class="btn primary block" id="saveAiConfigBtn">Lưu</button>
         <div class="result-box" id="saveAiConfigResult"></div>
       `;
@@ -697,37 +699,56 @@ function normalizeZaloUrl(v) {
         const sel = $('#aiCfgProvider').value;
         list.innerHTML = AI_MODEL_PRESETS[sel].map((m) => `<option value="${escapeHtml(m)}"></option>`).join('');
       }
+      // Chỉ hiện Ô API KEY của nhà cung cấp ĐANG CHỌN — trước đây hiện cả 2 ô cùng lúc dễ gây hiểu
+      // lầm "dán cả 2 thì dùng cả 2"; thực ra chỉ field "provider" quyết định DUY NHẤT 1 key nào được
+      // dùng (xem getApiKeyForProvider, functions/index.js) — ẩn bớt cho khỏi rối.
+      function toggleKeyFields() {
+        const sel = $('#aiCfgProvider').value;
+        $('#aiCfgGeminiKeyField').style.display = sel === 'gemini' ? 'block' : 'none';
+        $('#aiCfgClaudeKeyField').style.display = sel === 'claude' ? 'block' : 'none';
+      }
       fillModelPresets();
-      $('#aiCfgProvider').addEventListener('change', fillModelPresets);
+      toggleKeyFields();
+      $('#aiCfgProvider').addEventListener('change', () => { fillModelPresets(); toggleKeyFields(); });
 
       $('#saveAiConfigBtn').addEventListener('click', async () => {
         const box = $('#saveAiConfigResult');
-        showResult(box, '⏳ Đang lưu...');
-        try {
-          const newProvider = $('#aiCfgProvider').value;
-          const newModel = $('#aiCfgModel').value.trim();
-          const geminiKey = $('#aiCfgGeminiKey').value.trim();
-          const claudeKey = $('#aiCfgClaudeKey').value.trim();
+        const saveBtn = $('#saveAiConfigBtn');
+        const newProvider = $('#aiCfgProvider').value;
+        const newModel = $('#aiCfgModel').value.trim();
+        const typedKey = $(`#aiCfg${newProvider === 'claude' ? 'Claude' : 'Gemini'}Key`).value.trim();
 
-          // Để trống ô Model -> ghi chuỗi rỗng (không phải xoá field): getActiveProviderConfig() phía
-          // Cloud Function coi rỗng là falsy nên tự dùng lại defaultModel của provider, không cần
-          // FieldValue.delete() (client Firestore compat SDK cũng không có sẵn tiện nhắc kiểu đó ở
-          // đây, tránh phụ thuộc thêm).
+        saveBtn.disabled = true;
+        showResult(box, '⏳ Đang kiểm tra kết nối...');
+        try {
+          const { functions } = ensureFirebase();
+          if (!functions) throw new Error('Chưa tải được kết nối AI — thử tải lại trang.');
+          const test = functions.httpsCallable('testAiKey');
+          // typedKey rỗng (giáo viên không dán key mới, chỉ đổi model) -> Cloud Function tự lấy lại
+          // ĐÚNG key đang lưu cho provider này để kiểm tra (xem testAiKey, functions/index.js).
+          await test({ provider: newProvider, model: newModel, apiKey: typedKey || undefined });
+
+          showResult(box, '✅ Kết nối OK — đang lưu...');
           await db.collection('config').doc('aiProvider').set(
             { provider: newProvider, model: newModel },
             { merge: true }
           );
-          const keyPatch = {};
-          if (geminiKey) keyPatch.geminiApiKey = geminiKey;
-          if (claudeKey) keyPatch.anthropicApiKey = claudeKey;
-          if (Object.keys(keyPatch).length) {
-            await db.collection('secureConfig').doc('aiKeys').set(keyPatch, { merge: true });
+          if (typedKey) {
+            await db.collection('secureConfig').doc('aiKeys').set(
+              { [keyFieldByProvider[newProvider]]: typedKey },
+              { merge: true }
+            );
           }
-          showResult(box, '✅ Đã lưu — có hiệu lực từ lượt tạo AI kế tiếp.');
-          $('#aiCfgGeminiKey').value = '';
-          $('#aiCfgClaudeKey').value = '';
+          showToast('✅ Đã lưu cấu hình AI — có hiệu lực từ lượt tạo AI kế tiếp.', false);
+          // "Bấm xong thì ẩn form" — đóng lại y hệt lúc bấm nút menu để tự đóng (xem điều hướng chính
+          // ở trên), không chỉ ẩn mỗi khung body.
+          $('#adminSectionPanel').style.display = 'none';
+          $('#adminSectionPanel').innerHTML = '';
+          $$('.admin-menu-btn').forEach((b) => b.classList.remove('has-open'));
+          openSection = null;
         } catch (e) {
           showResult(box, `⚠️ ${escapeHtml(e.message)}`, true);
+          saveBtn.disabled = false;
         }
       });
     }

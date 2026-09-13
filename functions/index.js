@@ -39,6 +39,11 @@ const PROVIDERS = {
 };
 const DEFAULT_PROVIDER = 'gemini';
 
+// Admin DUY NHẤT của app, xác định bằng email — y hệt isAdmin() trong firebase/firestore.rules (app
+// chỉ có 1 người quản trị, không cần vai trò/danh sách quyền phức tạp hơn). Dùng để chặn testAiKey
+// bên dưới — chỉ admin mới được thử API key (tốn lượt gọi AI thật, dù rất nhỏ).
+const ADMIN_EMAIL = 'chinhhuynh89@gmail.com';
+
 // Khai báo TRƯỚC toàn bộ secret của mọi hãng đã đăng ký — secret nào chưa set giá trị thì đơn giản
 // không dùng tới (không lỗi), chỉ cần đúng secret của provider đang CHỌN trong config/aiProvider.
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
@@ -308,4 +313,43 @@ exports.generateFromLesson = onCall({
   }
 
   return { items };
+});
+
+// ---------- Kiểm tra API key trước khi admin bấm "Lưu" ở trang Quản trị → Cấu hình AI ----------
+// Gọi THẬT 1 lượt sinh nội dung tối thiểu (mode 'flashcard', nội dung 1 dòng) để xác nhận key/model
+// kết nối được — KHÔNG qua assertProTier/checkAndIncrementUsage (đây là thao tác của admin, không
+// tính vào trần 100 lượt/giáo viên/tháng). Nếu admin.js không dán key mới (chỉ đổi model), tự lấy lại
+// ĐÚNG key đang lưu cho provider đó để kiểm tra, khỏi bắt dán lại key mỗi lần chỉ muốn đổi model.
+exports.testAiKey = onCall({
+  secrets: [GEMINI_API_KEY, ANTHROPIC_API_KEY],
+  region: 'asia-southeast1',
+  timeoutSeconds: 30,
+  memory: '256MiB'
+}, async (request) => {
+  if (!request.auth || request.auth.token.email !== ADMIN_EMAIL) {
+    throw new HttpsError('permission-denied', 'Chỉ admin mới dùng được tính năng này.');
+  }
+  const { provider, model } = request.data || {};
+  let apiKey = request.data && request.data.apiKey;
+  if (!PROVIDERS[provider]) {
+    throw new HttpsError('invalid-argument', 'Nhà cung cấp không hợp lệ.');
+  }
+  const adapter = PROVIDERS[provider];
+  if (!apiKey) apiKey = await getApiKeyForProvider(adapter);
+  if (!apiKey) {
+    throw new HttpsError('invalid-argument', 'Chưa có API key nào để kiểm tra — dán key trước khi lưu.');
+  }
+  try {
+    await adapter.generate({
+      apiKey,
+      model: model || adapter.defaultModel,
+      systemPrompt: 'Đây là lượt kiểm tra kết nối nội bộ. Trả về đúng 1 flashcard bất kỳ.',
+      parts: [{ type: 'text', text: 'Kiểm tra kết nối API.' }],
+      mode: 'flashcard'
+    });
+  } catch (err) {
+    logger.error(`Kiểm tra API key thất bại (provider=${provider})`, err);
+    throw new HttpsError('invalid-argument', 'Không kết nối được — kiểm tra lại API key và/hoặc tên model.');
+  }
+  return { ok: true };
 });
