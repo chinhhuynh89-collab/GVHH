@@ -98,8 +98,8 @@ Nhiệm vụ: đây là ảnh chụp các trang của 1 ĐỀ THI TRẮC NGHIỆ
 
 Yêu cầu bắt buộc:
 1. Chép lại NGUYÊN VĂN đề bài và 4 phương án A/B/C/D của MỖI câu hỏi tìm thấy trong ảnh — giữ đúng 100% số liệu, công thức hoá học (ký hiệu, chỉ số trên/dưới, mũi tên phản ứng, đơn vị đo...), không bỏ sót câu nào, không đổi thứ tự các phương án.
-2. Nếu 1 phương án được TÔ MÀU/GẠCH CHÂN/ĐÁNH DẤU sẵn trong ảnh (giáo viên đã tự đánh dấu đáp án đúng trước khi nạp) — field "correct" PHẢI lấy đúng theo dấu đó, field "correctSource" = "highlight".
-3. Nếu KHÔNG thấy dấu hiệu đánh dấu nào cho câu đó — tự giải bài toán/câu hỏi hoá học đó bằng kiến thức chuyên môn để xác định đáp án đúng nhất, field "correctSource" = "solved".
+2. QUAN TRỌNG — trước khi tự giải bất kỳ câu nào, PHẢI so sánh KỸ 4 phương án A/B/C/D với nhau để tìm dấu hiệu giáo viên đã tự đánh dấu đáp án đúng sẵn trong file gốc. Dấu hiệu có thể RẤT TINH TẾ, gồm (không giới hạn): màu nền/màu chữ khác biệt (dù chỉ khác nhẹ so với 3 phương án còn lại), chữ in đậm/in nghiêng khác biệt, gạch chân, khoanh tròn/đóng khung quanh 1 phương án, hoặc ký hiệu đi kèm như "(*)", "✓", "X", "→" ngay trước/sau 1 phương án. Nếu thấy BẤT KỲ dấu hiệu nào như vậy — dù nhỏ — field "correct" PHẢI lấy đúng theo phương án đó, field "correctSource" = "highlight".
+3. CHỈ khi đã so sánh kỹ cả 4 phương án và chắc chắn KHÔNG có bất kỳ dấu hiệu khác biệt nào giữa chúng — mới tự giải bài toán/câu hỏi hoá học đó bằng kiến thức chuyên môn để xác định đáp án đúng nhất, field "correctSource" = "solved".
 4. Field "explain" PHẢI viết THẬT NGẮN (tối đa 1 câu, khoảng 10-15 từ) — chỉ nêu lý do cốt lõi, không viết dài dòng, để dành ngân sách phản hồi xử lý được NHIỀU câu hỏi hơn trong 1 lượt (đề dài có thể tới 40-50 câu).
 5. CHỈ trích các câu trắc nghiệm có ĐỦ 4 phương án A/B/C/D — bỏ qua câu tự luận, câu điền khuyết, trang bìa/trang trắng không có câu hỏi nào.`;
   }

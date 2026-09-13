@@ -332,12 +332,15 @@ async function renderPdfPageToDataUri(page) {
 // bị giới hạn kích thước để vừa 1 tài liệu Firestore): ảnh gửi AI chỉ đi qua API rồi bỏ, KHÔNG lưu vào
 // Firestore, nên không bị giới hạn đó — dùng độ phân giải/chất lượng CAO HƠN hẳn để AI đọc chính xác
 // chữ nhỏ/công thức/chỉ số trên-dưới trong đề thi, đổi lại ảnh nặng hơn (chấp nhận được vì chỉ tồn tại
-// tạm thời trong 1 lượt gọi API). ----------
-const AI_PAGE_IMAGE_BUDGET = 1.3 * 1024 * 1024; // ~1.3MB base64/trang — đủ đọc chữ nhỏ mà vẫn nhẹ
+// tạm thời trong 1 lượt gọi API). Độ phân giải nâng thêm 1 lần nữa (1200->1500, 0.75->0.85) sau khi
+// nhận diện được xử lý theo TỪNG NHÓM VÀI TRANG (xem AI_QUIZRECOGNIZE_PAGES_PER_CALL, ai-generate.js)
+// thay vì gộp cả chục trang — còn dư ngân sách payload để tăng chất lượng, giúp AI phân biệt tốt hơn
+// màu tô/in đậm đánh dấu đáp án đúng (giáo viên phản ánh AI hay bỏ sót dấu hiệu này). ----------
+const AI_PAGE_IMAGE_BUDGET = 2 * 1024 * 1024; // ~2MB base64/trang
 async function renderPdfPageToDataUriForAi(page) {
   const baseViewport = page.getViewport({ scale: 1 });
-  let targetWidth = 1200;
-  let quality = 0.75;
+  let targetWidth = 1500;
+  let quality = 0.85;
   for (let attempt = 0; attempt < 6; attempt++) {
     const scale = targetWidth / baseViewport.width;
     const viewport = page.getViewport({ scale });
