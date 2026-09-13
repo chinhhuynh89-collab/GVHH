@@ -957,6 +957,12 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .lesson-block ul { margin: 0 0 10px; padding-left: 20px; }
 .lesson-block li { font-size: calc(15.5px * var(--font-scale)); line-height: 1.7; color: #1f2530; margin-bottom: 9px; }
 .lesson-block > .hint { color: var(--text-faint); }
+/* Nhãn "xoá trang" của từng trang trong 1 bài giảng nhiều trang — chỉ hiện số trang + biểu tượng sọt
+   rác, đặt lệch phải, mờ nhạt để không chen ngang mạch đọc; chữ "Xoá trang này" chỉ hiện khi rê chuột
+   tới (title = tooltip trình duyệt) thay vì hiện thường trực, giúp nhìn bài giảng liền mạch hơn. */
+.lesson-page-del-row { display: flex; justify-content: flex-end; margin-bottom: 2px; }
+.lesson-page-del { font-size: 11.5px; color: var(--text-faint); text-decoration: none; opacity: 0.55; }
+.lesson-page-del:hover { opacity: 1; color: var(--danger); }
 /* Bảng nạp từ Word (xem doc-import.js: extractDocxTableRows) — cuộn ngang trên màn hẹp thay vì để chữ
    bị ép nhỏ xíu vừa khung, giống đúng cách .roster-table-wrap đã làm cho bảng danh sách học sinh. */
 .lesson-table-wrap { overflow-x: auto; margin-bottom: 10px; }

@@ -824,8 +824,8 @@
   function renderLessonPagesHtml(l) {
     if (!l.isGroup) return renderLessonPointsHtml(l.points);
     return l.pages.map((p, i) => `
-      <div class="lesson-page-block" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px dashed var(--border);">
-        ${owner.isOwner ? `<div class="hint" style="margin-bottom:6px;">Trang ${i + 1}/${l.pages.length} · <a href="#" class="lesson-delete-page" data-id="${p.id}">🗑️ Xoá trang này</a></div>` : ''}
+      <div class="lesson-page-block">
+        ${owner.isOwner ? `<div class="lesson-page-del-row"><a href="#" class="lesson-delete-page lesson-page-del" data-id="${p.id}" title="Xoá trang này">${i + 1}/${l.pages.length} 🗑️</a></div>` : ''}
         ${renderLessonPointsHtml(p.points)}
       </div>
     `).join('');
