@@ -41,6 +41,7 @@
   let customLessonsCache = [];
   let customQuizCache = [];
   let customFlashcardsCache = [];
+  let customLessonPlansCache = [];
   let effectiveQuiz = [];
   // "Bài" (đơn vị con trong chương, xem chapterMeta.units) — CHỈ áp dụng cho nội dung Tự thêm, không
   // đụng nội dung có sẵn trong app. null = đang xem phần "Chung" (= TOÀN CHƯƠNG, gộp mặc định + Tự
@@ -864,6 +865,7 @@
               ${l.isGroup ? '' : bankShareLinkHtml('lesson', l)}
               ${l.kind === 'custom' ? `· <a href="#" class="lesson-ai-generate" data-key="${key}">🤖 Tạo bằng AI</a>` : ''}
             </div>
+            ${l.kind === 'custom' ? savedLessonPlansHtml(key) : ''}
           ` : ''}
           ${l.kind === 'custom' && l.unitId ? unitButtonsHtml(l.unitId) : ''}
         </div>
@@ -888,12 +890,42 @@
     });
   }
 
+  function savedLessonPlansHtml(key) {
+    const plans = customLessonPlansCache.filter((p) => p.sourceLessonKey === key);
+    if (!plans.length) return '';
+    return `
+      <div class="hint" style="margin-top:4px;">
+        📋 Giáo án đã tạo:
+        ${plans.map((p) => `${escapeHtml(p.tenBai || 'Giáo án')} (<a href="#" class="lessonplan-view" data-id="${p.id}">Xem/In</a> · <a href="#" class="lessonplan-delete" data-id="${p.id}">xoá</a>)`).join(' · ')}
+      </div>
+    `;
+  }
+
   function wireLessonActions(box) {
     $$('.lesson-ai-generate', box).forEach((a) => {
       a.addEventListener('click', (e) => {
         e.preventDefault();
         const item = getAllLessons().find((it) => lessonKey(it) === a.dataset.key);
         if (item) openAiGeneratePanel(item);
+      });
+    });
+    $$('.lessonplan-view', box).forEach((a) => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const plan = customLessonPlansCache.find((p) => p.id === a.dataset.id);
+        if (plan) printLessonPlan(plan);
+      });
+    });
+    $$('.lessonplan-delete', box).forEach((a) => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!confirm('Xoá giáo án này?')) return;
+        const id = a.dataset.id;
+        try {
+          await deleteCustomLessonPlan(id);
+          customLessonPlansCache = customLessonPlansCache.filter((p) => p.id !== id);
+          renderAllLessons();
+        } catch (err) { showToast('Không xoá được: ' + err.message); }
       });
     });
     $$('.lesson-edit', box).forEach((a) => {
@@ -1111,12 +1143,14 @@
     });
   }
 
-  // ---------- Tạo trắc nghiệm/flashcard bằng AI (Claude) từ 1 bài giảng Tự thêm — CHỈ gói Pro ----------
-  // Cloud Function generateFromLesson (functions/index.js) KHÔNG tự ghi Firestore, chỉ trả về câu
-  // hỏi/flashcard đã soạn — giáo viên xem trước, bỏ tích câu không ưng, rồi mới "Lưu vào chương" bằng
-  // ĐÚNG addCustomQuizBatch/addCustomFlashcard đã dùng cho nạp PDF/Excel (không trùng lặp logic ghi,
-  // không mất bước duyệt của giáo viên trước khi lưu thật).
+  // ---------- Tạo trắc nghiệm/tự luận/flashcard/giáo án bằng AI từ 1 bài giảng Tự thêm — CHỈ gói Pro
+  // ----------
+  // Cloud Function generateFromLesson (functions/index.js) KHÔNG tự ghi Firestore, chỉ trả về nội
+  // dung đã soạn — giáo viên xem trước (bỏ tích câu không ưng, hoặc xem/in giáo án) rồi mới lưu bằng
+  // ĐÚNG addCustomQuizBatch/addCustomFlashcard/addCustomLessonPlan đã dùng cho nạp PDF/Excel (không
+  // trùng lặp logic ghi, không mất bước duyệt của giáo viên trước khi lưu thật).
   let aiGeneratedItems = [];
+  const AI_LEVEL_LABELS = { biet: 'Nhận biết', hieu: 'Thông hiểu', vandung: 'Vận dụng', vandungcao: 'Vận dụng cao' };
 
   async function openAiGeneratePanel(lessonItem) {
     const panel = $('#aiGeneratePanel');
@@ -1136,13 +1170,52 @@
     if (!isPro) {
       body.innerHTML = `
         <div class="result-box show">
-          🔒 Tính năng tạo trắc nghiệm/flashcard bằng AI chỉ dành cho gói <strong>Pro</strong>. Nâng cấp
-          Pro để dùng thử.
+          🔒 Tính năng tạo bằng AI chỉ dành cho gói <strong>Pro</strong>. Nâng cấp Pro để dùng thử.
         </div>
       `;
       return;
     }
     renderAiGenerateForm(lessonItem);
+  }
+
+  // Khung nhập riêng theo từng loại — "tập trung đúng chuyên môn" thay vì chỉ 1 ô "số lượng" chung:
+  // trắc nghiệm/tự luận chia theo 4 mức độ nhận thức (Thông tư 22/2021), giáo án hỏi rõ Lớp/Số tiết.
+  function aiModeFieldsHtml(mode) {
+    if (mode === 'quiz' || mode === 'essay') {
+      return `
+        <p class="hint" style="margin:0 0 6px;">Số câu theo từng mức độ (Thông tư 22/2021):</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="field"><label for="aiLevelBiet">Nhận biết</label><input type="number" id="aiLevelBiet" min="0" max="15" value="4" /></div>
+          <div class="field"><label for="aiLevelHieu">Thông hiểu</label><input type="number" id="aiLevelHieu" min="0" max="15" value="3" /></div>
+          <div class="field"><label for="aiLevelVandung">Vận dụng</label><input type="number" id="aiLevelVandung" min="0" max="15" value="2" /></div>
+          <div class="field"><label for="aiLevelVandungcao">Vận dụng cao</label><input type="number" id="aiLevelVandungcao" min="0" max="15" value="1" /></div>
+        </div>
+      `;
+    }
+    if (mode === 'flashcard') {
+      return `
+        <div class="field">
+          <label for="aiGenerateCount">Số lượng</label>
+          <select id="aiGenerateCount">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+          </select>
+        </div>
+      `;
+    }
+    return `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="field">
+          <label for="aiLop">Lớp</label>
+          <select id="aiLop">${[6, 7, 8, 9, 10, 11, 12].map((g) => `<option value="${g}">Lớp ${g}</option>`).join('')}</select>
+        </div>
+        <div class="field">
+          <label for="aiSoTiet">Số tiết</label>
+          <input type="number" id="aiSoTiet" min="1" max="10" value="1" />
+        </div>
+      </div>
+    `;
   }
 
   function renderAiGenerateForm(lessonItem) {
@@ -1153,27 +1226,42 @@
         <label for="aiGenerateMode">Loại muốn tạo</label>
         <select id="aiGenerateMode">
           <option value="quiz">Trắc nghiệm (4 đáp án)</option>
+          <option value="essay">Tự luận (câu trả lời ngắn)</option>
           <option value="flashcard">Flashcard</option>
+          <option value="lessonplan">Giáo án (theo mẫu Công văn 5512)</option>
         </select>
       </div>
-      <div class="field">
-        <label for="aiGenerateCount">Số lượng</label>
-        <select id="aiGenerateCount">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
-          <option value="15">15</option>
-        </select>
-      </div>
+      <div id="aiModeFields">${aiModeFieldsHtml('quiz')}</div>
       <button class="btn primary block" id="aiGenerateStartBtn">🤖 Tạo ngay</button>
       <button class="btn block" id="aiGenerateCloseBtn" style="margin-top:8px;">Đóng</button>
     `;
+    $('#aiGenerateMode').addEventListener('change', (e) => {
+      $('#aiModeFields').innerHTML = aiModeFieldsHtml(e.target.value);
+    });
     $('#aiGenerateStartBtn').addEventListener('click', () => runAiGenerate(lessonItem));
     $('#aiGenerateCloseBtn').addEventListener('click', () => { $('#aiGeneratePanel').style.display = 'none'; });
   }
 
+  function buildAiRequestData(mode, lessonItem) {
+    const data = { mode, lessonTitle: lessonItem.title, points: lessonItem.points };
+    if (mode === 'quiz' || mode === 'essay') {
+      data.levels = {
+        biet: parseInt($('#aiLevelBiet').value, 10) || 0,
+        hieu: parseInt($('#aiLevelHieu').value, 10) || 0,
+        vandung: parseInt($('#aiLevelVandung').value, 10) || 0,
+        vandungcao: parseInt($('#aiLevelVandungcao').value, 10) || 0
+      };
+    } else if (mode === 'flashcard') {
+      data.count = parseInt($('#aiGenerateCount').value, 10);
+    } else {
+      data.lop = $('#aiLop').value;
+      data.soTiet = parseInt($('#aiSoTiet').value, 10) || 1;
+    }
+    return data;
+  }
+
   async function runAiGenerate(lessonItem) {
     const mode = $('#aiGenerateMode').value;
-    const count = parseInt($('#aiGenerateCount').value, 10);
     const btn = $('#aiGenerateStartBtn');
     btn.disabled = true;
     btn.textContent = '⏳ Đang tạo (có thể mất 10-30 giây)...';
@@ -1181,7 +1269,7 @@
       const { functions } = ensureFirebase();
       if (!functions) throw new Error('Chưa tải được kết nối AI — thử tải lại trang.');
       const call = functions.httpsCallable('generateFromLesson');
-      const res = await call({ mode, count, lessonTitle: lessonItem.title, points: lessonItem.points });
+      const res = await call(buildAiRequestData(mode, lessonItem));
       aiGeneratedItems = (res.data && res.data.items) || [];
       if (!aiGeneratedItems.length) throw new Error('AI không tạo được nội dung nào từ bài giảng này.');
       renderAiGenerateReview(lessonItem, mode);
@@ -1194,22 +1282,46 @@
 
   function renderAiGenerateReview(lessonItem, mode) {
     const body = $('#aiGenerateBody');
-    const rows = aiGeneratedItems.map((it, i) => (mode === 'quiz' ? `
+    if (mode === 'lessonplan') {
+      const plan = aiGeneratedItems[0];
+      body.innerHTML = `
+        <p class="hint" style="margin-top:-4px;">AI đã soạn xong giáo án — xem lại rồi bấm "Lưu giáo án".</p>
+        <div style="max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg-soft);">
+          ${formatLessonPlanHtml(plan)}
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn primary" id="aiGenerateSaveBtn" style="flex:1;">💾 Lưu giáo án</button>
+          <button class="btn" id="aiGeneratePrintBtn" style="flex:1;">🖨️ In / Lưu PDF</button>
+          <button class="btn" id="aiGenerateCloseBtn" style="flex:1;">Huỷ</button>
+        </div>
+      `;
+      $('#aiGenerateSaveBtn').addEventListener('click', () => saveAiGeneratedItems(lessonItem, mode));
+      $('#aiGeneratePrintBtn').addEventListener('click', () => printLessonPlan(plan));
+      $('#aiGenerateCloseBtn').addEventListener('click', () => { $('#aiGeneratePanel').style.display = 'none'; });
+      return;
+    }
+
+    const rows = aiGeneratedItems.map((it, i) => {
+      const levelBadge = it.level ? `<span style="font-weight:600;">[${AI_LEVEL_LABELS[it.level] || it.level}]</span> ` : '';
+      const detail = mode === 'quiz'
+        ? it.options.map((o, oi) => `${oi === it.correct ? '✓ ' : ''}${escapeHtml(o)}`).join(' · ')
+        : mode === 'essay'
+          ? `Đáp án: ${escapeHtml(String(it.acceptedAnswers || '').split('|').join(' / '))}`
+          : escapeHtml(it.back);
+      const title = mode === 'flashcard' ? it.front : it.q;
+      return `
         <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;cursor:pointer;">
           <input type="checkbox" class="ai-item-check" data-idx="${i}" checked style="margin-top:3px;flex-shrink:0;" />
           <span>
-            <strong>${escapeHtml(it.q)}</strong>
-            <div class="hint" style="margin-top:2px;">${it.options.map((o, oi) => `${oi === it.correct ? '✓ ' : ''}${escapeHtml(o)}`).join(' · ')}</div>
+            ${levelBadge}<strong>${escapeHtml(title)}</strong>
+            <div class="hint" style="margin-top:2px;">${detail}</div>
           </span>
         </label>
-      ` : `
-        <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;cursor:pointer;">
-          <input type="checkbox" class="ai-item-check" data-idx="${i}" checked style="margin-top:3px;flex-shrink:0;" />
-          <span><strong>${escapeHtml(it.front)}</strong><div class="hint" style="margin-top:2px;">${escapeHtml(it.back)}</div></span>
-        </label>
-      `)).join('');
+      `;
+    }).join('');
+    const kindLabel = mode === 'quiz' ? 'câu hỏi trắc nghiệm' : mode === 'essay' ? 'câu hỏi tự luận' : 'flashcard';
     body.innerHTML = `
-      <p class="hint" style="margin-top:-4px;">AI đã tạo ${aiGeneratedItems.length} ${mode === 'quiz' ? 'câu hỏi' : 'flashcard'} — bỏ tích mục không ưng, rồi bấm "Lưu vào chương".</p>
+      <p class="hint" style="margin-top:-4px;">AI đã tạo ${aiGeneratedItems.length} ${kindLabel} — bỏ tích mục không ưng, rồi bấm "Lưu vào chương".</p>
       ${rows}
       <div class="btn-row">
         <button class="btn primary" id="aiGenerateSaveBtn" style="flex:1;">Lưu vào chương</button>
@@ -1222,15 +1334,29 @@
 
   async function saveAiGeneratedItems(lessonItem, mode) {
     const body = $('#aiGenerateBody');
-    const chosen = $$('.ai-item-check', body).filter((c) => c.checked).map((c) => aiGeneratedItems[parseInt(c.dataset.idx, 10)]);
-    if (!chosen.length) return;
     const saveBtn = $('#aiGenerateSaveBtn');
     saveBtn.disabled = true;
     saveBtn.textContent = 'Đang lưu...';
     try {
-      if (mode === 'quiz') {
+      if (mode === 'lessonplan') {
+        const plan = aiGeneratedItems[0];
+        const payload = Object.assign({ sourceLessonKey: lessonKey(lessonItem) }, plan);
+        const id = await addCustomLessonPlan(chapter.id, payload);
+        customLessonPlansCache.push(Object.assign({ id, chapterId: chapter.id }, payload));
+        renderAllLessons();
+        $('#aiGeneratePanel').style.display = 'none';
+        showToast('Đã lưu giáo án.', false);
+        return;
+      }
+
+      const chosen = $$('.ai-item-check', body).filter((c) => c.checked).map((c) => aiGeneratedItems[parseInt(c.dataset.idx, 10)]);
+      if (!chosen.length) { saveBtn.disabled = false; saveBtn.textContent = 'Lưu vào chương'; return; }
+
+      if (mode === 'quiz' || mode === 'essay') {
         const questions = chosen.map((it) => {
-          const q = { q: it.q, type: 'abcd', options: it.options, correct: it.correct, explain: it.explain || '' };
+          const q = it.type === 'abcd'
+            ? { q: it.q, type: 'abcd', options: it.options, correct: it.correct, explain: it.explain || '' }
+            : { q: it.q, type: 'text', acceptedAnswers: it.acceptedAnswers, explain: it.explain || '' };
           if (lessonItem.unitId) q.unitId = lessonItem.unitId;
           return q;
         });
@@ -1255,8 +1381,52 @@
     } catch (err) {
       showToast('Không lưu được: ' + err.message);
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Lưu vào chương';
+      saveBtn.textContent = mode === 'lessonplan' ? '💾 Lưu giáo án' : 'Lưu vào chương';
     }
+  }
+
+  // ---------- Giáo án AI: hiển thị/in theo mẫu Công văn 5512/BGDĐT-GDTrH ----------
+  function formatLessonPlanHtml(plan) {
+    if (!plan) return '';
+    const list = (arr) => ((Array.isArray(arr) && arr.length) ? `<ul style="margin:4px 0;padding-left:20px;">${arr.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : '<p class="hint">(không có)</p>');
+    const hoatDong = (Array.isArray(plan.tienTrinh) ? plan.tienTrinh : []).map((h, i) => `
+      <h4 style="margin:14px 0 4px;">${escapeHtml(h.tenHoatDong || `Hoạt động ${i + 1}`)}</h4>
+      <p><strong>a) Mục tiêu:</strong> ${escapeHtml(h.mucTieu || '')}</p>
+      <p><strong>b) Nội dung:</strong> ${escapeHtml(h.noiDung || '')}</p>
+      <p><strong>c) Sản phẩm:</strong> ${escapeHtml(h.sanPham || '')}</p>
+      <p><strong>d) Tổ chức thực hiện:</strong> ${escapeHtml(h.toChucThucHien || '')}</p>
+    `).join('');
+    return `
+      <h2 style="margin-top:0;">KẾ HOẠCH BÀI DẠY</h2>
+      <p><strong>Tên bài:</strong> ${escapeHtml(plan.tenBai || '')} &nbsp; <strong>Môn:</strong> ${escapeHtml(plan.monHoc || '')} &nbsp; <strong>Lớp:</strong> ${escapeHtml(String(plan.lop || ''))} &nbsp; <strong>Số tiết:</strong> ${escapeHtml(String(plan.soTiet || ''))}</p>
+      <h3>I. Mục tiêu</h3>
+      <p><strong>1. Kiến thức</strong></p>${list(plan.mucTieu && plan.mucTieu.kienThuc)}
+      <p><strong>2. Năng lực</strong></p>${list(plan.mucTieu && plan.mucTieu.nangLuc)}
+      <p><strong>3. Phẩm chất</strong></p>${list(plan.mucTieu && plan.mucTieu.phamChat)}
+      <h3>II. Thiết bị dạy học và học liệu</h3>
+      ${list(plan.thietBiDayHoc)}
+      <h3>III. Tiến trình dạy học</h3>
+      ${hoatDong}
+    `;
+  }
+
+  function printLessonPlan(plan) {
+    const html = formatLessonPlanHtml(plan);
+    const w = window.open('', '_blank');
+    if (!w) { showToast('Trình duyệt chặn cửa sổ in — cho phép popup rồi thử lại.'); return; }
+    w.document.write(`
+      <!DOCTYPE html><html><head><meta charset="utf-8" />
+      <title>${escapeHtml(plan.tenBai || 'Giáo án')}</title>
+      <style>
+        body{font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#111;max-width:800px;margin:24px auto;padding:0 16px;}
+        h2{text-align:center;} h3{margin-top:20px;border-bottom:1px solid #ccc;padding-bottom:4px;}
+        ul{margin:4px 0;} li{margin-bottom:2px;}
+      </style>
+      </head><body>${html}</body></html>
+    `);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
   }
 
   // ---------- Flashcard: xem (học) ----------
@@ -2333,16 +2503,18 @@
     initHeaderEdit();
 
     if (owner.uid) {
-      const [meta, lessons, quiz, flashcards] = await Promise.all([
+      const [meta, lessons, quiz, flashcards, lessonPlans] = await Promise.all([
         getChapterMeta(owner.uid, chapter.id).catch(() => null),
         getCustomLessons(owner.uid, chapter.id).catch(() => []),
         getCustomQuiz(owner.uid, chapter.id).catch(() => []),
-        getCustomFlashcards(owner.uid, chapter.id).catch(() => [])
+        getCustomFlashcards(owner.uid, chapter.id).catch(() => []),
+        owner.isOwner ? getCustomLessonPlans(owner.uid, chapter.id).catch(() => []) : Promise.resolve([])
       ]);
       chapterMeta = meta || {};
       customLessonsCache = lessons;
       customQuizCache = quiz;
       customFlashcardsCache = flashcards;
+      customLessonPlansCache = lessonPlans;
     }
 
     renderHeader();

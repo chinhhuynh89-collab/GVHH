@@ -124,6 +124,11 @@ service cloud.firestore {
         allow read: if true;
         allow write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
       }
+      // Giáo án do AI soạn — tài liệu soạn giảng RIÊNG của giáo viên, không phải nội dung cho học sinh
+      // xem (khác customLessons/customQuiz/customFlashcards ở trên) — chỉ chính giáo viên/admin đọc-ghi.
+      match /customLessonPlans/{planId} {
+        allow read, write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());
+      }
       match /chapterMeta/{chapterId} {
         allow read: if true;
         allow write: if request.auth != null && (request.auth.uid == teacherId || isAdmin());

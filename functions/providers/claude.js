@@ -4,6 +4,9 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
 const MAX_OUTPUT_TOKENS = 4000;
+const MAX_OUTPUT_TOKENS_LESSONPLAN = 8000; // giáo án dài hơn nhiều so với 1 câu hỏi/flashcard
+
+const LEVEL_ENUM = ['biet', 'hieu', 'vandung', 'vandungcao'];
 
 const QUIZ_TOOL = {
   name: 'return_quiz_questions',
@@ -22,9 +25,37 @@ const QUIZ_TOOL = {
               description: 'Đúng 4 phương án theo thứ tự A, B, C, D — không tự đánh số/chữ cái vào đầu mỗi phương án'
             },
             correct: { type: 'integer', minimum: 0, maximum: 3, description: 'Chỉ số phương án đúng: 0=A, 1=B, 2=C, 3=D' },
-            explain: { type: 'string', description: 'Giải thích ngắn gọn vì sao đáp án đó đúng' }
+            explain: { type: 'string', description: 'Giải thích ngắn gọn vì sao đáp án đó đúng' },
+            level: { type: 'string', enum: LEVEL_ENUM, description: 'Mức độ nhận thức theo Thông tư 22/2021' }
           },
-          required: ['q', 'options', 'correct']
+          required: ['q', 'options', 'correct', 'explain', 'level']
+        }
+      }
+    },
+    required: ['questions']
+  }
+};
+
+const ESSAY_TOOL = {
+  name: 'return_essay_questions',
+  description: 'Trả về danh sách câu hỏi tự luận ngắn (kèm đáp án chấp nhận được) đã soạn từ nội dung bài giảng.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      questions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            q: { type: 'string', description: 'Nội dung câu hỏi tự luận ngắn, tiếng Việt' },
+            acceptedAnswers: {
+              type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 4,
+              description: '1-4 cách diễn đạt đáp án đúng được chấp nhận (VD từ đồng nghĩa, viết tắt)'
+            },
+            explain: { type: 'string', description: 'Giải thích ngắn gọn' },
+            level: { type: 'string', enum: LEVEL_ENUM, description: 'Mức độ nhận thức theo Thông tư 22/2021' }
+          },
+          required: ['q', 'acceptedAnswers', 'explain', 'level']
         }
       }
     },
@@ -54,6 +85,53 @@ const FLASHCARD_TOOL = {
   }
 };
 
+const LESSONPLAN_TOOL = {
+  name: 'return_lesson_plan',
+  description: 'Trả về giáo án (Kế hoạch bài dạy) theo mẫu Công văn 5512/BGDĐT-GDTrH đã soạn từ nội dung bài giảng.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      tenBai: { type: 'string' },
+      monHoc: { type: 'string' },
+      lop: { type: 'string' },
+      soTiet: { type: 'integer' },
+      mucTieu: {
+        type: 'object',
+        properties: {
+          kienThuc: { type: 'array', items: { type: 'string' } },
+          nangLuc: { type: 'array', items: { type: 'string' } },
+          phamChat: { type: 'array', items: { type: 'string' } }
+        },
+        required: ['kienThuc', 'nangLuc', 'phamChat']
+      },
+      thietBiDayHoc: { type: 'array', items: { type: 'string' } },
+      tienTrinh: {
+        type: 'array',
+        description: 'ĐÚNG 4 hoạt động theo thứ tự: Mở đầu, Hình thành kiến thức mới, Luyện tập, Vận dụng',
+        items: {
+          type: 'object',
+          properties: {
+            tenHoatDong: { type: 'string' },
+            mucTieu: { type: 'string' },
+            noiDung: { type: 'string' },
+            sanPham: { type: 'string' },
+            toChucThucHien: { type: 'string' }
+          },
+          required: ['tenHoatDong', 'mucTieu', 'noiDung', 'sanPham', 'toChucThucHien']
+        }
+      }
+    },
+    required: ['tenBai', 'monHoc', 'lop', 'soTiet', 'mucTieu', 'thietBiDayHoc', 'tienTrinh']
+  }
+};
+
+function pickTool(mode) {
+  if (mode === 'quiz') return QUIZ_TOOL;
+  if (mode === 'essay') return ESSAY_TOOL;
+  if (mode === 'flashcard') return FLASHCARD_TOOL;
+  return LESSONPLAN_TOOL;
+}
+
 async function generate({ apiKey, model, systemPrompt, parts, mode }) {
   const claudeBlocks = parts.map((p) => (
     p.type === 'image'
@@ -61,10 +139,10 @@ async function generate({ apiKey, model, systemPrompt, parts, mode }) {
       : { type: 'text', text: p.text }
   ));
   const anthropic = new Anthropic({ apiKey });
-  const tool = mode === 'quiz' ? QUIZ_TOOL : FLASHCARD_TOOL;
+  const tool = pickTool(mode);
   const response = await anthropic.messages.create({
     model,
-    max_tokens: MAX_OUTPUT_TOKENS,
+    max_tokens: mode === 'lessonplan' ? MAX_OUTPUT_TOKENS_LESSONPLAN : MAX_OUTPUT_TOKENS,
     system: systemPrompt,
     tools: [tool],
     tool_choice: { type: 'tool', name: tool.name },
@@ -72,7 +150,9 @@ async function generate({ apiKey, model, systemPrompt, parts, mode }) {
   });
   const toolUse = (response.content || []).find((b) => b.type === 'tool_use' && b.name === tool.name);
   if (!toolUse || !toolUse.input) throw new Error('Claude không trả tool_use hợp lệ');
-  return mode === 'quiz' ? toolUse.input.questions : toolUse.input.flashcards;
+  if (mode === 'quiz' || mode === 'essay') return toolUse.input.questions;
+  if (mode === 'flashcard') return toolUse.input.flashcards;
+  return [toolUse.input]; // lessonplan: 1 giáo án duy nhất, bọc mảng cho khớp interface chung
 }
 
 module.exports = {

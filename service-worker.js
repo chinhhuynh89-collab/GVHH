@@ -32,6 +32,7 @@ const ASSETS = [
   './js/features/custom-lessons.js',
   './js/features/custom-quiz.js',
   './js/features/custom-flashcards.js',
+  './js/features/custom-lessonplans.js',
   './js/features/chapter-meta.js',
   './js/features/quiz-excel.js',
   './js/features/quiz-common.js',
