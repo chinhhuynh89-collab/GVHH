@@ -3,8 +3,8 @@
 // config/aiProvider (Firestore) chọn provider: "claude".
 const Anthropic = require('@anthropic-ai/sdk');
 
-const MAX_OUTPUT_TOKENS = 4000;
-const MAX_OUTPUT_TOKENS_LESSONPLAN = 8000; // giáo án dài hơn nhiều so với 1 câu hỏi/flashcard
+const MAX_OUTPUT_TOKENS = 6000;
+const MAX_OUTPUT_TOKENS_LESSONPLAN = 10000; // giáo án dài hơn nhiều so với 1 câu hỏi/flashcard
 
 const LEVEL_ENUM = ['biet', 'hieu', 'vandung', 'vandungcao'];
 

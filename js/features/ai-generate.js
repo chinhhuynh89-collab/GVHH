@@ -21,8 +21,10 @@ const AI_SUBJECT_NAME = 'Hoá học';
 const AI_LEVEL_KEYS = ['biet', 'hieu', 'vandung', 'vandungcao'];
 const AI_LEVEL_LABELS_VI = { biet: 'Nhận biết', hieu: 'Thông hiểu', vandung: 'Vận dụng', vandungcao: 'Vận dụng cao' };
 const AI_MODE_LABELS_VI = { quiz: 'trắc nghiệm', essay: 'tự luận', truefalse: 'Đúng/Sai', flashcard: 'flashcard', lessonplan: 'giáo án' };
-const AI_MAX_OUTPUT_TOKENS = 4000;
-const AI_MAX_OUTPUT_TOKENS_LESSONPLAN = 8000;
+// Tăng từ 4000/8000 lên 6000/10000 — prompt mới yêu cầu giải thích/tích hợp nội dung chi tiết hơn
+// hẳn, ngân sách cũ dễ bị cắt giữa chừng (đặc biệt giáo án + tự luận nhiều bước giải).
+const AI_MAX_OUTPUT_TOKENS = 6000;
+const AI_MAX_OUTPUT_TOKENS_LESSONPLAN = 10000;
 const AI_LIMITS_DEFAULT = {
   monthlyCallCap: 100, dailyCallCap: 20, maxPointsPerRequest: 15, maxQuestionsPerRequest: 20,
   dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3 }
@@ -68,6 +70,12 @@ function aiBuildContentParts(points, lessonTitle) {
   return parts;
 }
 
+// Khung persona + yêu cầu "đọc kỹ trước khi soạn" dùng chung cho mọi mode — mục tiêu: ép AI bám CHI
+// TIẾT CỤ THỂ có trong bài giảng (số liệu, tên chất, công thức, phương trình, ví dụ...) thay vì soạn
+// nội dung chung chung/khuôn mẫu có thể dùng cho bài nào cũng được (lỗi người dùng phản ánh: "chưa sát
+// nội dung bài giảng", "giáo án chưa tích hợp nội dung bài giảng vào").
+const AI_PERSONA_PREFIX = `Bạn là một Giáo sư ${AI_SUBJECT_NAME} có nhiều năm kinh nghiệm giảng dạy phổ thông tại Việt Nam, am hiểu sâu Chương trình GDPT 2018 và đã biên soạn hàng trăm giáo án/đề kiểm tra đạt chuẩn Sở/Bộ GD&ĐT. Trước khi soạn, hãy ĐỌC KỸ TOÀN BỘ nội dung bài giảng được cung cấp bên dưới (kể cả chữ và ảnh chụp trang sách/slide nếu có) để nắm chắc các khái niệm, số liệu, công thức, phương trình phản ứng, ví dụ cụ thể xuất hiện trong bài — đây là nguồn DUY NHẤT bạn được dùng, KHÔNG bịa thêm kiến thức ngoài nội dung đó.`;
+
 function aiBuildSystemPrompt(mode, params) {
   if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
     const total = aiSumLevels(params.levels);
@@ -85,12 +93,38 @@ function aiBuildSystemPrompt(mode, params) {
       : mode === 'truefalse'
         ? ' field "correct": 0 nếu mệnh đề ĐÚNG, 1 nếu mệnh đề SAI.'
         : '';
-    return `Bạn là trợ lý soạn học liệu cho giáo viên ${AI_SUBJECT_NAME} phổ thông tại Việt Nam. Dựa ĐÚNG vào nội dung bài giảng được cung cấp — KHÔNG bịa thêm kiến thức ngoài nội dung đó — hãy soạn ĐÚNG ${total} ${kindText} bằng tiếng Việt, đúng chương trình phổ thông Việt Nam, phân bố CHÍNH XÁC theo mức độ nhận thức (Thông tư 22/2021/TT-BGDĐT): ${breakdown}. Mỗi câu phải gắn đúng field "level" tương ứng đúng như số lượng đã yêu cầu ở trên.${extra} Nội dung câu hỏi phải bám sát bài giảng đã cho, không hỏi kiến thức không xuất hiện trong bài.`;
+    return `${AI_PERSONA_PREFIX}
+
+Nhiệm vụ: soạn ĐÚNG ${total} ${kindText} bằng tiếng Việt, đúng chương trình phổ thông Việt Nam, phân bố CHÍNH XÁC theo mức độ nhận thức (Thông tư 22/2021/TT-BGDĐT): ${breakdown}. Mỗi câu gắn đúng field "level" tương ứng.
+
+Yêu cầu bắt buộc để câu hỏi CHẤT LƯỢNG, SÁT bài giảng:
+1. MỖI câu hỏi PHẢI dựa trên 1 chi tiết CỤ THỂ có thật trong bài giảng đã cho (số liệu, tên chất, công thức hoá học, phương trình phản ứng, ví dụ, hiện tượng, tính chất... được nêu trong bài) — cấm soạn câu hỏi chung chung, sáo rỗng, có thể tráo dùng cho bất kỳ bài học nào khác.
+2. Câu mức "Vận dụng"/"Vận dụng cao" PHẢI yêu cầu học sinh áp dụng kiến thức trong bài (tính toán số liệu cụ thể, viết/cân bằng phương trình, giải thích hiện tượng, so sánh) — không chỉ hỏi lại định nghĩa/khái niệm suông.
+3. Đáp án nhiễu (các phương án sai) phải hợp lý, dựa trên lỗi hiểu sai thường gặp của học sinh về ĐÚNG nội dung bài này, không phải phương án sai vô nghĩa.
+4. Thuật ngữ, ký hiệu hoá học, đơn vị đo phải chính xác tuyệt đối.${extra}`;
   }
   if (mode === 'flashcard') {
-    return `Bạn là trợ lý soạn học liệu cho giáo viên ${AI_SUBJECT_NAME} phổ thông tại Việt Nam. Dựa ĐÚNG vào nội dung bài giảng được cung cấp — KHÔNG bịa thêm kiến thức ngoài nội dung đó — hãy soạn ra CHÍNH XÁC ${params.count} flashcard (mặt trước/mặt sau) bằng tiếng Việt, đúng chương trình phổ thông Việt Nam, độ khó phù hợp học sinh. Nội dung flashcard phải bám sát bài giảng đã cho, không hỏi kiến thức không xuất hiện trong bài.`;
+    return `${AI_PERSONA_PREFIX}
+
+Nhiệm vụ: soạn CHÍNH XÁC ${params.count} flashcard (mặt trước/mặt sau) bằng tiếng Việt, đúng chương trình phổ thông Việt Nam, độ khó phù hợp học sinh.
+
+Yêu cầu bắt buộc:
+1. Mặt trước ("front") là 1 khái niệm/thuật ngữ/công thức/câu hỏi ngắn LẤY TRỰC TIẾP từ nội dung bài giảng đã cho — không tự nghĩ ra khái niệm ngoài bài.
+2. Mặt sau ("back") là câu trả lời/giải thích chính xác, ngắn gọn, đúng như bài giảng trình bày (giữ đúng số liệu, công thức, tên gọi nếu có).
+3. Ưu tiên các khái niệm/công thức QUAN TRỌNG NHẤT của bài, tránh trùng lặp ý, tránh chọn chi tiết phụ không đáng ghi nhớ.`;
   }
-  return `Bạn là giáo viên ${AI_SUBJECT_NAME} giàu kinh nghiệm tại Việt Nam, soạn Kế hoạch bài dạy (giáo án) theo ĐÚNG cấu trúc mẫu quy định tại Công văn 5512/BGDĐT-GDTrH của Bộ Giáo dục và Đào tạo, cho lớp ${params.lop}, thời lượng ${params.soTiet} tiết. Dựa ĐÚNG vào nội dung bài giảng được cung cấp — KHÔNG bịa thêm kiến thức ngoài nội dung đó. Giáo án gồm: (I) Mục tiêu (Kiến thức, Năng lực, Phẩm chất — viết theo Chương trình GDPT 2018), (II) Thiết bị dạy học và học liệu, (III) Tiến trình dạy học gồm ĐÚNG 4 hoạt động theo thứ tự cố định: "Hoạt động 1: Mở đầu", "Hoạt động 2: Hình thành kiến thức mới", "Hoạt động 3: Luyện tập", "Hoạt động 4: Vận dụng" — mỗi hoạt động nêu rõ mục tiêu, nội dung, sản phẩm, tổ chức thực hiện. Viết bằng tiếng Việt, ngôn ngữ sư phạm chuẩn mực, cụ thể, có thể áp dụng trực tiếp vào lớp học.`;
+  return `${AI_PERSONA_PREFIX}
+
+Nhiệm vụ: soạn Kế hoạch bài dạy (giáo án) theo ĐÚNG cấu trúc mẫu quy định tại Công văn 5512/BGDĐT-GDTrH của Bộ Giáo dục và Đào tạo, cho lớp ${params.lop}, thời lượng ${params.soTiet} tiết, gồm:
+(I) Mục tiêu (Kiến thức, Năng lực, Phẩm chất — theo Chương trình GDPT 2018): PHẢI liệt kê ĐÚNG các đơn vị kiến thức CỤ THỂ xuất hiện trong bài giảng (tên khái niệm, công thức, phản ứng...), không viết mục tiêu chung chung kiểu "hiểu được kiến thức của bài".
+(II) Thiết bị dạy học và học liệu.
+(III) Tiến trình dạy học — ĐÚNG 4 hoạt động theo thứ tự cố định: "Hoạt động 1: Mở đầu", "Hoạt động 2: Hình thành kiến thức mới", "Hoạt động 3: Luyện tập", "Hoạt động 4: Vận dụng".
+
+Yêu cầu bắt buộc để giáo án TÍCH HỢP THẬT SỰ nội dung bài giảng (không phải khung sáo rỗng):
+1. "Hoạt động 2: Hình thành kiến thức mới" BẮT BUỘC phải trình bày TRỰC TIẾP đúng trình tự, khái niệm, số liệu, công thức, phương trình phản ứng, ví dụ CÓ THẬT trong bài giảng đã cho — chia thành các đơn vị kiến thức con bám sát cấu trúc bài giảng gốc (VD nếu bài có mục "1. ...", "2. ..." thì hoạt động này cũng chia theo đúng các mục đó). Mỗi bước "tổ chức thực hiện" phải nêu RÕ giáo viên trình bày/đặt câu hỏi về khái niệm/công thức/phản ứng CỤ THỂ nào, không viết chung chung "giáo viên trình bày khái niệm...".
+2. "Hoạt động 3: Luyện tập" và "Hoạt động 4: Vận dụng" phải đưa ra bài tập/câu hỏi/tình huống dựa ĐÚNG trên kiến thức vừa trình bày ở Hoạt động 2 (dùng lại đúng số liệu, chất, phản ứng đã xuất hiện trong bài), không phải bài tập chung chung không liên quan.
+3. Mỗi hoạt động nêu rõ mục tiêu, nội dung, sản phẩm, tổ chức thực hiện.
+4. Viết tiếng Việt, ngôn ngữ sư phạm chuẩn mực, cụ thể, áp dụng trực tiếp được vào lớp học — không viết placeholder kiểu "..." hay "(bổ sung sau)".`;
 }
 
 // ---------- Schema ép JSON có cấu trúc — Gemini dùng type chữ HOA (REST API), Claude dùng JSON Schema

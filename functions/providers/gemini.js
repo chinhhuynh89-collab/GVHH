@@ -9,8 +9,8 @@
 // LƯU Ý: "@google/genai" chỉ build ESM — require() thường (CJS) đọc SAI thành object rỗng thay vì báo
 // lỗi rõ ràng (đã kiểm chứng lúc code), nên bắt buộc dùng import() động (await import(...)) thay vì
 // require() cho riêng gói này.
-const MAX_OUTPUT_TOKENS = 4000;
-const MAX_OUTPUT_TOKENS_LESSONPLAN = 8000; // giáo án dài hơn nhiều so với 1 câu hỏi/flashcard
+const MAX_OUTPUT_TOKENS = 6000;
+const MAX_OUTPUT_TOKENS_LESSONPLAN = 10000; // giáo án dài hơn nhiều so với 1 câu hỏi/flashcard
 
 const LEVEL_ENUM = ['biet', 'hieu', 'vandung', 'vandungcao'];
 
