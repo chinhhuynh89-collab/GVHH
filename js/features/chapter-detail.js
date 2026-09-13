@@ -2386,7 +2386,10 @@
           const truncatedHtml = truncated
             ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ Phản hồi AI bị cắt cụt vì quá dài (đề có thể có nhiều câu) — chỉ cứu lại được ${items.length} câu ĐÃ HOÀN CHỈNH, có thể vẫn còn thiếu vài câu cuối. Kiểm tra lại số câu, nạp lại phần thiếu nếu cần.</div>`
             : '';
-          const unverified = customQuizCache.filter((q) => q.sourceFileName === file.name && q.aiUnverifiedCorrect);
+          // Đếm TRONG "items" (đúng lượt nạp này) — không lọc theo customQuizCache như dưới đây (cắt ảnh)
+          // vì nạp lại CÙNG tên file (VD lượt trước bị cắt cụt, nạp lại để bổ sung) sẽ đếm dồn CẢ câu
+          // của lượt TRƯỚC đó có cùng sourceFileName, ra tỉ lệ vô nghĩa kiểu "42/26".
+          const unverified = items.filter((q) => q.aiUnverifiedCorrect);
           const unverifiedHtml = unverified.length
             ? `<div class="result-box show error" style="margin-bottom:8px;"><strong>⚠️ ${unverified.length}/${items.length} câu KHÔNG có đáp án tô sẵn trong file gốc — AI đã TỰ GIẢI để chọn đáp án, cần rà lại kỹ trước khi dùng.</strong></div>`
             : '';
