@@ -26,8 +26,10 @@ const AI_MODE_LABELS_VI = { quiz: 'trắc nghiệm', essay: 'tự luận', truef
 const AI_MAX_OUTPUT_TOKENS = 6000;
 const AI_MAX_OUTPUT_TOKENS_LESSONPLAN = 10000;
 // Đề thi thật có thể có 30-50 câu (nhiều hơn hẳn 20 câu tối đa của mode "quiz" tự soạn) — cần ngân sách
-// riêng lớn hơn để không bị cắt cụt giữa chừng khi nhận diện nguyên 1 đề dài.
-const AI_MAX_OUTPUT_TOKENS_QUIZRECOGNIZE = 12000;
+// riêng lớn hơn để không bị cắt cụt giữa chừng khi nhận diện nguyên 1 đề dài. Chữ tiếng Việt có dấu tốn
+// nhiều token/ký tự hơn hẳn tiếng Anh (bộ mã hoá tách nhỏ theo byte UTF-8) nên vẫn có thể bị cắt với đề
+// rất dài — xem aiRecoverTruncatedArray bên dưới để cứu lại phần đã tạo được thay vì mất trắng cả lượt.
+const AI_MAX_OUTPUT_TOKENS_QUIZRECOGNIZE = 16000;
 function aiMaxOutputTokensFor(mode) {
   if (mode === 'lessonplan') return AI_MAX_OUTPUT_TOKENS_LESSONPLAN;
   if (mode === 'quizrecognize') return AI_MAX_OUTPUT_TOKENS_QUIZRECOGNIZE;
@@ -362,6 +364,52 @@ function aiClaudeTool(mode) {
   };
 }
 
+// Field JSON chứa mảng kết quả theo từng mode — dùng để CỨU LẠI 1 phần kết quả khi phản hồi AI bị cắt
+// cụt giữa chừng (hết ngân sách token, hay gặp với đề thi dài nhiều câu) thay vì mất trắng cả lượt gọi.
+// lessonplan trả về 1 OBJECT lớn (không phải mảng) nên không cứu được từng phần — null.
+const AI_ARRAY_FIELD_BY_MODE = { quiz: 'questions', essay: 'questions', truefalse: 'questions', quizrecognize: 'questions', flashcard: 'flashcards', lessonplan: null };
+
+// JSON bị cắt cụt giữa chừng (thường do hết maxOutputTokens) làm JSON.parse() lỗi toàn bộ dù phần lớn
+// nội dung đã sinh ra hợp lệ — quét thủ công để lấy lại các phần tử ĐÃ HOÀN CHỈNH trong mảng
+// "arrayField" (theo dõi độ sâu ngoặc {} + trạng thái trong/ngoài chuỗi để không đếm nhầm dấu ngoặc bên
+// trong chuỗi), bỏ phần tử cuối cùng dở dang. Trả về mảng rỗng nếu không cứu được gì (VD lỗi xảy ra
+// trước cả khi bắt đầu mảng).
+function aiRecoverTruncatedArray(text, arrayField) {
+  if (!arrayField) return [];
+  const marker = `"${arrayField}"`;
+  const markerIdx = text.indexOf(marker);
+  if (markerIdx === -1) return [];
+  const arrStart = text.indexOf('[', markerIdx);
+  if (arrStart === -1) return [];
+
+  const recovered = [];
+  let depth = 0;
+  let objStart = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = arrStart + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '{') { if (depth === 0) objStart = i; depth++; continue; }
+    if (ch === '}') {
+      depth--;
+      if (depth === 0 && objStart !== -1) {
+        try { recovered.push(JSON.parse(text.slice(objStart, i + 1))); } catch (e) { /* phần tử lỗi — bỏ qua */ }
+        objStart = -1;
+      }
+      continue;
+    }
+    if (ch === ']' && depth === 0) break; // hết mảng bình thường (không bị cắt) — dừng quét
+  }
+  return recovered;
+}
+
 // ---------- Gọi thẳng REST API — cả 2 hãng đều hỗ trợ CORS cho lượt gọi trực tiếp từ trình duyệt
 // (Claude cần thêm header "anthropic-dangerous-direct-browser-access", đúng tên Anthropic đặt cho cơ
 // chế này — không phải dấu hiệu lỗi/nguy hiểm, chỉ là tên header xác nhận CHỦ Ý gọi từ trình duyệt).
@@ -389,9 +437,19 @@ async function aiCallGeminiDirect({ apiKey, model, systemPrompt, parts, mode }) 
   const candidate = data && data.candidates && data.candidates[0];
   const text = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;
   if (!text) throw new Error('AI không trả về nội dung.');
-  const parsed = JSON.parse(text);
-  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse' || mode === 'quizrecognize') return parsed.questions;
-  if (mode === 'flashcard') return parsed.flashcards;
+  const arrayField = AI_ARRAY_FIELD_BY_MODE[mode];
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    // Cắt cụt giữa chừng (thường do candidate.finishReason === 'MAX_TOKENS') — cứu lại phần đã tạo
+    // hoàn chỉnh thay vì mất trắng, thay vì báo lỗi JSON khó hiểu cho giáo viên.
+    const recovered = aiRecoverTruncatedArray(text, arrayField);
+    if (recovered.length) { recovered.aiTruncated = true; return recovered; }
+    const truncatedNote = candidate && candidate.finishReason === 'MAX_TOKENS' ? ' (phản hồi AI bị cắt cụt vì quá dài — thử file ít câu hơn, hoặc chia nhỏ file trước khi nạp)' : '';
+    throw new Error('AI trả về dữ liệu không đọc được' + truncatedNote + '.');
+  }
+  if (arrayField) return parsed[arrayField];
   return [parsed];
 }
 
@@ -420,9 +478,12 @@ async function aiCallClaudeDirect({ apiKey, model, systemPrompt, parts, mode }) 
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error((data && data.error && data.error.message) || `Lỗi HTTP ${res.status}`);
   const toolUse = (data && data.content || []).find((b) => b.type === 'tool_use' && b.name === tool.name);
-  if (!toolUse || !toolUse.input) throw new Error('Claude không trả tool_use hợp lệ.');
-  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse' || mode === 'quizrecognize') return toolUse.input.questions;
-  if (mode === 'flashcard') return toolUse.input.flashcards;
+  if (!toolUse || !toolUse.input) {
+    const truncatedNote = data && data.stop_reason === 'max_tokens' ? ' (phản hồi bị cắt cụt vì quá dài — thử file ít câu hơn, hoặc chia nhỏ file trước khi nạp)' : '';
+    throw new Error('Claude không trả tool_use hợp lệ' + truncatedNote + '.');
+  }
+  const arrayField = AI_ARRAY_FIELD_BY_MODE[mode];
+  if (arrayField) return toolUse.input[arrayField];
   return [toolUse.input];
 }
 
@@ -641,8 +702,9 @@ async function recognizeQuizFromPdfClient(arrayBuffer) {
     throw new Error('Không gọi được AI lúc này: ' + err.message);
   }
   if (!Array.isArray(rawItems) || !rawItems.length) throw new Error('AI không nhận diện được câu hỏi nào trong file này.');
+  const truncated = !!rawItems.aiTruncated;
 
   const items = aiNormalizeItems('quizrecognize', rawItems);
   if (!items.length) throw new Error('AI trả về kết quả không đúng định dạng, thử lại.');
-  return { items, totalPages, usedPages };
+  return { items, totalPages, usedPages, truncated };
 }

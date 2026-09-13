@@ -2375,7 +2375,7 @@
         const box = $('#quizAiResult');
         box.innerHTML = `<div class="result-box show">⏳ AI đang đọc từng trang trong "${escapeHtml(file.name)}"... có thể mất khoảng 1 phút.</div>`;
         try {
-          const { items, totalPages, usedPages } = await recognizeQuizFromPdfClient(await file.arrayBuffer());
+          const { items, totalPages, usedPages, truncated } = await recognizeQuizFromPdfClient(await file.arrayBuffer());
           items.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
           await addCustomQuizBatch(chapter.id, items);
           customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
@@ -2383,12 +2383,16 @@
           const pageWarningHtml = usedPages < totalPages
             ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ File có ${totalPages} trang, AI chỉ xử lý được ${usedPages} trang đầu (giới hạn cấu hình ở Quản trị) — trang sau chưa được nạp.</div>`
             : '';
+          const truncatedHtml = truncated
+            ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ Phản hồi AI bị cắt cụt vì quá dài (đề có thể có nhiều câu) — chỉ cứu lại được ${items.length} câu ĐÃ HOÀN CHỈNH, có thể vẫn còn thiếu vài câu cuối. Kiểm tra lại số câu, nạp lại phần thiếu nếu cần.</div>`
+            : '';
           const unverified = customQuizCache.filter((q) => q.sourceFileName === file.name && q.aiUnverifiedCorrect);
           const unverifiedHtml = unverified.length
             ? `<div class="result-box show error" style="margin-bottom:8px;"><strong>⚠️ ${unverified.length}/${items.length} câu KHÔNG có đáp án tô sẵn trong file gốc — AI đã TỰ GIẢI để chọn đáp án, cần rà lại kỹ trước khi dùng.</strong></div>`
             : '';
           box.innerHTML = `
             ${pageWarningHtml}
+            ${truncatedHtml}
             ${unverifiedHtml}
             <div class="result-box show">✓ Đã nạp ${items.length} câu hỏi (chữ thật, không phải ảnh).</div>
             <button class="btn block" id="quizAiViewAllBtn" style="margin-top:8px;">👁️ Xem toàn bộ câu vừa nạp</button>
