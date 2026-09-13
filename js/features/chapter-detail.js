@@ -2362,6 +2362,66 @@
       }
     });
 
+    // Nhận diện câu hỏi từ PDF bằng AI (song song với cắt ảnh ở trên) — trả về CHỮ THẬT thay vì ảnh,
+    // xem recognizeQuizFromPdfClient (ai-generate.js). Câu nào AI phải TỰ GIẢI để chọn đáp án (file
+    // không có tô màu sẵn) được đánh dấu aiUnverifiedCorrect — hiện cảnh báo riêng để giáo viên rà lại.
+    if ($('#quizAiBtn')) {
+      $('#quizAiBtn').addEventListener('click', () => $('#quizAiFileInput').click());
+      $('#quizAiFileInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        if (!confirmIfDuplicateSourceFile(file.name)) return;
+        const box = $('#quizAiResult');
+        box.innerHTML = `<div class="result-box show">⏳ AI đang đọc từng trang trong "${escapeHtml(file.name)}"... có thể mất khoảng 1 phút.</div>`;
+        try {
+          const { items, totalPages, usedPages } = await recognizeQuizFromPdfClient(await file.arrayBuffer());
+          items.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
+          await addCustomQuizBatch(chapter.id, items);
+          customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
+
+          const pageWarningHtml = usedPages < totalPages
+            ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ File có ${totalPages} trang, AI chỉ xử lý được ${usedPages} trang đầu (giới hạn cấu hình ở Quản trị) — trang sau chưa được nạp.</div>`
+            : '';
+          const unverified = customQuizCache.filter((q) => q.sourceFileName === file.name && q.aiUnverifiedCorrect);
+          const unverifiedHtml = unverified.length
+            ? `<div class="result-box show error" style="margin-bottom:8px;"><strong>⚠️ ${unverified.length}/${items.length} câu KHÔNG có đáp án tô sẵn trong file gốc — AI đã TỰ GIẢI để chọn đáp án, cần rà lại kỹ trước khi dùng.</strong></div>`
+            : '';
+          box.innerHTML = `
+            ${pageWarningHtml}
+            ${unverifiedHtml}
+            <div class="result-box show">✓ Đã nạp ${items.length} câu hỏi (chữ thật, không phải ảnh).</div>
+            <button class="btn block" id="quizAiViewAllBtn" style="margin-top:8px;">👁️ Xem toàn bộ câu vừa nạp</button>
+            <div id="quizAiPreviewList" style="display:none;margin-top:10px;"></div>
+            ${quizImportConfirmBtnHtml()}
+          `;
+          wireQuizImportConfirmBtn(box);
+          $('#quizAiViewAllBtn').addEventListener('click', () => {
+            const list = $('#quizAiPreviewList');
+            const show = list.style.display === 'none';
+            list.style.display = show ? 'block' : 'none';
+            if (show && !list.dataset.rendered) {
+              list.dataset.rendered = '1';
+              list.innerHTML = items.map((q) => `
+                <div class="lesson-block" style="margin-bottom:10px;">
+                  ${q.aiUnverifiedCorrect ? '<div class="hint" style="color:var(--danger, #c0392b);">⚠️ Đáp án do AI tự giải — rà lại</div>' : ''}
+                  <h3 style="margin-bottom:8px;">${escapeHtml(q.q)}</h3>
+                  <ul style="margin:0;padding-left:20px;">
+                    ${q.options.map((opt, i) => `<li style="${i === q.correct ? 'font-weight:700;color:var(--brand);' : ''}">${escapeHtml(opt)}${i === q.correct ? ' ✓' : ''}</li>`).join('')}
+                  </ul>
+                </div>
+              `).join('');
+            }
+          });
+          rebuildEffectiveQuiz();
+          renderQuizManager();
+          renderQuiz();
+        } catch (err) {
+          box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(err.message)}</div>`;
+        }
+      });
+    }
+
     $('#quizTemplateBtn').addEventListener('click', () => downloadQuizTemplateCSV());
     if ($('#quizExcelTemplateBtn')) $('#quizExcelTemplateBtn').addEventListener('click', () => downloadQuizTemplateCSV());
     $('#quizExcelBtn').addEventListener('click', () => $('#quizExcelFileInput').click());

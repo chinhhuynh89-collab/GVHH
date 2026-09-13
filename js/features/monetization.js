@@ -64,7 +64,7 @@ const MONETIZATION_DEFAULTS = {
     dailyCallCap: 20,
     maxPointsPerRequest: 15,
     maxQuestionsPerRequest: 20,
-    dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3 }
+    dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3, quizrecognize: 5 }
   }
 };
 

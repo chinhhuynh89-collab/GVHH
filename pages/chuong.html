@@ -252,6 +252,17 @@
       <input type="file" id="quizPdfFileInput" accept=".pdf" style="display:none;" />
       <button class="btn primary block" id="quizPdfBtn" style="margin-top:10px;">+ Chọn file .pdf</button>
       <div id="quizPdfResult"></div>
+
+      <div class="hint" style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">
+        <strong>🤖 Cách khác — Nhận diện bằng AI (thử nghiệm):</strong> AI đọc ảnh từng trang rồi CHÉP
+        LẠI CHỮ THẬT của câu hỏi/đáp án (không phải ảnh) — câu hỏi tìm kiếm được, đọc bằng loa được,
+        trộn được cả câu lẫn đáp án khi thi. AI cũng tự đọc đáp án đúng nếu file có tô màu đánh dấu sẵn,
+        không thì tự giải để chọn — <strong>luôn rà lại đáp án các câu có đánh dấu ⚠️ sau khi nạp</strong>.
+        Cần tính năng "Tạo bằng AI" đã mở (gói Pro) và đã cấu hình API key ở Quản trị.
+      </div>
+      <input type="file" id="quizAiFileInput" accept=".pdf" style="display:none;" />
+      <button class="btn block" id="quizAiBtn" style="margin-top:8px;">🤖 Nhận diện bằng AI</button>
+      <div id="quizAiResult"></div>
     </div>
 
     <div class="card" id="quizBankSection" style="display:none;">

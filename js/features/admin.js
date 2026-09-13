@@ -793,6 +793,7 @@ function normalizeZaloUrl(v) {
           <div class="field"><label for="aiLimEssay">Tự luận</label><input type="number" id="aiLimEssay" min="0" step="1" value="${lim.dailyCapByMode.essay}" /></div>
           <div class="field"><label for="aiLimFlashcard">Flashcard</label><input type="number" id="aiLimFlashcard" min="0" step="1" value="${lim.dailyCapByMode.flashcard}" /></div>
           <div class="field"><label for="aiLimLessonplan">Giáo án</label><input type="number" id="aiLimLessonplan" min="0" step="1" value="${lim.dailyCapByMode.lessonplan}" /></div>
+          <div class="field"><label for="aiLimQuizrecognize">Nhận diện câu hỏi từ PDF</label><input type="number" id="aiLimQuizrecognize" min="0" step="1" value="${lim.dailyCapByMode.quizrecognize}" /></div>
         </div>
         <button class="btn primary block" id="saveAiLimitsBtn" style="margin-top:12px;">Lưu giới hạn</button>
         <div class="result-box" id="saveAiLimitsResult"></div>
@@ -810,7 +811,8 @@ function normalizeZaloUrl(v) {
               quiz: Math.max(0, Number($('#aiLimQuiz').value) || 0),
               essay: Math.max(0, Number($('#aiLimEssay').value) || 0),
               flashcard: Math.max(0, Number($('#aiLimFlashcard').value) || 0),
-              lessonplan: Math.max(0, Number($('#aiLimLessonplan').value) || 0)
+              lessonplan: Math.max(0, Number($('#aiLimLessonplan').value) || 0),
+              quizrecognize: Math.max(0, Number($('#aiLimQuizrecognize').value) || 0)
             }
           };
           await saveMonetizationConfig({ aiLimits });

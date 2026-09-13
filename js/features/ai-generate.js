@@ -20,14 +20,22 @@ const AI_SUBJECT_NAME = 'Hoá học';
 
 const AI_LEVEL_KEYS = ['biet', 'hieu', 'vandung', 'vandungcao'];
 const AI_LEVEL_LABELS_VI = { biet: 'Nhận biết', hieu: 'Thông hiểu', vandung: 'Vận dụng', vandungcao: 'Vận dụng cao' };
-const AI_MODE_LABELS_VI = { quiz: 'trắc nghiệm', essay: 'tự luận', truefalse: 'Đúng/Sai', flashcard: 'flashcard', lessonplan: 'giáo án' };
+const AI_MODE_LABELS_VI = { quiz: 'trắc nghiệm', essay: 'tự luận', truefalse: 'Đúng/Sai', flashcard: 'flashcard', lessonplan: 'giáo án', quizrecognize: 'nhận diện câu hỏi từ PDF' };
 // Tăng từ 4000/8000 lên 6000/10000 — prompt mới yêu cầu giải thích/tích hợp nội dung chi tiết hơn
 // hẳn, ngân sách cũ dễ bị cắt giữa chừng (đặc biệt giáo án + tự luận nhiều bước giải).
 const AI_MAX_OUTPUT_TOKENS = 6000;
 const AI_MAX_OUTPUT_TOKENS_LESSONPLAN = 10000;
+// Đề thi thật có thể có 30-50 câu (nhiều hơn hẳn 20 câu tối đa của mode "quiz" tự soạn) — cần ngân sách
+// riêng lớn hơn để không bị cắt cụt giữa chừng khi nhận diện nguyên 1 đề dài.
+const AI_MAX_OUTPUT_TOKENS_QUIZRECOGNIZE = 12000;
+function aiMaxOutputTokensFor(mode) {
+  if (mode === 'lessonplan') return AI_MAX_OUTPUT_TOKENS_LESSONPLAN;
+  if (mode === 'quizrecognize') return AI_MAX_OUTPUT_TOKENS_QUIZRECOGNIZE;
+  return AI_MAX_OUTPUT_TOKENS;
+}
 const AI_LIMITS_DEFAULT = {
   monthlyCallCap: 100, dailyCallCap: 20, maxPointsPerRequest: 15, maxQuestionsPerRequest: 20,
-  dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3 }
+  dailyCapByMode: { quiz: 10, essay: 10, flashcard: 10, lessonplan: 3, quizrecognize: 5 }
 };
 // gemini-2.5-flash bị Google ngừng cấp cho user mới (2026) -> đổi mặc định sang gemini-3.6-flash.
 const AI_DEFAULT_MODEL_BY_PROVIDER = { gemini: 'gemini-3.6-flash', claude: 'claude-haiku-4-5-20251001' };
@@ -77,6 +85,18 @@ function aiBuildContentParts(points, lessonTitle) {
 const AI_PERSONA_PREFIX = `Bạn là một Giáo sư ${AI_SUBJECT_NAME} có nhiều năm kinh nghiệm giảng dạy phổ thông tại Việt Nam, am hiểu sâu Chương trình GDPT 2018 và đã biên soạn hàng trăm giáo án/đề kiểm tra đạt chuẩn Sở/Bộ GD&ĐT. Trước khi soạn, hãy ĐỌC KỸ TOÀN BỘ nội dung bài giảng được cung cấp bên dưới (kể cả chữ và ảnh chụp trang sách/slide nếu có) để nắm chắc các khái niệm, số liệu, công thức, phương trình phản ứng, ví dụ cụ thể xuất hiện trong bài — đây là nguồn DUY NHẤT bạn được dùng, KHÔNG bịa thêm kiến thức ngoài nội dung đó.`;
 
 function aiBuildSystemPrompt(mode, params) {
+  if (mode === 'quizrecognize') {
+    return `${AI_PERSONA_PREFIX}
+
+Nhiệm vụ: đây là ảnh chụp các trang của 1 ĐỀ THI TRẮC NGHIỆM ${AI_SUBJECT_NAME} có sẵn (không phải bài giảng) — nhiệm vụ của bạn là TRÍCH XUẤT CHÍNH XÁC từng câu hỏi trắc nghiệm 4 đáp án có trong đề, tuyệt đối KHÔNG tự sáng tác câu hỏi mới, KHÔNG sửa/rút gọn/diễn giải lại nội dung.
+
+Yêu cầu bắt buộc:
+1. Chép lại NGUYÊN VĂN đề bài và 4 phương án A/B/C/D của MỖI câu hỏi tìm thấy trong ảnh — giữ đúng 100% số liệu, công thức hoá học (ký hiệu, chỉ số trên/dưới, mũi tên phản ứng, đơn vị đo...), không bỏ sót câu nào, không đổi thứ tự các phương án.
+2. Nếu 1 phương án được TÔ MÀU/GẠCH CHÂN/ĐÁNH DẤU sẵn trong ảnh (giáo viên đã tự đánh dấu đáp án đúng trước khi nạp) — field "correct" PHẢI lấy đúng theo dấu đó, field "correctSource" = "highlight".
+3. Nếu KHÔNG thấy dấu hiệu đánh dấu nào cho câu đó — tự giải bài toán/câu hỏi hoá học đó bằng kiến thức chuyên môn để xác định đáp án đúng nhất, field "correctSource" = "solved".
+4. Field "explain" giải thích ngắn gọn, chính xác vì sao đáp án đó đúng.
+5. CHỈ trích các câu trắc nghiệm có ĐỦ 4 phương án A/B/C/D — bỏ qua câu tự luận, câu điền khuyết, trang bìa/trang trắng không có câu hỏi nào.`;
+  }
   if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
     const total = aiSumLevels(params.levels);
     const breakdown = AI_LEVEL_KEYS
@@ -130,6 +150,20 @@ Yêu cầu bắt buộc để giáo án TÍCH HỢP THẬT SỰ nội dung bài 
 // ---------- Schema ép JSON có cấu trúc — Gemini dùng type chữ HOA (REST API), Claude dùng JSON Schema
 // chuẩn (chữ thường) qua cơ chế "tool use". ----------
 function aiGeminiSchema(mode) {
+  if (mode === 'quizrecognize') {
+    const props = {
+      q: { type: 'STRING' },
+      options: { type: 'ARRAY', items: { type: 'STRING' } },
+      correct: { type: 'INTEGER' },
+      correctSource: { type: 'STRING', enum: ['highlight', 'solved'] },
+      explain: { type: 'STRING' }
+    };
+    return {
+      type: 'OBJECT',
+      properties: { questions: { type: 'ARRAY', items: { type: 'OBJECT', properties: props, required: Object.keys(props) } } },
+      required: ['questions']
+    };
+  }
   if (mode === 'quiz' || mode === 'truefalse') {
     const props = {
       q: { type: 'STRING' },
@@ -209,6 +243,32 @@ function aiGeminiSchema(mode) {
 }
 
 function aiClaudeTool(mode) {
+  if (mode === 'quizrecognize') {
+    return {
+      name: 'return_recognized_quiz_questions',
+      description: 'Trả về danh sách câu hỏi trắc nghiệm đã nhận diện chính xác từ ảnh đề thi.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          questions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                q: { type: 'string' },
+                options: { type: 'array', items: { type: 'string' }, minItems: 4, maxItems: 4 },
+                correct: { type: 'integer' },
+                correctSource: { type: 'string', enum: ['highlight', 'solved'] },
+                explain: { type: 'string' }
+              },
+              required: ['q', 'options', 'correct', 'correctSource', 'explain']
+            }
+          }
+        },
+        required: ['questions']
+      }
+    };
+  }
   if (mode === 'quiz' || mode === 'truefalse') {
     const props = {
       q: { type: 'string' },
@@ -320,7 +380,7 @@ async function aiCallGeminiDirect({ apiKey, model, systemPrompt, parts, mode }) 
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: aiGeminiSchema(mode),
-        maxOutputTokens: mode === 'lessonplan' ? AI_MAX_OUTPUT_TOKENS_LESSONPLAN : AI_MAX_OUTPUT_TOKENS
+        maxOutputTokens: aiMaxOutputTokensFor(mode)
       }
     })
   });
@@ -330,7 +390,7 @@ async function aiCallGeminiDirect({ apiKey, model, systemPrompt, parts, mode }) 
   const text = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;
   if (!text) throw new Error('AI không trả về nội dung.');
   const parsed = JSON.parse(text);
-  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') return parsed.questions;
+  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse' || mode === 'quizrecognize') return parsed.questions;
   if (mode === 'flashcard') return parsed.flashcards;
   return [parsed];
 }
@@ -350,7 +410,7 @@ async function aiCallClaudeDirect({ apiKey, model, systemPrompt, parts, mode }) 
     },
     body: JSON.stringify({
       model,
-      max_tokens: mode === 'lessonplan' ? AI_MAX_OUTPUT_TOKENS_LESSONPLAN : AI_MAX_OUTPUT_TOKENS,
+      max_tokens: aiMaxOutputTokensFor(mode),
       system: systemPrompt,
       tools: [tool],
       tool_choice: { type: 'tool', name: tool.name },
@@ -361,7 +421,7 @@ async function aiCallClaudeDirect({ apiKey, model, systemPrompt, parts, mode }) 
   if (!res.ok) throw new Error((data && data.error && data.error.message) || `Lỗi HTTP ${res.status}`);
   const toolUse = (data && data.content || []).find((b) => b.type === 'tool_use' && b.name === tool.name);
   if (!toolUse || !toolUse.input) throw new Error('Claude không trả tool_use hợp lệ.');
-  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') return toolUse.input.questions;
+  if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse' || mode === 'quizrecognize') return toolUse.input.questions;
   if (mode === 'flashcard') return toolUse.input.flashcards;
   return [toolUse.input];
 }
@@ -371,6 +431,17 @@ function aiIsValidLevel(v) { return AI_LEVEL_KEYS.includes(v); }
 // Lọc lại LẦN CUỐI cho khớp ĐÚNG khuôn addCustomQuizBatch/addCustomFlashcard/addCustomLessonPlan — y
 // hệt normalizeItems() cũ trong functions/index.js.
 function aiNormalizeItems(mode, rawItems) {
+  if (mode === 'quizrecognize') {
+    return rawItems
+      .filter((it) => it && typeof it.q === 'string' && Array.isArray(it.options) && it.options.length === 4 && Number.isInteger(it.correct) && it.correct >= 0 && it.correct <= 3)
+      .map((it) => {
+        const q = { q: it.q, type: 'abcd', options: it.options, correct: it.correct, explain: typeof it.explain === 'string' ? it.explain : '' };
+        // "solved" = AI tự giải để chọn đáp án (đề không có tô màu sẵn) — đánh dấu để giáo viên rà lại,
+        // khác "highlight" (đọc đúng theo màu tô sẵn trong file gốc, tin cậy như cách cắt ảnh cũ).
+        if (it.correctSource === 'solved') q.aiUnverifiedCorrect = true;
+        return q;
+      });
+  }
   if (mode === 'quiz') {
     return rawItems
       .filter((it) => it && typeof it.q === 'string' && Array.isArray(it.options) && it.options.length === 4 && Number.isInteger(it.correct) && it.correct >= 0 && it.correct <= 3)
@@ -530,4 +601,48 @@ async function generateFromLessonClient(data) {
   const items = aiNormalizeItems(mode, rawItems);
   if (!items.length) throw new Error('AI trả về kết quả không đúng định dạng, thử lại.');
   return { items };
+}
+
+// ---------- Nhận diện câu hỏi trắc nghiệm từ ẢNH các trang PDF bằng AI — thay cho cách "cắt ảnh"
+// (doc-import.js: extractQuizFromPdf) khi giáo viên muốn có CHỮ THẬT thay vì ảnh: q/options là text
+// thường, câu hỏi sau khi nạp có đầy đủ tính năng như câu tự gõ tay (tìm kiếm được, đọc bằng TTS, trộn
+// được cả câu lẫn đáp án khi thi) — đánh đổi là độ chính xác phụ thuộc khả năng AI đọc ảnh, không còn
+// đảm bảo 100% pixel như cắt ảnh. Được giữ SONG SONG với cắt ảnh (không thay thế) — giáo viên tự chọn
+// cách nào cho từng file (xem chapter-detail.js). Trả về { items, totalPages, usedPages } — usedPages <
+// totalPages nghĩa là file dài hơn giới hạn, chỉ xử lý được usedPages trang đầu. ----------
+async function recognizeQuizFromPdfClient(arrayBuffer) {
+  const teacher = getCurrentTeacher();
+  if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
+
+  // Khoá tính năng (Pro/miễn phí) + trần lượt dùng — dùng CHUNG hệ thống với "Tạo bằng AI" (cùng chi
+  // phí API thật), mode riêng "quizrecognize" để admin đặt trần riêng nếu muốn (Quản trị → Giới hạn dùng AI).
+  if (typeof enforceFeatureLock === 'function') await enforceFeatureLock(teacher.uid, 'aiGenerate');
+
+  const cfg = typeof getMonetizationConfig === 'function' ? await getMonetizationConfig() : null;
+  const aiLimits = (cfg && cfg.aiLimits) || AI_LIMITS_DEFAULT;
+  await aiCheckAndIncrementUsage(teacher.uid, 'quizrecognize', aiLimits);
+
+  const { parts: pageParts, totalPages, usedPages } = await renderPdfPagesForAiRecognition(arrayBuffer, aiLimits.maxPointsPerRequest);
+  if (!pageParts.length) throw new Error('Không đọc được trang nào từ file PDF này.');
+  const contentParts = [
+    { type: 'text', text: `Đây là ${usedPages} trang (theo đúng thứ tự) của 1 đề thi trắc nghiệm ${AI_SUBJECT_NAME} dạng ảnh chụp:` },
+    ...pageParts
+  ];
+
+  const { provider, model, apiKey } = await aiGetActiveProviderAndKey();
+  if (!apiKey) {
+    throw new Error(`Chưa cấu hình API key cho nhà cung cấp AI "${provider}" — báo admin vào trang Quản trị → Cấu hình AI để dán key.`);
+  }
+
+  let rawItems;
+  try {
+    rawItems = await aiCallProvider(provider, { apiKey, model, systemPrompt: aiBuildSystemPrompt('quizrecognize', {}), parts: contentParts, mode: 'quizrecognize' });
+  } catch (err) {
+    throw new Error('Không gọi được AI lúc này: ' + err.message);
+  }
+  if (!Array.isArray(rawItems) || !rawItems.length) throw new Error('AI không nhận diện được câu hỏi nào trong file này.');
+
+  const items = aiNormalizeItems('quizrecognize', rawItems);
+  if (!items.length) throw new Error('AI trả về kết quả không đúng định dạng, thử lại.');
+  return { items, totalPages, usedPages };
 }

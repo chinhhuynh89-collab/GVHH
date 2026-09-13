@@ -327,6 +327,51 @@ async function renderPdfPageToDataUri(page) {
   throw new Error('Không nén được 1 trang PDF về đủ nhỏ để lưu.');
 }
 
+// ---------- Vẽ trang PDF thành ảnh để gửi cho AI nhận diện câu hỏi (mode "quizrecognize", xem
+// ai-generate.js: recognizeQuizFromPdfClient) — khác renderPdfPageToDataUri ở trên (dùng cho bài giảng,
+// bị giới hạn kích thước để vừa 1 tài liệu Firestore): ảnh gửi AI chỉ đi qua API rồi bỏ, KHÔNG lưu vào
+// Firestore, nên không bị giới hạn đó — dùng độ phân giải/chất lượng CAO HƠN hẳn để AI đọc chính xác
+// chữ nhỏ/công thức/chỉ số trên-dưới trong đề thi, đổi lại ảnh nặng hơn (chấp nhận được vì chỉ tồn tại
+// tạm thời trong 1 lượt gọi API). ----------
+const AI_PAGE_IMAGE_BUDGET = 1.3 * 1024 * 1024; // ~1.3MB base64/trang — đủ đọc chữ nhỏ mà vẫn nhẹ
+async function renderPdfPageToDataUriForAi(page) {
+  const baseViewport = page.getViewport({ scale: 1 });
+  let targetWidth = 1200;
+  let quality = 0.75;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const scale = targetWidth / baseViewport.width;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(viewport.width));
+    canvas.height = Math.max(1, Math.round(viewport.height));
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const trimmedCanvas = trimCanvasWhitespace(canvas);
+    const dataUri = trimmedCanvas.toDataURL('image/jpeg', quality);
+    if (dataUri.length <= AI_PAGE_IMAGE_BUDGET || targetWidth <= 700) return dataUri;
+    if (quality > 0.55) quality -= 0.1;
+    else targetWidth = Math.round(targetWidth * 0.85);
+  }
+  throw new Error('Không nén được 1 trang PDF về đủ nhỏ để gửi cho AI.');
+}
+
+// Vẽ TỐI ĐA maxPages trang ĐẦU của PDF thành mảng "part" ảnh (đúng hình dạng aiBuildContentParts đã
+// dùng cho bài giảng, xem ai-generate.js) — trả kèm { totalPages, usedPages } để báo cho giáo viên biết
+// nếu file dài hơn số trang đã xử lý (usedPages < totalPages).
+async function renderPdfPagesForAiRecognition(arrayBuffer, maxPages) {
+  const pdfjsLib = await ensurePdfJs();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const totalPages = pdf.numPages;
+  const usedPages = Math.min(totalPages, Math.max(1, maxPages));
+  const parts = [];
+  for (let i = 1; i <= usedPages; i++) {
+    const page = await pdf.getPage(i);
+    const dataUri = await renderPdfPageToDataUriForAi(page);
+    const match = /^data:(image\/[a-zA-Z]+);base64,(.+)$/.exec(dataUri);
+    if (match) parts.push({ type: 'image', mimeType: match[1], data: match[2] });
+  }
+  return { parts, totalPages, usedPages };
+}
+
 async function extractPdf(arrayBuffer, fileName) {
   const pdfjsLib = await ensurePdfJs();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
