@@ -418,6 +418,26 @@ function aiRecoverTruncatedArray(text, arrayField) {
 // (Claude cần thêm header "anthropic-dangerous-direct-browser-access", đúng tên Anthropic đặt cho cơ
 // chế này — không phải dấu hiệu lỗi/nguy hiểm, chỉ là tên header xác nhận CHỦ Ý gọi từ trình duyệt).
 // ----------
+// Đánh dấu lỗi HTTP 429 (vượt trần TỐC ĐỘ gọi API của Google/Anthropic — VD "20 lượt/phút" bản miễn
+// phí, KHÁC hẳn trần lượt dùng/tháng của app) để aiCallProvider tự chờ rồi gọi lại thay vì báo lỗi
+// luôn — quizrecognize giờ gọi nhiều lượt liên tiếp (mỗi nhóm trang 1 lượt) nên dễ chạm trần này hơn
+// hẳn so với trước, cần tự phục hồi thay vì bắt giáo viên tự bấm lại.
+function aiBuildHttpError(res, data, message) {
+  const err = new Error(message);
+  if (res.status !== 429) return err;
+  err.rateLimited = true;
+  // Gemini trả gợi ý thời gian chờ trong error.details (RetryInfo.retryDelay, VD "43.7s") — Anthropic
+  // trả qua header chuẩn "retry-after" (giây nguyên) — không có thì mặc định chờ 15s.
+  const retryInfo = data && data.error && Array.isArray(data.error.details)
+    ? data.error.details.find((d) => typeof d['@type'] === 'string' && d['@type'].includes('RetryInfo'))
+    : null;
+  const geminiSeconds = retryInfo && retryInfo.retryDelay ? parseFloat(retryInfo.retryDelay) : null;
+  const anthropicSeconds = res.headers && res.headers.get ? parseInt(res.headers.get('retry-after'), 10) : null;
+  const seconds = geminiSeconds || anthropicSeconds || 15;
+  err.retryAfterMs = Math.min(Math.max(seconds, 1), 60) * 1000; // chặn tối đa 60s/lần chờ
+  return err;
+}
+
 async function aiCallGeminiDirect({ apiKey, model, systemPrompt, parts, mode }) {
   const geminiParts = parts.map((p) => (
     p.type === 'image' ? { inlineData: { mimeType: p.mimeType, data: p.data } } : { text: p.text }
@@ -437,7 +457,7 @@ async function aiCallGeminiDirect({ apiKey, model, systemPrompt, parts, mode }) 
     })
   });
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((data && data.error && data.error.message) || `Lỗi HTTP ${res.status}`);
+  if (!res.ok) throw aiBuildHttpError(res, data, (data && data.error && data.error.message) || `Lỗi HTTP ${res.status}`);
   const candidate = data && data.candidates && data.candidates[0];
   const text = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;
   if (!text) throw new Error('AI không trả về nội dung.');
@@ -480,7 +500,7 @@ async function aiCallClaudeDirect({ apiKey, model, systemPrompt, parts, mode }) 
     })
   });
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((data && data.error && data.error.message) || `Lỗi HTTP ${res.status}`);
+  if (!res.ok) throw aiBuildHttpError(res, data, (data && data.error && data.error.message) || `Lỗi HTTP ${res.status}`);
   const toolUse = (data && data.content || []).find((b) => b.type === 'tool_use' && b.name === tool.name);
   if (!toolUse || !toolUse.input) {
     const truncatedNote = data && data.stop_reason === 'max_tokens' ? ' (phản hồi bị cắt cụt vì quá dài — thử file ít câu hơn, hoặc chia nhỏ file trước khi nạp)' : '';
@@ -601,8 +621,20 @@ async function aiGetActiveProviderAndKey() {
   return { provider, model, apiKey };
 }
 
+// Tự chờ + gọi lại khi gặp lỗi 429 (vượt trần TỐC ĐỘ gọi API, xem aiBuildHttpError) — tối đa 3 lần thử
+// (1 lần đầu + 2 lần lại), mỗi lần chờ đúng thời gian API gợi ý. Hết lượt thử vẫn lỗi thì để lỗi thật
+// bay lên cho nơi gọi tự xử lý (VD recognizeQuizFromPdfClient giữ lại phần đã xử lý được).
 async function aiCallProvider(provider, args) {
-  return provider === 'claude' ? aiCallClaudeDirect(args) : aiCallGeminiDirect(args);
+  const call = provider === 'claude' ? aiCallClaudeDirect : aiCallGeminiDirect;
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await call(args);
+    } catch (err) {
+      if (!err.rateLimited || attempt === maxAttempts) throw err;
+      await new Promise((resolve) => setTimeout(resolve, err.retryAfterMs || 15000));
+    }
+  }
 }
 
 // ---------- Hàm chính — THAY THẾ lượt gọi Cloud Function generateFromLesson cũ. Trả về { items } y
