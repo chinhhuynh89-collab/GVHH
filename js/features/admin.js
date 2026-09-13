@@ -713,9 +713,18 @@ function normalizeZaloUrl(v) {
         $('#aiCfgGeminiKeyField').style.display = sel === 'gemini' ? 'block' : 'none';
         $('#aiCfgClaudeKeyField').style.display = sel === 'claude' ? 'block' : 'none';
       }
+      // Đổi Nhà cung cấp mà ô Model đang giữ tên model của nhà cung cấp KIA (VD còn "claude-..." khi đã
+      // chọn Gemini) thì phải xoá — nếu không sẽ gửi nhầm tên model sang API sai, báo lỗi khó hiểu.
+      function resetModelIfMismatched() {
+        const sel = $('#aiCfgProvider').value;
+        const otherProvider = sel === 'claude' ? 'gemini' : 'claude';
+        const modelInput = $('#aiCfgModel');
+        if (AI_MODEL_PRESETS[otherProvider].includes(modelInput.value.trim())) modelInput.value = '';
+      }
       fillModelPresets();
       toggleKeyFields();
-      $('#aiCfgProvider').addEventListener('change', () => { fillModelPresets(); toggleKeyFields(); });
+      resetModelIfMismatched(); // dọn luôn dữ liệu cũ nếu model đang lưu bị lệch nhà cung cấp
+      $('#aiCfgProvider').addEventListener('change', () => { fillModelPresets(); toggleKeyFields(); resetModelIfMismatched(); });
 
       $('#saveAiConfigBtn').addEventListener('click', async () => {
         const box = $('#saveAiConfigResult');
