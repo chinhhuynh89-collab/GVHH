@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v253';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v254';
 const ASSETS = [
   './',
   './index.html',
@@ -66,6 +66,7 @@ const ASSETS = [
   './js/vendor/firebase/firebase-app-compat.js',
   './js/vendor/firebase/firebase-auth-compat.js',
   './js/vendor/firebase/firebase-firestore-compat.js',
+  './js/vendor/firebase/firebase-functions-compat.js',
   './pages/bang-tuan-hoan.html',
   './pages/cong-cu-tinh-toan.html',
   './pages/can-bang-phuong-trinh.html',

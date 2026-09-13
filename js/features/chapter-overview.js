@@ -356,7 +356,11 @@
     const withContent = chapters.filter((c) => data.type === 'program' || hasContent(c));
     const percent = overallPercent(chapters);
     const doneCount = chapters.filter((c) => isChapterComplete(c.id)).length;
-    const title = data.type === 'grade' ? `Tiến độ Hoá học lớp ${data.grade}` : `Tiến độ ${data.program ? data.program.name : ''}`;
+    // Dùng ĐÚNG label của tab hiện tại (đã áp dụng gradeLabels nếu giáo viên đổi tên — xem buildTabs)
+    // thay vì tự ghép "Hoá học lớp N" cứng — sửa lỗi thực tế: đổi tên "Lớp 7" -> "Lớp 77" ở tab nhưng
+    // dòng "Tiến độ..." bên dưới vẫn hiện "lớp 7" cũ vì ghép thẳng data.grade, không qua gradeLabels.
+    const currentTab = tabs.find((t) => tabKey(t) === currentTabKey);
+    const title = data.type === 'grade' ? `Tiến độ ${currentTab ? currentTab.label : 'Hoá học lớp ' + data.grade}` : `Tiến độ ${data.program ? data.program.name : ''}`;
     const sub = withContent.length
       ? `Đã hoàn thành ${doneCount}/${withContent.length} chương có nội dung`
       : (data.type === 'program' ? 'Chương trình này chưa có chương nào' : 'Nội dung chi tiết đang được biên soạn');
