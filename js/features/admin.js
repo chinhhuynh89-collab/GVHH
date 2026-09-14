@@ -93,7 +93,7 @@ function normalizeZaloUrl(v) {
     // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
     // Gắn nút bấm NGAY LẬP TỨC (đồng bộ, không chờ await nào ở trên) — đây là phần quan trọng nhất
     // của trang nên phải chắc chắn hoạt động dù mạng chậm hay cfg tải lỗi.
-    const NEEDS_CFG = { plans: true, payment: true, locked: true, commissions: true, aiConfig: true };
+    const NEEDS_CFG = { plans: true, payment: true, locked: true, commissions: true, aiConfig: true, stats: true };
     const SECTION_BUILDERS = {
       stats: buildStatsSection,
       roster: buildRosterSection,
@@ -141,12 +141,26 @@ function normalizeZaloUrl(v) {
           <div id="adminStatsBody"><p class="hint">⏳ Đang tải...</p></div>
         </div>
         <div class="card">
+          <h2><span class="icon">🤖</span>Lượt dùng AI (toàn bộ giáo viên)</h2>
+          <p class="hint" style="margin-top:-4px;">Tổng hợp từ "aiUsage" — dùng để cân nhắc tăng/giảm trần lượt dùng ở mục "Cấu hình AI" bên dưới, KHÔNG phải hạn mức thật của Gemini/Claude (xem ghi chú cạnh nút Firebase Console).</p>
+          <div id="adminAiUsageBody"><p class="hint">⏳ Đang tải...</p></div>
+        </div>
+        <div class="card">
+          <h2><span class="icon">🔥</span>Dung lượng/lượt đọc-ghi Firebase</h2>
+          <p class="hint" style="margin-top:-4px;">
+            App chạy trình duyệt KHÔNG tự đọc được số THẬT từ Google (cần tài khoản dịch vụ riêng, không an toàn để đặt trong app công khai) — bấm nút dưới để xem số liệu thật trên Firebase Console.
+            Hạn mức gói Spark (miễn phí) hiện hành để đối chiếu nhanh: <strong>50.000 lượt đọc/ngày</strong>, <strong>20.000 lượt ghi/ngày</strong>, <strong>20.000 lượt xoá/ngày</strong>, <strong>1 GiB lưu trữ</strong> — vượt bất kỳ hạn mức nào cũng làm cả app "Quota exceeded." tới khi reset (~14-15h chiều hôm sau, giờ Việt Nam).
+          </p>
+          <a class="btn primary" href="https://console.firebase.google.com/project/giao-vien-hoa-hoc/usage" target="_blank" rel="noopener">🔗 Mở Firebase Console → Usage and billing</a>
+        </div>
+        <div class="card">
           <h2><span class="icon">🧾</span>Lịch sử giao dịch</h2>
           <p class="hint" style="margin-top:-4px;">Toàn bộ yêu cầu nâng cấp đã gửi — chờ duyệt, đã duyệt, đã từ chối — mới nhất lên đầu.</p>
           <div id="txHistoryBody"><p class="hint">⏳ Đang tải...</p></div>
         </div>
       `;
       const statsBox = $('#adminStatsBody');
+      const aiUsageBox = $('#adminAiUsageBody');
       const txBox = $('#txHistoryBody');
       try {
         const [subsSnap, studentSubsSnap, allSubmissionsSnap, commissionsSnap, profilesSnap] = await Promise.all([
@@ -171,6 +185,45 @@ function normalizeZaloUrl(v) {
             <div class="chapter-card" style="text-align:center;"><div class="cc-title">${formatVnd(totalCommissionOwed)}</div><div class="hint">Hoa hồng chưa trả</div></div>
           </div>
         `;
+
+        // Tổng hợp lượt dùng AI CỦA TẤT CẢ giáo viên (aiUsage/{uid}, xem ai-generate.js:
+        // aiCheckAndIncrementUsage) — tách "try" riêng, không để lỗi ở đây (VD Rules chưa cập nhật)
+        // làm hỏng luôn phần lịch sử giao dịch bên dưới. CHỈ đúng nếu firestore.rules đã thêm
+        // "|| isAdmin()" cho collection này — mặc định rule cũ chỉ cho từng giáo viên đọc ĐÚNG bản ghi
+        // của mình, admin đọc "list" cả collection sẽ bị Firestore âm thầm trả về rất thiếu (không
+        // phải lỗi rõ ràng) nếu rules chưa cập nhật, nên báo rõ nguyên nhân khi bắt được permission lỗi.
+        try {
+          const aiUsageSnap = await db.collection('aiUsage').get();
+          const now = new Date();
+          const todayKey = now.toISOString().slice(0, 10);
+          const curMonthKey = now.toISOString().slice(0, 7);
+          const modeKeys = ['quiz', 'essay', 'flashcard', 'lessonplan', 'quizrecognize'];
+          const modeLabelMap = { quiz: 'Trắc nghiệm', essay: 'Tự luận', flashcard: 'Flashcard', lessonplan: 'Giáo án', quizrecognize: 'Nhận diện PDF' };
+          let todayTotal = 0, monthTotal = 0, activeTeachersToday = 0;
+          const todayByMode = { quiz: 0, essay: 0, flashcard: 0, lessonplan: 0, quizrecognize: 0 };
+          aiUsageSnap.docs.forEach((d) => {
+            const u = d.data();
+            if (u.monthKey === curMonthKey) monthTotal += Number(u.count) || 0;
+            if (u.dayKey === todayKey) {
+              const dc = Number(u.dailyCount) || 0;
+              todayTotal += dc;
+              if (dc > 0) activeTeachersToday++;
+              const byMode = u.dailyCountByMode || {};
+              modeKeys.forEach((m) => { todayByMode[m] += Number(byMode[m]) || 0; });
+            }
+          });
+          const modeBreakdown = modeKeys.filter((m) => todayByMode[m] > 0).map((m) => `${modeLabelMap[m]}: ${todayByMode[m]}`).join(' · ');
+          aiUsageBox.innerHTML = `
+            <div class="action-grid">
+              <div class="chapter-card" style="text-align:center;"><div class="cc-title">${todayTotal}</div><div class="hint">Lượt dùng AI hôm nay</div></div>
+              <div class="chapter-card" style="text-align:center;"><div class="cc-title">${monthTotal}</div><div class="hint">Lượt dùng AI tháng này</div></div>
+              <div class="chapter-card" style="text-align:center;"><div class="cc-title">${activeTeachersToday}</div><div class="hint">Giáo viên đã dùng AI hôm nay</div></div>
+            </div>
+            <p class="hint" style="margin-top:8px;">Theo loại (hôm nay): ${escapeHtml(modeBreakdown || 'Chưa có lượt nào hôm nay')}</p>
+          `;
+        } catch (e) {
+          aiUsageBox.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}${e.code === 'permission-denied' ? ' — cần dán lại nội dung firebase/firestore.rules mới nhất vào Firebase Console → Firestore Database → Rules rồi bấm Publish (mục "aiUsage" cần thêm quyền đọc cho admin).' : ''}</p>`;
+        }
 
         const txList = allSubmissionsSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
           .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));

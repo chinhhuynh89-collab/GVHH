@@ -47,11 +47,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Đếm lượt dùng AI/ngày/tháng — TỪNG giáo viên chỉ đọc/ghi được ĐÚNG bản ghi của chính mình (chặn
-    // sửa bản ghi người khác để giả mạo/xoá giới hạn). Gọi trực tiếp từ trình duyệt (xem
+    // Đếm lượt dùng AI/ngày/tháng — TỪNG giáo viên chỉ GHI được ĐÚNG bản ghi của chính mình (chặn sửa
+    // bản ghi người khác để giả mạo/xoá giới hạn). Gọi trực tiếp từ trình duyệt (xem
     // js/features/ai-generate.js: checkAndIncrementAiUsage) từ khi tính năng AI bỏ Cloud Function.
+    // ĐỌC: chính giáo viên đó, HOẶC admin (đọc cả collection để tổng hợp lượt dùng AI toàn hệ thống ở
+    // trang Quản trị → Thống kê nhanh — xem js/features/admin.js: buildStatsSection).
     match /aiUsage/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow write: if request.auth != null && request.auth.uid == uid;
     }
 
     // Trạng thái gói trả phí — TÁCH RIÊNG khỏi "teachers"/"studentSubscriptions" khỏi bản ghi khác vì
