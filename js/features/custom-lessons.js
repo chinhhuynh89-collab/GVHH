@@ -47,6 +47,10 @@ async function addCustomLessonBatch(chapterId, lessons) {
   let opCount = 0;
   let byteCount = 0;
   const commits = [];
+  // col.doc() sinh sẵn ID ngay trên máy — trả về nguyên các bài vừa ghi để nơi gọi CỘNG THÊM vào cache
+  // trong bộ nhớ, khỏi phải getCustomLessons() đọc lại TOÀN BỘ collection (tốn thêm lượt đọc Firestore
+  // mỗi lần nạp file — xem giải thích ở addCustomQuizBatch, custom-quiz.js).
+  const created = [];
   docs.forEach((doc) => {
     const size = JSON.stringify(doc).length;
     if (opCount > 0 && (opCount >= MAX_BATCH_OPS || byteCount + size > MAX_BATCH_BYTES)) {
@@ -55,12 +59,15 @@ async function addCustomLessonBatch(chapterId, lessons) {
       opCount = 0;
       byteCount = 0;
     }
-    batch.set(col.doc(), doc);
+    const ref = col.doc();
+    batch.set(ref, doc);
+    created.push(Object.assign({ id: ref.id }, doc));
     opCount++;
     byteCount += size;
   });
   if (opCount > 0) commits.push(batch.commit());
   await Promise.all(commits);
+  return created;
 }
 
 async function updateCustomLesson(id, patch) {

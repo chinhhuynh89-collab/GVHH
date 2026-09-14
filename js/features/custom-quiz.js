@@ -37,6 +37,10 @@ async function addCustomQuizBatch(chapterId, questions) {
   let opCount = 0;
   let byteCount = 0;
   const commits = [];
+  // col.doc() sinh sẵn ID ngay trên máy (KHÔNG cần round-trip lên server) — giữ lại để trả về nguyên
+  // các mục vừa ghi, cho nơi gọi tự CỘNG THÊM vào cache đang có trong bộ nhớ thay vì phải gọi lại
+  // getCustomQuiz() đọc lại TOÀN BỘ collection từ Firestore (tốn thêm N lượt đọc mỗi lần nạp file).
+  const created = [];
   docs.forEach((doc) => {
     const size = JSON.stringify(doc).length;
     if (opCount > 0 && (opCount >= MAX_BATCH_OPS || byteCount + size > MAX_BATCH_BYTES)) {
@@ -45,12 +49,15 @@ async function addCustomQuizBatch(chapterId, questions) {
       opCount = 0;
       byteCount = 0;
     }
-    batch.set(col.doc(), doc);
+    const ref = col.doc();
+    batch.set(ref, doc);
+    created.push(Object.assign({ id: ref.id }, doc));
     opCount++;
     byteCount += size;
   });
   if (opCount > 0) commits.push(batch.commit());
   await Promise.all(commits);
+  return created;
 }
 
 async function updateCustomQuiz(id, patch) {

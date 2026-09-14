@@ -1127,10 +1127,12 @@
       saveBtns.forEach((b) => { b.disabled = true; b.textContent = 'Đang lưu...'; });
       try {
         const unitId = await ensureUnitForImport(fileName);
-        await addCustomLessonBatch(chapter.id, chosen.map((sec) =>
+        const createdLessons = await addCustomLessonBatch(chapter.id, chosen.map((sec) =>
           Object.assign({ title: sec.title, points: sec.points, sourceFileName: fileName, unitId })
         ));
-        customLessonsCache = await getCustomLessons(owner.uid, chapter.id);
+        // Cộng thẳng vào cache đang có (đã sắp đúng thứ tự, "order" mới luôn lớn hơn) thay vì gọi lại
+        // getCustomLessons() đọc lại TOÀN BỘ collection — giảm lượt đọc Firestore mỗi lần nạp file.
+        customLessonsCache = customLessonsCache.concat(createdLessons);
         box.innerHTML = `<div class="result-box show">✓ Đã lưu vào chương.</div>`;
         renderUnitsList();
         renderAllLessons();
@@ -1402,8 +1404,8 @@
           if (lessonItem.unitId) q.unitId = lessonItem.unitId;
           return q;
         });
-        await addCustomQuizBatch(chapter.id, questions);
-        customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
+        const createdQuiz = await addCustomQuizBatch(chapter.id, questions);
+        customQuizCache = customQuizCache.concat(createdQuiz);
         rebuildEffectiveQuiz();
         renderQuizManager();
         renderQuiz();
@@ -2293,8 +2295,8 @@
         // vì nạp file câu hỏi (khác bài giảng: 1 file câu hỏi thường là ngân hàng đề tổng hợp NHIỀU chủ
         // đề, không phải "1 file = 1 Bài" như bài giảng) — chỉ gắn unitId khi ĐANG scope sẵn vào 1 Bài.
         questions.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
-        await addCustomQuizBatch(chapter.id, questions);
-        customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
+        const createdQuizPdf = await addCustomQuizBatch(chapter.id, questions);
+        customQuizCache = customQuizCache.concat(createdQuizPdf);
         // Báo NGAY mọi cảnh báo gặp phải lúc nạp (thiếu/trùng số câu, trang lỗi...) — giáo viên cần biết
         // ngay chỗ nào phải tự kiểm tra lại, không im lặng bỏ qua rồi chỉ phát hiện đề bị thiếu khi đã trễ.
         const warningHtml = warnings.length
@@ -2380,8 +2382,8 @@
           };
           const { items, totalPages, usedPages, truncated, droppedByFormat } = await recognizeQuizFromPdfClient(await file.arrayBuffer(), onProgress);
           items.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
-          await addCustomQuizBatch(chapter.id, items);
-          customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
+          const createdQuizAi = await addCustomQuizBatch(chapter.id, items);
+          customQuizCache = customQuizCache.concat(createdQuizAi);
 
           const pageWarningHtml = usedPages < totalPages
             ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ File có ${totalPages} trang, AI chỉ xử lý được ${usedPages} trang đầu (giới hạn cấu hình ở Quản trị) — trang sau chưa được nạp.</div>`
@@ -2457,8 +2459,8 @@
         // Xem chú thích ở nhánh nạp PDF trắc nghiệm phía trên — không tự tạo Bài mới, chỉ gắn unitId
         // khi ĐANG scope sẵn vào 1 Bài có sẵn.
         questions.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
-        await addCustomQuizBatch(chapter.id, questions);
-        customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
+        const createdQuizExcel = await addCustomQuizBatch(chapter.id, questions);
+        customQuizCache = customQuizCache.concat(createdQuizExcel);
         box.innerHTML = `<div class="result-box show">✓ Đã nạp ${questions.length} câu hỏi.</div>${quizImportConfirmBtnHtml()}`;
         wireQuizImportConfirmBtn(box);
         rebuildEffectiveQuiz();
