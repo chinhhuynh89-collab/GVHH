@@ -553,13 +553,13 @@
 
       renderTableBody();
       refreshPresence();
-      // Tăng từ 30s lên 60s (giảm nửa tốc độ đọc ngay cả khi đang xem) + BỎ QUA lượt làm mới nào rơi
-      // đúng lúc tab đang ẩn (chuyển sang tab khác/thu nhỏ) — dấu chấm online/offline không cần cập
-      // nhật khi không ai nhìn thấy nó. Bù lại: làm mới NGAY khi tab hiện lại (visibilitychange), để
-      // không phải chờ tới 60s tiếp theo mới thấy đúng trạng thái sau khi quay lại tab.
+      // Tăng từ 30s lên 5 PHÚT (giảm mạnh tốc độ đọc ngay cả khi đang xem) + BỎ QUA lượt làm mới nào
+      // rơi đúng lúc tab đang ẩn (chuyển sang tab khác/thu nhỏ) — dấu chấm online/offline không cần
+      // cập nhật khi không ai nhìn thấy nó. Bù lại: làm mới NGAY khi tab hiện lại (visibilitychange),
+      // để không phải chờ tới 5 phút tiếp theo mới thấy đúng trạng thái sau khi quay lại tab.
       rosterPresenceInterval = setInterval(() => {
         if (!document.hidden) refreshPresence();
-      }, 60000);
+      }, 5 * 60 * 1000);
       rosterVisibilityHandler = () => { if (!document.hidden) refreshPresence(); };
       document.addEventListener('visibilitychange', rosterVisibilityHandler);
 
