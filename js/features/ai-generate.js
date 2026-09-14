@@ -716,6 +716,9 @@ async function generateFromLessonClient(data) {
 // bao nhiêu trang — đánh đổi: nhiều lượt gọi API hơn (chậm hơn 1 chút, tốn nhiều lượt trong trần dùng
 // hơn vì tính phí THEO LƯỢT GỌI THẬT, không phải theo 1 lần bấm nút).
 const AI_QUIZRECOGNIZE_PAGES_PER_CALL = 3;
+// Nghỉ giữa 2 nhóm trang liên tiếp — tránh dồn dập nhiều lượt gọi trong cùng 1 phút, dễ chạm trần TỐC
+// ĐỘ gọi API miễn phí của Google (thường 15-20 lượt/phút cho model mới).
+const AI_QUIZRECOGNIZE_CHUNK_DELAY_MS = 4000;
 
 // ---------- Nhận diện câu hỏi trắc nghiệm từ ẢNH các trang PDF bằng AI — thay cho cách "cắt ảnh"
 // (doc-import.js: extractQuizFromPdf) khi giáo viên muốn có CHỮ THẬT thay vì ảnh: q/options là text
@@ -752,6 +755,12 @@ async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
   const totalChunks = Math.ceil(pageParts.length / AI_QUIZRECOGNIZE_PAGES_PER_CALL);
   for (let c = 0; c < totalChunks; c++) {
     if (typeof onProgress === 'function') onProgress(c + 1, totalChunks);
+
+    // Nghỉ 1 chút GIỮA các nhóm trang (không nghỉ trước nhóm đầu tiên) — gọi liên tiếp gần như ngay lập
+    // tức dễ dồn dập vượt trần TỐC ĐỘ gọi API/PHÚT của Google (đã gặp thật: "Please retry in ~45-60s",
+    // đúng dấu hiệu giới hạn theo phút chứ không phải theo ngày) — dãn cách giúp cả file dài tự nhiên
+    // không bị dồn cục trong cùng 1 phút, thay vì chỉ trông chờ cơ chế thử lại (aiCallProvider) xử lý.
+    if (c > 0) await new Promise((resolve) => setTimeout(resolve, AI_QUIZRECOGNIZE_CHUNK_DELAY_MS));
 
     // Tính lượt dùng cho TỪNG lượt gọi API thật (không phải từng lần bấm nút) — đúng chi phí thật, tránh
     // 1 file dài "né" được trần dùng chỉ vì tính gộp theo lượt bấm. Hết lượt giữa chừng vẫn giữ lại các
