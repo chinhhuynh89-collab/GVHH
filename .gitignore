@@ -1,0 +1,3 @@
+# Cache CLI cục bộ của "firebase deploy"/"firebase hosting:channel:deploy" — không cần đưa lên GitHub,
+# chỉ là dữ liệu tạm trên máy chạy lệnh deploy, tự sinh lại bình thường ở lần deploy kế tiếp.
+.firebase/
