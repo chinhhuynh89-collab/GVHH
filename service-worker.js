@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tro-ly-hoa-hoc-v285';
+const CACHE_NAME = 'tro-ly-hoa-hoc-v286';
 const ASSETS = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const ASSETS = [
   './js/data/chemistry-formulas.js',
   './js/data/reference-tables.js',
   './js/data/organic-nomenclature.js',
+  './js/data/chemistry-dictionary.js',
   './js/features/periodic-table.js',
   './js/features/chemistry-stories.js',
   './js/features/chemistry-formulas.js',
@@ -25,6 +26,7 @@ const ASSETS = [
   './js/features/organic-nomenclature.js',
   './js/features/trivia-game.js',
   './js/features/virtual-experiment.js',
+  './js/features/chemistry-dictionary.js',
   './js/features/calculator.js',
   './js/features/balancer.js',
   './js/features/formula-parser.js',
@@ -79,6 +81,7 @@ const ASSETS = [
   './pages/danh-phap-huu-co.html',
   './pages/do-vui-hoa-hoc.html',
   './pages/thi-nghiem-ao.html',
+  './pages/tu-dien-hoa-hoc.html',
   './pages/hoc-theo-chuong.html',
   './pages/chuong.html',
   './pages/ket-noi-dong-bo.html',

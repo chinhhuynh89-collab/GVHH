@@ -52,6 +52,7 @@ const MONETIZATION_DEFAULTS = {
   lockedFeatures: {
     periodicTable: false, calculator: false, equationBalancer: false,
     chemistryStories: false, formulasLaws: false, referenceTables: false, organicNomenclature: false,
+    chemistryDictionary: false,
     customPrograms: false, examCreator: false, advancedStats: false, aiGenerate: true
   },
   // Giới hạn chi phí tính năng "Tạo bằng AI" — admin chỉnh được ở Quản trị → Cấu hình AI (KHÔNG cần
@@ -86,6 +87,7 @@ const LOCKABLE_FEATURES = [
   { id: 'organicNomenclature', label: 'Danh pháp hữu cơ', audience: 'any' },
   { id: 'triviaGame', label: 'Đố vui Hoá học (trắc nghiệm tốc độ)', audience: 'any' },
   { id: 'virtualExperiment', label: 'Thí nghiệm ảo (trộn hoá chất)', audience: 'any' },
+  { id: 'chemistryDictionary', label: 'Từ điển Hoá học Việt-Anh', audience: 'any' },
   { id: 'customPrograms', label: 'Tạo chương trình giảng dạy riêng (ngoài lớp 6-12 mặc định)', audience: 'teacher' },
   { id: 'examCreator', label: 'Tạo đề kiểm tra tự động', audience: 'teacher' },
   { id: 'advancedStats', label: 'Thống kê điểm theo từng đợt kiểm tra', audience: 'teacher' },
