@@ -132,19 +132,31 @@ function setFreeMode(enabled) {
   localStorage.setItem(FREE_MODE_KEY, enabled ? '1' : '0');
 }
 
-function isChapterUnlocked(chapters, chapterId) {
+// isProgram=true (chương trình riêng do giáo viên tự tạo, xem programs-data.js): MỌI chương đều coi
+// như "có nội dung" bất kể hasContent() nói gì — chương trình riêng KHÔNG có mảng "lessons" tĩnh nào cả
+// (100% nội dung do giáo viên tự thêm qua Firestore), nên hasContent() (chỉ kiểm tra mảng lessons tĩnh
+// của chương trình lớp 6-12 mặc định) LUÔN trả về false cho MỌI chương của MỌI chương trình riêng — nếu
+// không có tham số này, isChapterUnlocked() sẽ hiểu nhầm "chương nào cũng chưa biên soạn" nên KHÔNG BAO
+// GIỜ khoá chương sau, học sinh có thể bỏ qua toàn bộ chương trình riêng mà không cần hoàn thành gì cả
+// (lỗi thực tế đã gặp — xem cùng cách xử lý "data.type === 'program' || hasContent(c)" đã có sẵn ở
+// chapter-overview.js, hàm này giờ khớp lại cho ĐÚNG Y HỆT).
+function isChapterUnlocked(chapters, chapterId, isProgram) {
   if (isFreeMode()) return true;
   const idx = chapters.findIndex((c) => c.id === chapterId);
   if (idx <= 0) return true;
   const prev = chapters[idx - 1];
   // Chương trước chưa có nội dung chi tiết (đang biên soạn) thì không thể "hoàn thành" -> không chặn chương sau.
-  if (!hasContent(prev)) return true;
+  if (!isProgram && !hasContent(prev)) return true;
   return isChapterComplete(prev.id);
 }
 
-// Chỉ tính % trên các chương đã có nội dung chi tiết, tránh việc thêm chương "đang biên soạn" kéo % xuống sai lệch.
-function overallPercent(chapters) {
-  const withContent = chapters.filter(hasContent);
+// Chỉ tính % trên các chương đã có nội dung chi tiết, tránh việc thêm chương "đang biên soạn" kéo % xuống
+// sai lệch — TRỪ chương trình riêng (isProgram=true): coi MỌI chương là "có nội dung" (lý do y hệt
+// isChapterUnlocked ở trên) — thiếu tham số này khiến % tổng của MỌI chương trình riêng LUÔN hiện 0%
+// (mọi chương đều bị lọc bỏ khỏi "withContent" vì hasContent() không biết chương trình riêng không có
+// mảng "lessons" tĩnh) dù học sinh đã hoàn thành 100% — lỗi thực tế đã gặp.
+function overallPercent(chapters, isProgram) {
+  const withContent = isProgram ? chapters : chapters.filter(hasContent);
   if (!withContent.length) return 0;
   const sum = withContent.reduce((s, c) => s + chapterPercent(c.id), 0);
   return Math.round(sum / withContent.length);

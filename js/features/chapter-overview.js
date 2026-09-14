@@ -354,7 +354,7 @@
   function renderOverview(data) {
     const chapters = data.chapters;
     const withContent = chapters.filter((c) => data.type === 'program' || hasContent(c));
-    const percent = overallPercent(chapters);
+    const percent = overallPercent(chapters, data.type === 'program');
     const doneCount = chapters.filter((c) => isChapterComplete(c.id)).length;
     // Dùng ĐÚNG label của tab hiện tại (đã áp dụng gradeLabels nếu giáo viên đổi tên — xem buildTabs)
     // thay vì tự ghép "Hoá học lớp N" cứng — sửa lỗi thực tế: đổi tên "Lớp 7" -> "Lớp 77" ở tab nhưng
@@ -395,7 +395,7 @@
     }
     $('#chapterList').innerHTML = chapters.map((c) => {
       const withContent = data.type === 'program' ? true : hasContent(c);
-      const unlocked = isChapterUnlocked(chapters, c.id);
+      const unlocked = isChapterUnlocked(chapters, c.id, data.type === 'program');
       const percent = withContent ? chapterPercent(c.id) : 0;
       const complete = withContent && isChapterComplete(c.id);
       let badge = '';
