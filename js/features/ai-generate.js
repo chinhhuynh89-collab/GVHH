@@ -586,33 +586,51 @@ async function aiCheckAndIncrementUsage(uid, mode, aiLimits) {
   const monthKey = now.toISOString().slice(0, 7);
   const dayKey = now.toISOString().slice(0, 10);
   const ref = db.collection('aiUsage').doc(uid);
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const data = snap.exists ? snap.data() : {};
-    const monthCount = data.monthKey === monthKey ? (data.count || 0) : 0;
-    const sameDayData = data.dayKey === dayKey;
-    const dayCount = sameDayData ? (data.dailyCount || 0) : 0;
-    const dayByMode = sameDayData ? (data.dailyCountByMode || {}) : {};
-    const modeCount = dayByMode[mode] || 0;
+  // Thử lại vài lần nếu Firestore báo lỗi TẠM THỜI (tranh chấp ghi đồng thời vào CÙNG 1 tài liệu
+  // "aiUsage/{uid}" — VD "Quota exceeded"/aborted do transaction, KHÁC hẳn lỗi "hết lượt dùng" cố ý ở
+  // dưới) — không retry lỗi cố ý (đánh dấu isQuotaCap) vì đó là báo ĐÚNG đã hết lượt, retry vô ích.
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const data = snap.exists ? snap.data() : {};
+        const monthCount = data.monthKey === monthKey ? (data.count || 0) : 0;
+        const sameDayData = data.dayKey === dayKey;
+        const dayCount = sameDayData ? (data.dailyCount || 0) : 0;
+        const dayByMode = sameDayData ? (data.dailyCountByMode || {}) : {};
+        const modeCount = dayByMode[mode] || 0;
 
-    if (monthCount >= aiLimits.monthlyCallCap) {
-      throw new Error(`Đã dùng hết ${aiLimits.monthlyCallCap} lượt tạo bằng AI trong tháng này — thử lại vào tháng sau.`);
-    }
-    if (dayCount >= aiLimits.dailyCallCap) {
-      throw new Error(`Đã dùng hết ${aiLimits.dailyCallCap} lượt tạo bằng AI hôm nay — thử lại vào ngày mai.`);
-    }
-    const modeCap = aiLimits.dailyCapByMode[mode];
-    if (typeof modeCap === 'number' && modeCount >= modeCap) {
-      throw new Error(`Đã dùng hết ${modeCap} lượt tạo ${AI_MODE_LABELS_VI[mode] || mode} hôm nay — thử lại vào ngày mai hoặc chọn loại khác.`);
-    }
+        if (monthCount >= aiLimits.monthlyCallCap) {
+          const err = new Error(`Đã dùng hết ${aiLimits.monthlyCallCap} lượt tạo bằng AI trong tháng này — thử lại vào tháng sau.`);
+          err.isQuotaCap = true;
+          throw err;
+        }
+        if (dayCount >= aiLimits.dailyCallCap) {
+          const err = new Error(`Đã dùng hết ${aiLimits.dailyCallCap} lượt tạo bằng AI hôm nay — thử lại vào ngày mai.`);
+          err.isQuotaCap = true;
+          throw err;
+        }
+        const modeCap = aiLimits.dailyCapByMode[mode];
+        if (typeof modeCap === 'number' && modeCount >= modeCap) {
+          const err = new Error(`Đã dùng hết ${modeCap} lượt tạo ${AI_MODE_LABELS_VI[mode] || mode} hôm nay — thử lại vào ngày mai hoặc chọn loại khác.`);
+          err.isQuotaCap = true;
+          throw err;
+        }
 
-    tx.set(ref, {
-      monthKey, count: monthCount + 1,
-      dayKey, dailyCount: dayCount + 1,
-      dailyCountByMode: Object.assign({}, dayByMode, { [mode]: modeCount + 1 }),
-      updatedAt: now.toISOString()
-    }, { merge: true });
-  });
+        tx.set(ref, {
+          monthKey, count: monthCount + 1,
+          dayKey, dailyCount: dayCount + 1,
+          dailyCountByMode: Object.assign({}, dayByMode, { [mode]: modeCount + 1 }),
+          updatedAt: now.toISOString()
+        }, { merge: true });
+      });
+      return;
+    } catch (err) {
+      if (err.isQuotaCap || attempt === maxAttempts) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    }
+  }
 }
 
 // Đọc nhà cung cấp/model đang chọn (config/aiProvider, công khai đọc) + API key tương ứng
