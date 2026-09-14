@@ -165,27 +165,32 @@ const ELECTRODE_POTENTIALS = [
 ];
 
 // ---------- Bảng nhận biết ion ----------
+// type/color: dùng cho "Thí nghiệm ảo" (virtual-experiment.js) — KHÔNG ảnh hưởng bảng tra cứu hiện có
+// (chỉ hiện ion/reagent/phenomenon, bỏ qua 2 field này). type là 1 trong 4 loại hiện tượng chính:
+// 'ketTua' (kết tủa), 'khi' (khí thoát ra), 'mauNgonLua' (đốt đổi màu ngọn lửa), 'doiMauDungDich' (đổi
+// màu dung dịch/giấy quỳ) — vài ion có NHIỀU hiện tượng cùng lúc, chọn hiện tượng NỔI BẬT/đặc trưng
+// nhất để làm câu hỏi đoán trước, không có nghĩa là hiện tượng DUY NHẤT (xem đủ chi tiết ở "phenomenon").
 const ION_IDENTIFICATION = [
-  { ion: 'Na⁺', reagent: 'Đốt trên ngọn lửa không màu', phenomenon: 'Ngọn lửa nhuộm màu vàng tươi' },
-  { ion: 'K⁺', reagent: 'Đốt trên ngọn lửa không màu', phenomenon: 'Ngọn lửa nhuộm màu tím' },
-  { ion: 'NH₄⁺', reagent: 'Dung dịch NaOH/KOH, đun nhẹ', phenomenon: 'Khí mùi khai (NH₃) bay ra, làm xanh quỳ tím ẩm' },
-  { ion: 'Ba²⁺', reagent: 'Dung dịch H₂SO₄ loãng (hoặc muối tan chứa SO₄²⁻)', phenomenon: 'Kết tủa trắng BaSO₄, không tan trong axit loãng' },
-  { ion: 'Ca²⁺', reagent: 'Dung dịch chứa CO₃²⁻ (VD Na₂CO₃)', phenomenon: 'Kết tủa trắng CaCO₃, tan trong axit mạnh giải phóng khí CO₂' },
-  { ion: 'Al³⁺', reagent: 'Dung dịch kiềm (NaOH/KOH), nhỏ từ từ đến dư', phenomenon: 'Kết tủa keo trắng Al(OH)₃ xuất hiện rồi tan trong kiềm dư (tính lưỡng tính)' },
-  { ion: 'Zn²⁺', reagent: 'Dung dịch kiềm, nhỏ từ từ đến dư', phenomenon: 'Kết tủa trắng Zn(OH)₂ xuất hiện rồi tan trong kiềm dư (tính lưỡng tính)' },
-  { ion: 'Fe²⁺', reagent: 'Dung dịch kiềm (OH⁻)', phenomenon: 'Kết tủa trắng hơi xanh Fe(OH)₂, hoá nâu đỏ ngoài không khí' },
-  { ion: 'Fe³⁺', reagent: 'Dung dịch kiềm (OH⁻); hoặc dung dịch SCN⁻', phenomenon: 'Kết tủa nâu đỏ Fe(OH)₃; hoặc dung dịch chuyển đỏ máu với SCN⁻' },
-  { ion: 'Cu²⁺', reagent: 'Dung dịch NH₃ dư', phenomenon: 'Kết tủa xanh lam Cu(OH)₂ rồi tan trong NH₃ dư, tạo dung dịch xanh lam đậm (phức chất)' },
-  { ion: 'Mg²⁺', reagent: 'Dung dịch kiềm', phenomenon: 'Kết tủa trắng Mg(OH)₂, tan được trong dung dịch muối amoni' },
-  { ion: 'H⁺', reagent: 'Quỳ tím', phenomenon: 'Quỳ tím hoá đỏ' },
-  { ion: 'Cl⁻', reagent: 'Dung dịch AgNO₃', phenomenon: 'Kết tủa trắng AgCl, không tan trong axit, hoá đen ngoài ánh sáng' },
-  { ion: 'Br⁻', reagent: 'Dung dịch AgNO₃', phenomenon: 'Kết tủa vàng nhạt AgBr, hoá đen ngoài ánh sáng' },
-  { ion: 'I⁻', reagent: 'Dung dịch AgNO₃', phenomenon: 'Kết tủa vàng đậm AgI, không tan trong axit' },
-  { ion: 'NO₃⁻', reagent: 'Bột Cu + dung dịch H₂SO₄ loãng, đun nhẹ', phenomenon: 'Dung dịch chuyển xanh (Cu²⁺); khí không màu (NO) hoá nâu (NO₂) ngoài không khí' },
-  { ion: 'SO₄²⁻', reagent: 'Dung dịch BaCl₂ (trong môi trường axit loãng dư)', phenomenon: 'Kết tủa trắng BaSO₄, không tan trong axit loãng' },
-  { ion: 'SO₃²⁻', reagent: 'Dung dịch I₂', phenomenon: 'Làm mất màu nâu đỏ của dung dịch I₂ (SO₃²⁻ bị oxi hoá thành SO₄²⁻)' },
-  { ion: 'S²⁻', reagent: 'Dung dịch Pb(NO₃)₂ (hoặc CuSO₄)', phenomenon: 'Kết tủa đen PbS (hoặc CuS)' },
-  { ion: 'CO₃²⁻ / HCO₃⁻', reagent: 'Dung dịch HCl hoặc H₂SO₄ loãng', phenomenon: 'Sủi bọt khí CO₂ không màu, làm đục nước vôi trong' },
-  { ion: 'PO₄³⁻', reagent: 'Dung dịch AgNO₃', phenomenon: 'Kết tủa vàng Ag₃PO₄' },
-  { ion: 'OH⁻', reagent: 'Quỳ tím / phenolphtalein', phenomenon: 'Quỳ tím hoá xanh; phenolphtalein hoá hồng' }
+  { ion: 'Na⁺', reagent: 'Đốt trên ngọn lửa không màu', phenomenon: 'Ngọn lửa nhuộm màu vàng tươi', type: 'mauNgonLua', color: '#eab308' },
+  { ion: 'K⁺', reagent: 'Đốt trên ngọn lửa không màu', phenomenon: 'Ngọn lửa nhuộm màu tím', type: 'mauNgonLua', color: '#a855f7' },
+  { ion: 'NH₄⁺', reagent: 'Dung dịch NaOH/KOH, đun nhẹ', phenomenon: 'Khí mùi khai (NH₃) bay ra, làm xanh quỳ tím ẩm', type: 'khi', color: '#e2e8f0' },
+  { ion: 'Ba²⁺', reagent: 'Dung dịch H₂SO₄ loãng (hoặc muối tan chứa SO₄²⁻)', phenomenon: 'Kết tủa trắng BaSO₄, không tan trong axit loãng', type: 'ketTua', color: '#f8fafc' },
+  { ion: 'Ca²⁺', reagent: 'Dung dịch chứa CO₃²⁻ (VD Na₂CO₃)', phenomenon: 'Kết tủa trắng CaCO₃, tan trong axit mạnh giải phóng khí CO₂', type: 'ketTua', color: '#f8fafc' },
+  { ion: 'Al³⁺', reagent: 'Dung dịch kiềm (NaOH/KOH), nhỏ từ từ đến dư', phenomenon: 'Kết tủa keo trắng Al(OH)₃ xuất hiện rồi tan trong kiềm dư (tính lưỡng tính)', type: 'ketTua', color: '#f1f5f9' },
+  { ion: 'Zn²⁺', reagent: 'Dung dịch kiềm, nhỏ từ từ đến dư', phenomenon: 'Kết tủa trắng Zn(OH)₂ xuất hiện rồi tan trong kiềm dư (tính lưỡng tính)', type: 'ketTua', color: '#f1f5f9' },
+  { ion: 'Fe²⁺', reagent: 'Dung dịch kiềm (OH⁻)', phenomenon: 'Kết tủa trắng hơi xanh Fe(OH)₂, hoá nâu đỏ ngoài không khí', type: 'ketTua', color: '#5eead4' },
+  { ion: 'Fe³⁺', reagent: 'Dung dịch kiềm (OH⁻); hoặc dung dịch SCN⁻', phenomenon: 'Kết tủa nâu đỏ Fe(OH)₃; hoặc dung dịch chuyển đỏ máu với SCN⁻', type: 'ketTua', color: '#92400e' },
+  { ion: 'Cu²⁺', reagent: 'Dung dịch NH₃ dư', phenomenon: 'Kết tủa xanh lam Cu(OH)₂ rồi tan trong NH₃ dư, tạo dung dịch xanh lam đậm (phức chất)', type: 'doiMauDungDich', color: '#1e3a8a' },
+  { ion: 'Mg²⁺', reagent: 'Dung dịch kiềm', phenomenon: 'Kết tủa trắng Mg(OH)₂, tan được trong dung dịch muối amoni', type: 'ketTua', color: '#f8fafc' },
+  { ion: 'H⁺', reagent: 'Quỳ tím', phenomenon: 'Quỳ tím hoá đỏ', type: 'doiMauDungDich', color: '#ef4444' },
+  { ion: 'Cl⁻', reagent: 'Dung dịch AgNO₃', phenomenon: 'Kết tủa trắng AgCl, không tan trong axit, hoá đen ngoài ánh sáng', type: 'ketTua', color: '#f8fafc' },
+  { ion: 'Br⁻', reagent: 'Dung dịch AgNO₃', phenomenon: 'Kết tủa vàng nhạt AgBr, hoá đen ngoài ánh sáng', type: 'ketTua', color: '#fde68a' },
+  { ion: 'I⁻', reagent: 'Dung dịch AgNO₃', phenomenon: 'Kết tủa vàng đậm AgI, không tan trong axit', type: 'ketTua', color: '#f59e0b' },
+  { ion: 'NO₃⁻', reagent: 'Bột Cu + dung dịch H₂SO₄ loãng, đun nhẹ', phenomenon: 'Dung dịch chuyển xanh (Cu²⁺); khí không màu (NO) hoá nâu (NO₂) ngoài không khí', type: 'khi', color: '#7dd3fc' },
+  { ion: 'SO₄²⁻', reagent: 'Dung dịch BaCl₂ (trong môi trường axit loãng dư)', phenomenon: 'Kết tủa trắng BaSO₄, không tan trong axit loãng', type: 'ketTua', color: '#f8fafc' },
+  { ion: 'SO₃²⁻', reagent: 'Dung dịch I₂', phenomenon: 'Làm mất màu nâu đỏ của dung dịch I₂ (SO₃²⁻ bị oxi hoá thành SO₄²⁻)', type: 'doiMauDungDich', color: '#f8fafc' },
+  { ion: 'S²⁻', reagent: 'Dung dịch Pb(NO₃)₂ (hoặc CuSO₄)', phenomenon: 'Kết tủa đen PbS (hoặc CuS)', type: 'ketTua', color: '#1e293b' },
+  { ion: 'CO₃²⁻ / HCO₃⁻', reagent: 'Dung dịch HCl hoặc H₂SO₄ loãng', phenomenon: 'Sủi bọt khí CO₂ không màu, làm đục nước vôi trong', type: 'khi', color: '#e2e8f0' },
+  { ion: 'PO₄³⁻', reagent: 'Dung dịch AgNO₃', phenomenon: 'Kết tủa vàng Ag₃PO₄', type: 'ketTua', color: '#eab308' },
+  { ion: 'OH⁻', reagent: 'Quỳ tím / phenolphtalein', phenomenon: 'Quỳ tím hoá xanh; phenolphtalein hoá hồng', type: 'doiMauDungDich', color: '#f472b6' }
 ];

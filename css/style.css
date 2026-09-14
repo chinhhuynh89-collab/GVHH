@@ -1126,6 +1126,24 @@ input.quiz-option { cursor: text; }
 /* Đồng hồ CẢ LƯỢT chơi (2 phút, #triviaGameTime) — đổi màu cảnh báo khi sắp hết giờ, khác hẳn màu chữ
    thường của .trivia-topbar để dễ nhận ra ngay cả khi đang tập trung đọc câu hỏi. */
 #triviaGameTime.is-low { color: var(--danger); }
+/* "Thí nghiệm ảo" (virtual-experiment.js) — ống nghiệm CSS thuần (không canvas/engine đồ hoạ), đổi màu
+   "chất lỏng" theo đúng màu hiện tượng thật (kết tủa/đổi màu dung dịch), thêm bong bóng nổi cho hiệu
+   ứng "có khí thoát ra" và quầng lửa màu cho hiệu ứng "đốt đổi màu ngọn lửa". */
+.experiment-tube-wrap { display: flex; justify-content: center; align-items: flex-end; height: 170px; position: relative; margin: 16px 0; }
+.experiment-tube { width: 64px; height: 128px; border: 3px solid var(--border); border-top: none; border-radius: 0 0 18px 18px; overflow: hidden; position: relative; background: rgba(255, 255, 255, 0.03); }
+.experiment-liquid { position: absolute; bottom: 0; left: 0; right: 0; height: 68%; transition: background-color 0.6s ease; }
+.experiment-flame {
+  width: 34px; height: 46px; position: absolute; top: -32px; left: 50%; margin-left: -17px;
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  filter: blur(1.5px); opacity: 0.85; transition: background-color 0.6s ease;
+  animation: experimentFlameFlicker 0.9s ease-in-out infinite alternate;
+}
+@keyframes experimentFlameFlicker { from { transform: scale(1, 1); } to { transform: scale(0.92, 1.12); } }
+.bubble { position: absolute; bottom: 2px; width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.75); animation: experimentBubbleRise 1.5s ease-in infinite; }
+.bubble:nth-child(1) { left: 18%; animation-delay: 0s; }
+.bubble:nth-child(2) { left: 48%; animation-delay: 0.5s; }
+.bubble:nth-child(3) { left: 74%; animation-delay: 1s; }
+@keyframes experimentBubbleRise { from { bottom: 2px; opacity: 1; } to { bottom: 100%; opacity: 0; } }
 .trivia-question { font-size: calc(17px * var(--font-scale)); font-weight: 700; margin: 0 0 16px; }
 .trivia-feedback { text-align: center; font-weight: 700; margin-top: 12px; padding: 10px; border-radius: 8px; }
 .trivia-feedback.ok { background: rgba(52, 211, 153, 0.15); color: var(--ok); }
