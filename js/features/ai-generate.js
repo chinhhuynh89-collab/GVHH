@@ -749,9 +749,9 @@ const AI_QUIZRECOGNIZE_CHUNK_DELAY_MS = 8000;
 // được cả câu lẫn đáp án khi thi) — đánh đổi là độ chính xác phụ thuộc khả năng AI đọc ảnh, không còn
 // đảm bảo 100% pixel như cắt ảnh. Được giữ SONG SONG với cắt ảnh (không thay thế) — giáo viên tự chọn
 // cách nào cho từng file (xem chapter-detail.js). Trả về { items, totalPages, usedPages, truncated,
-// quotaExceeded } — usedPages < totalPages nghĩa là file dài hơn giới hạn, chỉ xử lý được usedPages
-// trang đầu; quotaExceeded=true nghĩa là hết lượt dùng AI giữa chừng (vẫn trả về phần đã xử lý được).
-// onProgress(chunkIndex, totalChunks) tuỳ chọn — báo tiến độ cho UI khi đề dài nhiều nhóm trang. ----------
+// rawCount, droppedByFormat } — usedPages < totalPages nghĩa là file dài hơn giới hạn, chỉ xử lý được
+// usedPages trang đầu. onProgress(chunkIndex, totalChunks) tuỳ chọn — báo tiến độ cho UI khi đề dài
+// nhiều nhóm trang. ----------
 async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
   const teacher = getCurrentTeacher();
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
@@ -771,10 +771,15 @@ async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
     throw new Error(`Chưa cấu hình API key cho nhà cung cấp AI "${provider}" — báo admin vào trang Quản trị → Cấu hình AI để dán key.`);
   }
 
+  // Tính CHUNG 1 lượt dùng cho cả file (không phải 1 lượt/nhóm trang) — trước đây đếm riêng từng nhóm
+  // để khớp đúng chi phí API thật, nhưng cách đó bắt "aiUsage/{uid}" (1 tài liệu DUY NHẤT) chịu nhiều
+  // giao dịch ghi liên tiếp trong thời gian ngắn với file nhiều trang, dễ gây tranh chấp ghi
+  // (contention) — đúng nguyên nhân lỗi "Quota exceeded." gặp thực tế dù đã thêm cơ chế thử lại. Đếm 1
+  // lần/file vừa giảm hẳn rủi ro này, vừa đơn giản hơn (không cần theo dõi quotaExceeded giữa chừng).
+  await aiCheckAndIncrementUsage(teacher.uid, 'quizrecognize', aiLimits);
+
   const allItems = [];
   let anyTruncated = false;
-  let quotaExceeded = false;
-  let quotaError = null;
   const totalChunks = Math.ceil(pageParts.length / AI_QUIZRECOGNIZE_PAGES_PER_CALL);
   for (let c = 0; c < totalChunks; c++) {
     if (typeof onProgress === 'function') onProgress(c + 1, totalChunks);
@@ -784,17 +789,6 @@ async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
     // đúng dấu hiệu giới hạn theo phút chứ không phải theo ngày) — dãn cách giúp cả file dài tự nhiên
     // không bị dồn cục trong cùng 1 phút, thay vì chỉ trông chờ cơ chế thử lại (aiCallProvider) xử lý.
     if (c > 0) await new Promise((resolve) => setTimeout(resolve, AI_QUIZRECOGNIZE_CHUNK_DELAY_MS));
-
-    // Tính lượt dùng cho TỪNG lượt gọi API thật (không phải từng lần bấm nút) — đúng chi phí thật, tránh
-    // 1 file dài "né" được trần dùng chỉ vì tính gộp theo lượt bấm. Hết lượt giữa chừng vẫn giữ lại các
-    // câu đã nhận diện được ở các nhóm trang TRƯỚC đó thay vì mất trắng.
-    try {
-      await aiCheckAndIncrementUsage(teacher.uid, 'quizrecognize', aiLimits);
-    } catch (err) {
-      quotaExceeded = true;
-      quotaError = err;
-      break;
-    }
 
     const chunkStart = c * AI_QUIZRECOGNIZE_PAGES_PER_CALL;
     const chunkParts = pageParts.slice(chunkStart, chunkStart + AI_QUIZRECOGNIZE_PAGES_PER_CALL);
@@ -815,10 +809,7 @@ async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
     }
   }
 
-  if (!allItems.length) {
-    if (quotaExceeded && quotaError) throw quotaError;
-    throw new Error('AI không nhận diện được câu hỏi nào trong file này.');
-  }
+  if (!allItems.length) throw new Error('AI không nhận diện được câu hỏi nào trong file này.');
 
   const items = aiNormalizeItems('quizrecognize', allItems);
   if (!items.length) throw new Error('AI trả về kết quả không đúng định dạng, thử lại.');
@@ -826,5 +817,5 @@ async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
   // (VD field "correct" không hợp lệ) — khác với AI không trả về câu đó ngay từ đầu. Phân biệt 2
   // trường hợp này giúp chẩn đoán đúng chỗ khi giáo viên báo "thiếu câu" mà không có lỗi/cảnh báo nào.
   const droppedByFormat = allItems.length - items.length;
-  return { items, totalPages, usedPages, truncated: anyTruncated, quotaExceeded, rawCount: allItems.length, droppedByFormat };
+  return { items, totalPages, usedPages, truncated: anyTruncated, rawCount: allItems.length, droppedByFormat };
 }

@@ -2378,7 +2378,7 @@
           const onProgress = (chunkIndex, totalChunks) => {
             box.innerHTML = `<div class="result-box show">⏳ AI đang đọc trang... (nhóm ${chunkIndex}/${totalChunks})</div>`;
           };
-          const { items, totalPages, usedPages, truncated, quotaExceeded, droppedByFormat } = await recognizeQuizFromPdfClient(await file.arrayBuffer(), onProgress);
+          const { items, totalPages, usedPages, truncated, droppedByFormat } = await recognizeQuizFromPdfClient(await file.arrayBuffer(), onProgress);
           items.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
           await addCustomQuizBatch(chapter.id, items);
           customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
@@ -2388,9 +2388,6 @@
             : '';
           const truncatedHtml = truncated
             ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ Phản hồi AI bị cắt cụt ở 1 vài nhóm trang — chỉ cứu lại được các câu ĐÃ HOÀN CHỈNH ở nhóm đó, có thể vẫn thiếu vài câu. Kiểm tra lại số câu, nạp lại file nếu cần.</div>`
-            : '';
-          const quotaExceededHtml = quotaExceeded
-            ? `<div class="result-box show error" style="margin-bottom:8px;"><strong>⚠️ Đã hết lượt dùng AI giữa chừng</strong> — chỉ xử lý được 1 phần file này. Đã nạp phần đã xử lý, thử lại phần còn thiếu vào ngày/tháng sau (xem trần dùng ở Quản trị).</div>`
             : '';
           // Chẩn đoán: AI trả về "rawCount" câu nhưng chỉ items.length câu qua được kiểm tra định dạng
           // (VD field "correct" không hợp lệ) — khác hẳn AI không thấy/không trả câu đó ngay từ đầu.
@@ -2406,7 +2403,6 @@
             : '';
           box.innerHTML = `
             ${pageWarningHtml}
-            ${quotaExceededHtml}
             ${truncatedHtml}
             ${droppedByFormatHtml}
             ${unverifiedHtml}
@@ -2437,7 +2433,11 @@
           renderQuizManager();
           renderQuiz();
         } catch (err) {
-          box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(err.message)}</div>`;
+          // Hiện thêm "err.code" nếu có (VD lỗi Firestore SDK có code "resource-exhausted") — giúp phân
+          // biệt lỗi ĐẾM LƯỢT DÙNG (Firestore) với lỗi GỌI AI (Gemini/Claude) khi debug, thay vì chỉ có
+          // 1 câu message chung chung không rõ nguồn gốc.
+          const codeNote = err.code ? ` (mã lỗi: ${escapeHtml(err.code)})` : '';
+          box.innerHTML = `<div class="result-box show error">⚠️ ${escapeHtml(err.message)}${codeNote}</div>`;
         }
       });
     }
