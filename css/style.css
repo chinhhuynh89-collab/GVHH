@@ -744,9 +744,11 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .formula-note { margin-top: 0; }
 
 /* ---------- Từ điển Hoá học Việt-Anh (chemistry-dictionary.js) — danh sách dạng hàng thay vì thẻ,
-   vì mỗi mục chỉ có 2 dòng chữ ngắn (Việt/Anh), dùng thẻ card riêng cho từng mục sẽ quá rời rạc. */
-.dict-row { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+   vì mỗi mục chỉ có 2 dòng chữ ngắn (Việt/Anh), dùng thẻ card riêng cho từng mục sẽ quá rời rạc. Mỗi
+   hàng là 1 link mở Wikipedia tiếng Việt (giải thích chi tiết hơn) nên cần reset style link mặc định. */
+.dict-row { display: block; padding: 12px 14px; border-bottom: 1px solid var(--border); color: inherit; }
 .dict-row:last-child { border-bottom: none; }
+.dict-row:active { background: var(--surface-2); }
 .dict-row-vi { font-weight: 700; font-size: 14.5px; }
 .dict-row-en { color: var(--brand-dark); font-size: 13.5px; margin-top: 2px; }
 .dict-row-cat { color: var(--text-faint); font-size: 11px; margin-top: 4px; }

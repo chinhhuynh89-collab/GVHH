@@ -19,6 +19,16 @@
     return DICTIONARY_CATEGORIES.find((c) => c.id === catId);
   }
 
+  // Nhấp vào 1 từ -> mở trang tìm kiếm Wikipedia tiếng Việt ở tab mới. Dùng "Special:Search?go=Go"
+  // (tự nhảy thẳng vào bài viết khớp nhất, hoặc hiện danh sách kết quả nếu không có bài khớp tuyệt đối)
+  // thay vì đoán thẳng URL bài viết (vi.wikipedia.org/wiki/<Tên>) — nhiều nhãn tiếng Việt trong từ điển
+  // này có phần chú thích trong ngoặc (VD "Cation (ion dương)") không khớp tên bài viết thật, đoán sai
+  // sẽ ra trang "không tồn tại". Bỏ phần ngoặc trước khi tìm để tăng khả năng khớp đúng bài.
+  function wikiSearchUrl(viLabel) {
+    const term = viLabel.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    return 'https://vi.wikipedia.org/wiki/Special:Search?go=Go&search=' + encodeURIComponent(term);
+  }
+
   function renderChips(activeCategory) {
     const chips = [{ id: 'all', icon: '📚', label: 'Tất cả' }].concat(DICTIONARY_CATEGORIES);
     chipsBox.innerHTML = chips.map((c) => `
@@ -52,11 +62,11 @@
         ${items.map((d) => {
           const cat = categoryInfo(d.category);
           return `
-            <div class="dict-row">
+            <a class="dict-row" href="${wikiSearchUrl(d.vi)}" target="_blank" rel="noopener">
               <div class="dict-row-vi">${escapeHtml(d.vi)}</div>
               <div class="dict-row-en">${escapeHtml(d.en)}</div>
-              ${cat ? `<div class="dict-row-cat">${cat.icon} ${escapeHtml(cat.label)}</div>` : ''}
-            </div>
+              ${cat ? `<div class="dict-row-cat">${cat.icon} ${escapeHtml(cat.label)} · Xem trên Wikipedia ↗</div>` : ''}
+            </a>
           `;
         }).join('')}
       </div>
