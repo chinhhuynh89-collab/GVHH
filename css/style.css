@@ -1096,6 +1096,10 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   font-size: calc(15px * var(--font-scale));
   cursor: pointer;
   text-align: left;
+  /* <button> KHÔNG tự kế thừa màu chữ từ body như thẻ thường (trình duyệt luôn có màu chữ mặc định
+     riêng cho control, thường là đen) — thiếu dòng này khiến chữ đen chìm vào nền tối var(--bg-soft),
+     gần như không đọc được. */
+  color: var(--text);
 }
 .quiz-option:active { background: var(--surface-2); }
 .quiz-option.selected { border-color: var(--brand); background: rgba(20, 184, 166, 0.12); }
