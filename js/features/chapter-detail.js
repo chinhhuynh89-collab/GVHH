@@ -2420,15 +2420,23 @@
             list.style.display = show ? 'block' : 'none';
             if (show && !list.dataset.rendered) {
               list.dataset.rendered = '1';
-              list.innerHTML = items.map((q) => `
+              // Từ khi hỗ trợ nhận diện cả 3 dạng câu (ABCD/Đúng-Sai/Trả lời ngắn — không chỉ ABCD như
+              // trước), KHÔNG được giả định "q.options" luôn tồn tại (dạng "text" không có) — dùng
+              // getQuestionType/formatCorrectAnswerDisplay/QUIZ_TYPE_LABELS dùng chung (quiz-common.js)
+              // thay vì tự vẽ danh sách 4 phương án cứng như trước.
+              list.innerHTML = items.map((q) => {
+                const qType = getQuestionType(q);
+                const answerHtml = qType === 'abcd'
+                  ? `<ul style="margin:0;padding-left:20px;">${q.options.map((opt, i) => `<li style="${i === q.correct ? 'font-weight:700;color:var(--brand);' : ''}">${escapeHtml(opt)}${i === q.correct ? ' ✓' : ''}</li>`).join('')}</ul>`
+                  : `<div class="hint">[${QUIZ_TYPE_LABELS[qType]}] Đúng: ${escapeHtml(formatCorrectAnswerDisplay(q))}</div>`;
+                return `
                 <div class="lesson-block" style="margin-bottom:10px;">
                   ${q.aiUnverifiedCorrect ? '<div class="hint" style="color:var(--danger, #c0392b);">⚠️ Đáp án do AI tự giải — rà lại</div>' : ''}
                   <h3 style="margin-bottom:8px;">${escapeHtml(q.q)}</h3>
-                  <ul style="margin:0;padding-left:20px;">
-                    ${q.options.map((opt, i) => `<li style="${i === q.correct ? 'font-weight:700;color:var(--brand);' : ''}">${escapeHtml(opt)}${i === q.correct ? ' ✓' : ''}</li>`).join('')}
-                  </ul>
+                  ${answerHtml}
                 </div>
-              `).join('');
+              `;
+              }).join('');
             }
           });
           rebuildEffectiveQuiz();

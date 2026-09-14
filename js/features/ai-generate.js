@@ -94,14 +94,28 @@ function aiBuildSystemPrompt(mode, params) {
   if (mode === 'quizrecognize') {
     return `${AI_PERSONA_PREFIX}
 
-Nhiệm vụ: đây là ảnh chụp các trang của 1 ĐỀ THI TRẮC NGHIỆM ${AI_SUBJECT_NAME} có sẵn (không phải bài giảng) — nhiệm vụ của bạn là TRÍCH XUẤT CHÍNH XÁC từng câu hỏi trắc nghiệm 4 đáp án có trong đề, tuyệt đối KHÔNG tự sáng tác câu hỏi mới, KHÔNG sửa/rút gọn/diễn giải lại nội dung.
+Nhiệm vụ: đây là ảnh chụp các trang của 1 ĐỀ THI/PHIẾU BÀI TẬP TRẮC NGHIỆM ${AI_SUBJECT_NAME} có sẵn (không phải bài giảng) — nhiệm vụ của bạn là TRÍCH XUẤT CHÍNH XÁC từng câu hỏi có trong đề, tuyệt đối KHÔNG tự sáng tác câu hỏi mới, KHÔNG sửa/rút gọn/diễn giải lại nội dung. Đề có thể gồm CẢ 3 dạng câu hỏi khác nhau (đúng cấu trúc đề thi GDPT 2018) — PHẢI tự nhận diện đúng dạng của TỪNG câu qua field "type":
 
-Yêu cầu bắt buộc:
-1. Chép lại NGUYÊN VĂN đề bài và 4 phương án A/B/C/D của MỖI câu hỏi tìm thấy trong ảnh — giữ đúng 100% số liệu, công thức hoá học (ký hiệu, chỉ số trên/dưới, mũi tên phản ứng, đơn vị đo...), không bỏ sót câu nào, không đổi thứ tự các phương án.
-2. QUAN TRỌNG — trước khi tự giải bất kỳ câu nào, PHẢI so sánh KỸ 4 phương án A/B/C/D với nhau để tìm dấu hiệu giáo viên đã tự đánh dấu đáp án đúng sẵn trong file gốc. Dấu hiệu có thể RẤT TINH TẾ, gồm (không giới hạn): màu nền/màu chữ khác biệt (dù chỉ khác nhẹ so với 3 phương án còn lại), chữ in đậm/in nghiêng khác biệt, gạch chân, khoanh tròn/đóng khung quanh 1 phương án, hoặc ký hiệu đi kèm như "(*)", "✓", "X", "→" ngay trước/sau 1 phương án. Nếu thấy BẤT KỲ dấu hiệu nào như vậy — dù nhỏ — field "correct" PHẢI lấy đúng theo phương án đó, field "correctSource" = "highlight".
-3. CHỈ khi đã so sánh kỹ cả 4 phương án và chắc chắn KHÔNG có bất kỳ dấu hiệu khác biệt nào giữa chúng — mới tự giải bài toán/câu hỏi hoá học đó bằng kiến thức chuyên môn để xác định đáp án đúng nhất, field "correctSource" = "solved".
-4. Field "explain" PHẢI viết THẬT NGẮN (tối đa 1 câu, khoảng 10-15 từ) — chỉ nêu lý do cốt lõi, không viết dài dòng, để dành ngân sách phản hồi xử lý được NHIỀU câu hỏi hơn trong 1 lượt (đề dài có thể tới 40-50 câu).
-5. CHỈ trích các câu trắc nghiệm có ĐỦ 4 phương án A/B/C/D — bỏ qua câu tự luận, câu điền khuyết, trang bìa/trang trắng không có câu hỏi nào.`;
+DẠNG 1 — "type": "abcd" — trắc nghiệm nhiều phương án, có ĐỦ 4 phương án A/B/C/D:
+   - "options": chép NGUYÊN VĂN đúng 4 phương án, giữ đúng thứ tự, không đổi.
+   - "correct": chỉ số 0-3 của phương án đúng (0=A, 1=B, 2=C, 3=D).
+
+DẠNG 2 — "type": "truefalse" — câu Đúng/Sai: 1 đề bài chung kèm nhiều mệnh đề con đánh dấu (a), (b), (c), (d), MỖI mệnh đề tự đúng/sai riêng, KHÔNG có phương án A/B/C/D:
+   - TÁCH mỗi mệnh đề con thành 1 MỤC ĐỘC LẬP riêng trong mảng kết quả (1 câu có 4 mệnh đề a/b/c/d thì trả về 4 mục riêng biệt, không gộp chung).
+   - "q": PHẢI ghép ĐỦ ngữ cảnh đề bài chung vào trước nội dung mệnh đề con thành 1 câu hoàn chỉnh tự đứng riêng vẫn hiểu được, theo mẫu: "<tóm tắt/nguyên văn đề bài chung>. Nhận định: <nguyên văn mệnh đề con>" — vì tách riêng khỏi đề bài chung mà không ghép lại sẽ mất hết ngữ cảnh.
+   - "correct": 0 nếu mệnh đề ĐÚNG, 1 nếu mệnh đề SAI.
+   - "options" bỏ trống (không cần điền, hệ thống tự gán "Đúng"/"Sai").
+
+DẠNG 3 — "type": "text" — trắc nghiệm trả lời ngắn: học sinh tự tính ra 1 đáp số, KHÔNG có phương án nào cho sẵn:
+   - "q": chép nguyên văn câu hỏi/đề bài.
+   - "acceptedAnswers": đáp số đúng bạn TỰ TÍNH ra (chỉ kết quả cuối cùng, đúng định dạng làm tròn nếu đề có yêu cầu); nếu có nhiều cách viết tương đương hợp lý thì phân tách bằng dấu "|".
+
+Yêu cầu bắt buộc (áp dụng CHUNG cho cả 3 dạng):
+1. Giữ đúng 100% số liệu, công thức hoá học (ký hiệu, chỉ số trên/dưới, mũi tên phản ứng, đơn vị đo...), không bỏ sót câu/mệnh đề nào.
+2. QUAN TRỌNG — với DẠNG 1, trước khi tự giải, PHẢI so sánh KỸ 4 phương án A/B/C/D với nhau để tìm dấu hiệu giáo viên đã tự đánh dấu đáp án đúng sẵn trong file gốc. Dấu hiệu có thể RẤT TINH TẾ, gồm (không giới hạn): màu nền/màu chữ khác biệt (dù chỉ khác nhẹ so với 3 phương án còn lại), chữ in đậm/in nghiêng khác biệt, gạch chân, khoanh tròn/đóng khung quanh 1 phương án, hoặc ký hiệu đi kèm như "(*)", "✓", "X", "→" ngay trước/sau 1 phương án. Với DẠNG 2/3, cũng áp dụng đúng nguyên tắc này nếu file có ghi sẵn đáp án tương tự (VD tô đậm mệnh đề đúng, viết sẵn đáp số). Nếu thấy BẤT KỲ dấu hiệu nào như vậy — dù nhỏ — field "correct"/"acceptedAnswers" PHẢI lấy đúng theo đó, field "correctSource" = "highlight".
+3. CHỈ khi đã kiểm tra kỹ và chắc chắn KHÔNG có dấu hiệu đáp án tô sẵn nào — mới tự giải bằng kiến thức chuyên môn để xác định đáp án đúng nhất, field "correctSource" = "solved". DẠNG 3 (trả lời ngắn) hầu như LUÔN thuộc trường hợp này vì bản chất đề trả lời ngắn hiếm khi có đáp án tô sẵn.
+4. Field "explain" PHẢI viết THẬT NGẮN (tối đa 1 câu, khoảng 10-15 từ) — chỉ nêu lý do cốt lõi, không viết dài dòng, để dành ngân sách phản hồi xử lý được NHIỀU câu hỏi hơn trong 1 lượt (đề dài có thể tới 40-50 câu, DẠNG 2 tách nhỏ còn nhiều mục hơn nữa).
+5. Bỏ qua trang bìa/trang trắng không có câu hỏi nào, bỏ qua câu tự luận yêu cầu trình bày lời giải nhiều bước dài dòng (không thuộc 3 dạng trên).`;
   }
   if (mode === 'quiz' || mode === 'essay' || mode === 'truefalse') {
     const total = aiSumLevels(params.levels);
@@ -157,16 +171,21 @@ Yêu cầu bắt buộc để giáo án TÍCH HỢP THẬT SỰ nội dung bài 
 // chuẩn (chữ thường) qua cơ chế "tool use". ----------
 function aiGeminiSchema(mode) {
   if (mode === 'quizrecognize') {
+    // "options"/"correct"/"acceptedAnswers" CHỈ bắt buộc CÓ Ý NGHĨA tuỳ theo "type" (xem prompt) — khai
+    // báo tất cả đều optional ở tầng schema (không ép required cả 3 field cho mọi loại câu), việc kiểm
+    // tra đúng-đủ-theo-từng-type thật sự nằm ở aiNormalizeItems (loại bỏ mục nào không hợp lệ).
     const props = {
+      type: { type: 'STRING', enum: ['abcd', 'truefalse', 'text'] },
       q: { type: 'STRING' },
       options: { type: 'ARRAY', items: { type: 'STRING' } },
       correct: { type: 'INTEGER' },
+      acceptedAnswers: { type: 'STRING' },
       correctSource: { type: 'STRING', enum: ['highlight', 'solved'] },
       explain: { type: 'STRING' }
     };
     return {
       type: 'OBJECT',
-      properties: { questions: { type: 'ARRAY', items: { type: 'OBJECT', properties: props, required: Object.keys(props) } } },
+      properties: { questions: { type: 'ARRAY', items: { type: 'OBJECT', properties: props, required: ['type', 'q', 'correctSource', 'explain'] } } },
       required: ['questions']
     };
   }
@@ -252,7 +271,7 @@ function aiClaudeTool(mode) {
   if (mode === 'quizrecognize') {
     return {
       name: 'return_recognized_quiz_questions',
-      description: 'Trả về danh sách câu hỏi trắc nghiệm đã nhận diện chính xác từ ảnh đề thi.',
+      description: 'Trả về danh sách câu hỏi đã nhận diện chính xác từ ảnh đề thi (3 dạng: abcd/truefalse/text).',
       input_schema: {
         type: 'object',
         properties: {
@@ -261,13 +280,15 @@ function aiClaudeTool(mode) {
             items: {
               type: 'object',
               properties: {
+                type: { type: 'string', enum: ['abcd', 'truefalse', 'text'] },
                 q: { type: 'string' },
-                options: { type: 'array', items: { type: 'string' }, minItems: 4, maxItems: 4 },
+                options: { type: 'array', items: { type: 'string' } },
                 correct: { type: 'integer' },
+                acceptedAnswers: { type: 'string' },
                 correctSource: { type: 'string', enum: ['highlight', 'solved'] },
                 explain: { type: 'string' }
               },
-              required: ['q', 'options', 'correct', 'correctSource', 'explain']
+              required: ['type', 'q', 'correctSource', 'explain']
             }
           }
         },
@@ -519,19 +540,47 @@ function aiNormalizeItems(mode, rawItems) {
   if (mode === 'quizrecognize') {
     return rawItems
       .map((it) => {
-        if (!it || typeof it.q !== 'string' || !Array.isArray(it.options) || it.options.length !== 4) return null;
-        let correct = it.correct;
-        // Phòng trường hợp AI trả chữ cái ("C") hoặc chuỗi số ("2") thay vì đúng số nguyên cho field
-        // "correct" — từng nghi ngờ đây là lý do câu có đáp án tô sẵn bị lọc mất (không khớp
-        // Number.isInteger) trong khi câu AI tự giải (tự nhiên ra đúng số nguyên) vẫn qua được.
-        if (typeof correct === 'string') {
-          const letterIdx = 'ABCD'.indexOf(correct.trim().toUpperCase());
-          correct = letterIdx !== -1 ? letterIdx : parseInt(correct, 10);
+        if (!it || typeof it.q !== 'string' || !it.q.trim()) return null;
+        // Field "type" do AI tự gán (xem prompt) — mặc định "abcd" nếu thiếu/lạ, để tương thích ngược
+        // với các lượt gọi CŨ (trước khi hỗ trợ đa dạng câu hỏi) chỉ từng trả đúng dạng abcd.
+        const rawType = it.type === 'truefalse' || it.type === 'text' ? it.type : 'abcd';
+
+        if (rawType === 'abcd') {
+          if (!Array.isArray(it.options) || it.options.length !== 4) return null;
+          let correct = it.correct;
+          // Phòng trường hợp AI trả chữ cái ("C") hoặc chuỗi số ("2") thay vì đúng số nguyên cho field
+          // "correct" — từng nghi ngờ đây là lý do câu có đáp án tô sẵn bị lọc mất (không khớp
+          // Number.isInteger) trong khi câu AI tự giải (tự nhiên ra đúng số nguyên) vẫn qua được.
+          if (typeof correct === 'string') {
+            const letterIdx = 'ABCD'.indexOf(correct.trim().toUpperCase());
+            correct = letterIdx !== -1 ? letterIdx : parseInt(correct, 10);
+          }
+          if (!Number.isInteger(correct) || correct < 0 || correct > 3) return null;
+          const q = { q: it.q, type: 'abcd', options: it.options, correct, explain: typeof it.explain === 'string' ? it.explain : '' };
+          if (it.correctSource === 'solved') q.aiUnverifiedCorrect = true;
+          return q;
         }
-        if (!Number.isInteger(correct) || correct < 0 || correct > 3) return null;
-        const q = { q: it.q, type: 'abcd', options: it.options, correct, explain: typeof it.explain === 'string' ? it.explain : '' };
-        // "solved" = AI tự giải để chọn đáp án (đề không có tô màu sẵn) — đánh dấu để giáo viên rà lại,
-        // khác "highlight" (đọc đúng theo màu tô sẵn trong file gốc, tin cậy như cách cắt ảnh cũ).
+
+        if (rawType === 'truefalse') {
+          let correct = it.correct;
+          // Cùng lý do phòng ngừa như "abcd" ở trên — AI có thể trả "Đúng"/"Sai"/"true"/"0" thay vì số
+          // nguyên thuần, chấp nhận thêm vài biến thể chữ thường gặp trước khi loại bỏ hẳn.
+          if (typeof correct === 'string') {
+            const norm = correct.trim().toLowerCase();
+            correct = (norm === 'đúng' || norm === 'dung' || norm === 'true' || norm === '0') ? 0
+              : (norm === 'sai' || norm === 'false' || norm === '1') ? 1
+              : parseInt(correct, 10);
+          }
+          if (!Number.isInteger(correct) || (correct !== 0 && correct !== 1)) return null;
+          const q = { q: it.q, type: 'truefalse', options: ['Đúng', 'Sai'], correct, explain: typeof it.explain === 'string' ? it.explain : '' };
+          if (it.correctSource === 'solved') q.aiUnverifiedCorrect = true;
+          return q;
+        }
+
+        // rawType === 'text' (trắc nghiệm trả lời ngắn)
+        const acceptedAnswers = typeof it.acceptedAnswers === 'string' ? it.acceptedAnswers.trim() : '';
+        if (!acceptedAnswers) return null;
+        const q = { q: it.q, type: 'text', acceptedAnswers, explain: typeof it.explain === 'string' ? it.explain : '' };
         if (it.correctSource === 'solved') q.aiUnverifiedCorrect = true;
         return q;
       })
@@ -780,6 +829,14 @@ async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
 
   const allItems = [];
   let anyTruncated = false;
+  // Lọc trùng câu hỏi do CHỒNG LẤN trang giữa 2 nhóm liên tiếp (xem giải thích "chunkStart" bên dưới) —
+  // so khớp theo "q" đã chuẩn hoá khoảng trắng/hoa-thường, đủ để bắt các bản sao Y HỆT NHAU (AI đọc lại
+  // đúng cùng 1 trang ảnh 2 lần sẽ ra chữ giống nhau), không ảnh hưởng câu khác nhau dù nội dung gần
+  // giống (VD 2 câu cùng hỏi về Kc nhưng số liệu khác nhau vẫn được giữ cả 2 vì text khác nhau).
+  const seenQuestionText = new Set();
+  function normalizeForDedup(s) {
+    return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
   const totalChunks = Math.ceil(pageParts.length / AI_QUIZRECOGNIZE_PAGES_PER_CALL);
   for (let c = 0; c < totalChunks; c++) {
     if (typeof onProgress === 'function') onProgress(c + 1, totalChunks);
@@ -790,8 +847,16 @@ async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
     // không bị dồn cục trong cùng 1 phút, thay vì chỉ trông chờ cơ chế thử lại (aiCallProvider) xử lý.
     if (c > 0) await new Promise((resolve) => setTimeout(resolve, AI_QUIZRECOGNIZE_CHUNK_DELAY_MS));
 
-    const chunkStart = c * AI_QUIZRECOGNIZE_PAGES_PER_CALL;
-    const chunkParts = pageParts.slice(chunkStart, chunkStart + AI_QUIZRECOGNIZE_PAGES_PER_CALL);
+    const newStart = c * AI_QUIZRECOGNIZE_PAGES_PER_CALL;
+    // Từ nhóm thứ 2 trở đi, LẶP LẠI trang CUỐI của nhóm liền trước làm trang ĐẦU của nhóm này — 1 câu
+    // hỏi in tràn đúng ranh giới 2 nhóm (VD 4 phương án A/B nằm cuối trang này, C/D đầu trang kế tiếp)
+    // trước đây rơi vào "khe hở" giữa 2 nhóm, KHÔNG nhóm nào nhìn thấy đủ cả 4 phương án nên bị bỏ sót ở
+    // cả hai (đã gặp thật, xem giải thích với giáo viên). Chồng lấn 1 trang đảm bảo luôn có ÍT NHẤT 1
+    // nhóm nhìn thấy trọn vẹn câu đó. Không tăng số LƯỢT GỌI API (vẫn đúng "totalChunks" như cũ, không
+    // ảnh hưởng trần tốc độ/phút) — chỉ nhóm sau nhóm đầu có thêm 1 ảnh trang lặp, phát sinh bản sao
+    // trùng của các câu nằm TRỌN trong trang lặp đó, được lọc bằng "seenQuestionText" ở trên.
+    const chunkStart = c === 0 ? newStart : newStart - 1;
+    const chunkParts = pageParts.slice(chunkStart, newStart + AI_QUIZRECOGNIZE_PAGES_PER_CALL);
     const contentParts = [
       { type: 'text', text: `Đây là trang ${chunkStart + 1}-${chunkStart + chunkParts.length} (trong tổng số ${usedPages} trang, theo đúng thứ tự) của 1 đề thi trắc nghiệm ${AI_SUBJECT_NAME} dạng ảnh chụp:` },
       ...chunkParts
@@ -805,7 +870,14 @@ async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
     }
     if (Array.isArray(rawItems)) {
       if (rawItems.aiTruncated) anyTruncated = true;
-      allItems.push(...rawItems);
+      rawItems.forEach((it) => {
+        const key = it && typeof it.q === 'string' ? normalizeForDedup(it.q) : '';
+        if (key) {
+          if (seenQuestionText.has(key)) return;
+          seenQuestionText.add(key);
+        }
+        allItems.push(it);
+      });
     }
   }
 
