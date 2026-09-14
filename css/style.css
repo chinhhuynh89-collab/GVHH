@@ -180,6 +180,10 @@ main {
      nhất có float) mà "Dành cho học sinh" không có. */
   display: flow-root;
 }
+/* Biến thể nổi bật cho 1-2 khu vực CỐ Ý muốn đập vào mắt hơn hẳn các .section-label khác (màu xám nhạt
+   mặc định) — KHÔNG đổi thẳng .section-label gốc vì sẽ ảnh hưởng luôn "Dành cho giáo viên"/"Dành cho
+   học sinh"/"Sắp ra mắt" (vốn cố tình trung tính, không cần nổi bật). */
+.section-label-highlight { color: var(--brand); font-size: 13px; }
 
 .tile-grid {
   display: grid;
