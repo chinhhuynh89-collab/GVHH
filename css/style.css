@@ -1465,3 +1465,35 @@ sub { font-size: 0.72em; }
 #fontSizeDown { font-size: 12px; }
 #fontSizeUp { font-size: 15px; }
 #fontSizeLabel { min-width: 36px; text-align: center; font-size: 11px; color: var(--text-dim); }
+
+/* ---------- Trang Quản trị → "Thống kê nhanh" (admin.js: buildStatsSection) — 4 khối trước đây LUÔN
+   HIỆN HẾT cùng lúc (tràn dài cả trang). Giờ mỗi khối gập lại mặc định, chỉ hiện tiêu đề + 1 dòng tóm
+   tắt ngắn để vẫn liếc qua được ngay không cần bấm, bấm vào mới xổ ra chi tiết đầy đủ — đỡ rối mắt. */
+.admin-collapse { margin-bottom: 12px; }
+.admin-collapse:last-child { margin-bottom: 0; }
+.admin-collapse-header {
+  display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+}
+.admin-collapse-header h2 { margin: 0; flex-shrink: 0; }
+.admin-collapse-arrow { display: inline-block; width: 0.9em; flex-shrink: 0; color: var(--text-faint); transition: transform 0.15s ease; }
+.admin-collapse.is-open .admin-collapse-arrow { transform: rotate(90deg); }
+.admin-collapse-hint {
+  font-size: 12.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; min-width: 0;
+}
+.admin-collapse-body { display: none; margin-top: 12px; }
+.admin-collapse.is-open .admin-collapse-body { display: block; }
+
+/* Con số thống kê CHÍNH — cỡ to, màu nổi bật riêng từng chỉ số (không dùng lại .cc-title 15px vốn cho
+   thẻ danh sách chương, quá nhỏ để làm số liệu "đập vào mắt" của 1 bảng điều khiển). Viền trái màu +
+   nền hơi ánh màu đó tạo cảm giác mỗi thẻ có "sắc riêng", đỡ đơn điệu khi nhiều thẻ xếp cạnh nhau. */
+.admin-kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 640px) { .admin-kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+.admin-kpi {
+  padding: 12px 14px; border-radius: var(--radius-md); background: var(--bg-soft);
+  border-left: 3px solid var(--kpi-color, var(--brand));
+  transition: transform 0.15s ease;
+}
+.admin-kpi:hover { transform: translateY(-2px); }
+.admin-kpi-num { font-size: 26px; font-weight: 800; color: var(--kpi-color, var(--brand)); line-height: 1.15; }
+.admin-kpi-label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }

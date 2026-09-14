@@ -134,31 +134,51 @@ function normalizeZaloUrl(v) {
     });
 
     // ---------- 📈 Thống kê nhanh + Lịch sử giao dịch ----------
-    async function buildStatsSection(panel) {
-      panel.innerHTML = `
-        <div class="card">
-          <h2><span class="icon">📈</span>Thống kê nhanh</h2>
-          <div id="adminStatsBody"><p class="hint">⏳ Đang tải...</p></div>
-        </div>
-        <div class="card">
-          <h2><span class="icon">🤖</span>Lượt dùng AI (toàn bộ giáo viên)</h2>
-          <p class="hint" style="margin-top:-4px;">Tổng hợp từ "aiUsage" — dùng để cân nhắc tăng/giảm trần lượt dùng ở mục "Cấu hình AI" bên dưới, KHÔNG phải hạn mức thật của Gemini/Claude (xem ghi chú cạnh nút Firebase Console).</p>
-          <div id="adminAiUsageBody"><p class="hint">⏳ Đang tải...</p></div>
-        </div>
-        <div class="card">
-          <h2><span class="icon">🔥</span>Dung lượng/lượt đọc-ghi Firebase</h2>
-          <p class="hint" style="margin-top:-4px;">
-            App chạy trình duyệt KHÔNG tự đọc được số THẬT từ Google (cần tài khoản dịch vụ riêng, không an toàn để đặt trong app công khai) — bấm nút dưới để xem số liệu thật trên Firebase Console.
-            Hạn mức gói Spark (miễn phí) hiện hành để đối chiếu nhanh: <strong>50.000 lượt đọc/ngày</strong>, <strong>20.000 lượt ghi/ngày</strong>, <strong>20.000 lượt xoá/ngày</strong>, <strong>1 GiB lưu trữ</strong> — vượt bất kỳ hạn mức nào cũng làm cả app "Quota exceeded." tới khi reset (~14-15h chiều hôm sau, giờ Việt Nam).
-          </p>
-          <a class="btn primary" href="https://console.firebase.google.com/project/giao-vien-hoa-hoc/usage" target="_blank" rel="noopener">🔗 Mở Firebase Console → Usage and billing</a>
-        </div>
-        <div class="card">
-          <h2><span class="icon">🧾</span>Lịch sử giao dịch</h2>
-          <p class="hint" style="margin-top:-4px;">Toàn bộ yêu cầu nâng cấp đã gửi — chờ duyệt, đã duyệt, đã từ chối — mới nhất lên đầu.</p>
-          <div id="txHistoryBody"><p class="hint">⏳ Đang tải...</p></div>
+    // 4 khối trước đây LUÔN HIỆN HẾT cùng lúc (tràn dài cả trang) — giờ mỗi khối gập lại mặc định
+    // (.admin-collapse, xem style.css), chỉ hiện tiêu đề + 1 dòng tóm tắt ngắn để vẫn liếc được ngay,
+    // bấm vào mới xổ chi tiết đầy đủ. Số liệu vẫn TẢI SẴN ngay từ đầu (không đợi bấm mới tải) để dòng
+    // tóm tắt có số thật ngay khi trang mở, không phải "⏳ Đang tải..." rồi mới đổi.
+    function collapseSectionHtml(id, icon, title, subtitle, bodyContentHtml) {
+      return `
+        <div class="card admin-collapse" data-collapse-id="${id}">
+          <div class="admin-collapse-header" data-collapse-toggle="${id}">
+            <span class="admin-collapse-arrow">▸</span>
+            <h2><span class="icon">${icon}</span>${title}</h2>
+            <span class="admin-collapse-hint" id="hint-${id}"><p class="hint" style="margin:0;">⏳ Đang tải...</p></span>
+          </div>
+          ${subtitle ? `<p class="hint" style="margin:6px 0 0 22px;">${subtitle}</p>` : ''}
+          <div class="admin-collapse-body">${bodyContentHtml}</div>
         </div>
       `;
+    }
+    function wireCollapseToggles(panel) {
+      $$('[data-collapse-toggle]', panel).forEach((header) => {
+        header.addEventListener('click', () => {
+          header.closest('.admin-collapse').classList.toggle('is-open');
+        });
+      });
+    }
+
+    async function buildStatsSection(panel) {
+      panel.innerHTML =
+        collapseSectionHtml('core', '📈', 'Thống kê nhanh', '', '<div id="adminStatsBody"><p class="hint">⏳ Đang tải...</p></div>') +
+        collapseSectionHtml('ai', '🤖', 'Lượt dùng AI (toàn bộ giáo viên)',
+          'Tổng hợp từ "aiUsage" — dùng để cân nhắc tăng/giảm trần lượt dùng ở mục "Cấu hình AI" bên dưới, KHÔNG phải hạn mức thật của Gemini/Claude (xem ghi chú ở khối Firebase).',
+          '<div id="adminAiUsageBody"><p class="hint">⏳ Đang tải...</p></div>') +
+        collapseSectionHtml('firebase', '🔥', 'Dung lượng/lượt đọc-ghi Firebase',
+          'App chạy trình duyệt KHÔNG tự đọc được số THẬT từ Google (cần tài khoản dịch vụ riêng, không an toàn để đặt trong app công khai) — bấm nút dưới để xem số liệu thật trên Firebase Console.',
+          `<p class="hint" style="margin-top:0;">Hạn mức gói Spark (miễn phí) hiện hành để đối chiếu nhanh: <strong>50.000 lượt đọc/ngày</strong>, <strong>20.000 lượt ghi/ngày</strong>, <strong>20.000 lượt xoá/ngày</strong>, <strong>1 GiB lưu trữ</strong> — vượt bất kỳ hạn mức nào cũng làm cả app "Quota exceeded." tới khi reset (~14-15h chiều hôm sau, giờ Việt Nam).</p>
+           <a class="btn primary" href="https://console.firebase.google.com/project/giao-vien-hoa-hoc/usage" target="_blank" rel="noopener">🔗 Mở Firebase Console → Usage and billing</a>`) +
+        collapseSectionHtml('tx', '🧾', 'Lịch sử giao dịch',
+          'Toàn bộ yêu cầu nâng cấp đã gửi — chờ duyệt, đã duyệt, đã từ chối — mới nhất lên đầu.',
+          '<div id="txHistoryBody"><p class="hint">⏳ Đang tải...</p></div>');
+      wireCollapseToggles(panel);
+
+      const hintCore = $('#hint-core');
+      const hintAi = $('#hint-ai');
+      const hintFirebase = $('#hint-firebase');
+      const hintTx = $('#hint-tx');
+      hintFirebase.textContent = 'Xem trên Console →';
       const statsBox = $('#adminStatsBody');
       const aiUsageBox = $('#adminAiUsageBody');
       const txBox = $('#txHistoryBody');
@@ -178,13 +198,14 @@ function normalizeZaloUrl(v) {
           .reduce((sum, d) => sum + (Number(d.data().amount) || 0), 0);
         const totalCommissionOwed = commissionsSnap.docs.reduce((sum, d) => sum + (Number(d.data().amount) || 0), 0);
         statsBox.innerHTML = `
-          <div class="action-grid">
-            <div class="chapter-card" style="text-align:center;"><div class="cc-title">${subsSnap.size}</div><div class="hint">Giáo viên Pro</div></div>
-            <div class="chapter-card" style="text-align:center;"><div class="cc-title">${studentSubsSnap.size}</div><div class="hint">Học sinh Premium</div></div>
-            <div class="chapter-card" style="text-align:center;"><div class="cc-title">${formatVnd(totalRevenue)}</div><div class="hint">Tổng ghi nhận đã duyệt</div></div>
-            <div class="chapter-card" style="text-align:center;"><div class="cc-title">${formatVnd(totalCommissionOwed)}</div><div class="hint">Hoa hồng chưa trả</div></div>
+          <div class="admin-kpi-grid">
+            <div class="admin-kpi" style="--kpi-color:var(--brand);"><div class="admin-kpi-num">${subsSnap.size}</div><div class="admin-kpi-label">Giáo viên Pro</div></div>
+            <div class="admin-kpi" style="--kpi-color:var(--brand-2);"><div class="admin-kpi-num">${studentSubsSnap.size}</div><div class="admin-kpi-label">Học sinh Premium</div></div>
+            <div class="admin-kpi" style="--kpi-color:var(--accent);"><div class="admin-kpi-num">${formatVnd(totalRevenue)}</div><div class="admin-kpi-label">Tổng ghi nhận đã duyệt</div></div>
+            <div class="admin-kpi" style="--kpi-color:var(--danger);"><div class="admin-kpi-num">${formatVnd(totalCommissionOwed)}</div><div class="admin-kpi-label">Hoa hồng chưa trả</div></div>
           </div>
         `;
+        hintCore.textContent = `${subsSnap.size} GV Pro · ${studentSubsSnap.size} HS Premium · ${formatVnd(totalRevenue)} đã ghi nhận`;
 
         // Tổng hợp lượt dùng AI CỦA TẤT CẢ giáo viên (aiUsage/{uid}, xem ai-generate.js:
         // aiCheckAndIncrementUsage) — tách "try" riêng, không để lỗi ở đây (VD Rules chưa cập nhật)
@@ -214,19 +235,23 @@ function normalizeZaloUrl(v) {
           });
           const modeBreakdown = modeKeys.filter((m) => todayByMode[m] > 0).map((m) => `${modeLabelMap[m]}: ${todayByMode[m]}`).join(' · ');
           aiUsageBox.innerHTML = `
-            <div class="action-grid">
-              <div class="chapter-card" style="text-align:center;"><div class="cc-title">${todayTotal}</div><div class="hint">Lượt dùng AI hôm nay</div></div>
-              <div class="chapter-card" style="text-align:center;"><div class="cc-title">${monthTotal}</div><div class="hint">Lượt dùng AI tháng này</div></div>
-              <div class="chapter-card" style="text-align:center;"><div class="cc-title">${activeTeachersToday}</div><div class="hint">Giáo viên đã dùng AI hôm nay</div></div>
+            <div class="admin-kpi-grid">
+              <div class="admin-kpi" style="--kpi-color:var(--brand);"><div class="admin-kpi-num">${todayTotal}</div><div class="admin-kpi-label">Lượt dùng AI hôm nay</div></div>
+              <div class="admin-kpi" style="--kpi-color:var(--brand-2);"><div class="admin-kpi-num">${monthTotal}</div><div class="admin-kpi-label">Lượt dùng AI tháng này</div></div>
+              <div class="admin-kpi" style="--kpi-color:var(--accent);"><div class="admin-kpi-num">${activeTeachersToday}</div><div class="admin-kpi-label">Giáo viên đã dùng AI hôm nay</div></div>
             </div>
             <p class="hint" style="margin-top:8px;">Theo loại (hôm nay): ${escapeHtml(modeBreakdown || 'Chưa có lượt nào hôm nay')}</p>
           `;
+          hintAi.textContent = `${todayTotal} hôm nay · ${monthTotal} tháng này`;
         } catch (e) {
           aiUsageBox.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}${e.code === 'permission-denied' ? ' — cần dán lại nội dung firebase/firestore.rules mới nhất vào Firebase Console → Firestore Database → Rules rồi bấm Publish (mục "aiUsage" cần thêm quyền đọc cho admin).' : ''}</p>`;
+          hintAi.textContent = '⚠️ Lỗi tải';
         }
 
         const txList = allSubmissionsSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
           .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        const pendingCount = txList.filter((t) => t.status !== 'approved' && t.status !== 'rejected').length;
+        hintTx.textContent = `${txList.length} giao dịch${pendingCount ? ` · ${pendingCount} chờ duyệt` : ''}`;
         if (!txList.length) {
           txBox.innerHTML = '<p class="hint">Chưa có giao dịch nào.</p>';
         } else {
@@ -263,6 +288,8 @@ function normalizeZaloUrl(v) {
         }
       } catch (e) {
         statsBox.innerHTML = `<p class="hint">⚠️ ${escapeHtml(e.message)}</p>`;
+        hintCore.textContent = '⚠️ Lỗi tải';
+        hintTx.textContent = '⚠️ Lỗi tải';
         txBox.innerHTML = '';
       }
     }
