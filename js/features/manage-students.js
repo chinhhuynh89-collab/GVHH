@@ -64,20 +64,16 @@
 
     // ---------- Điều hướng: 1 khung nội dung duy nhất, đổi theo nút vừa bấm ----------
     let openSub = null;
-    // Roster panel tự lập lịch làm mới trạng thái online/offline định kỳ (xem renderRosterPanel) —
-    // phải dọn lịch này mỗi khi chuyển sang mục khác/đóng lại, nếu không nó cứ chạy ngầm mãi dù
-    // khung danh sách đã bị thay bằng nội dung khác (rò rỉ interval, tốn đọc Firestore vô ích).
-    // rosterVisibilityHandler dọn CHUNG 1 lượt với interval — thiếu bước này, mỗi lần mở lại "Danh
-    // sách" sẽ CHỒNG THÊM 1 listener "visibilitychange" mới (rò rỉ listener, không rò rỉ interval
-    // nhưng vẫn gọi refreshPresence() nhiều lần thừa mỗi lần đổi tab). Đã gặp thật: để 1 tab "Quản lý
-    // học sinh" mở nền (không tắt máy, chỉ chuyển tab khác) NHIỀU GIỜ liền vẫn cứ 30s gọi lại 1 lượt
-    // đọc presence cho MỖI học sinh (getPresenceForUids đọc riêng từng doc, không gộp được) — dù
-    // không ai nhìn tab đó, dẫn tới tốn hàng chục nghìn lượt đọc Firestore chỉ trong vài giờ.
-    let rosterPresenceInterval = null;
+    // Trạng thái online/offline KHÔNG còn tự hẹn giờ đọc lại định kỳ nữa (từng dùng setInterval 30s
+    // rồi 5 phút — vẫn tốn đọc Firestore vô ích nếu lỡ để tab mở nền nhiều giờ, dù đã giãn chu kỳ).
+    // Giờ CHỈ đọc khi có lý do THẬT SỰ: (1) lúc mở bảng lần đầu, (2) giáo viên tự bấm nút "🔄 Làm mới",
+    // (3) quay lại tab sau khi đã chuyển đi nơi khác (visibilitychange) — mỗi lý do đúng 1 lượt đọc,
+    // không có vòng lặp nào chạy nền. Đánh đổi: dấu chấm online/offline không tự "sống" theo thời gian
+    // thực nữa (không phù hợp với Firestore vốn không có onDisconnect như Realtime Database để biết
+    // NGAY lúc 1 người mất kết nối) — nhưng đây vốn dĩ chỉ là ước lượng theo "nhịp tim" ghi mỗi 40s
+    // (xem app.js), tự làm mới lại đúng lúc cần xem là đủ, không cần cập nhật khi không ai nhìn tới.
     let rosterVisibilityHandler = null;
-    function stopRosterPresencePolling() {
-      clearInterval(rosterPresenceInterval);
-      rosterPresenceInterval = null;
+    function stopRosterPresenceTracking() {
       if (rosterVisibilityHandler) {
         document.removeEventListener('visibilitychange', rosterVisibilityHandler);
         rosterVisibilityHandler = null;
@@ -87,7 +83,7 @@
       btn.addEventListener('click', async () => {
         const key = btn.dataset.sub;
         const panel = $('#manageSubPanel');
-        stopRosterPresencePolling();
+        stopRosterPresenceTracking();
         if (openSub === key) {
           panel.innerHTML = '';
           btn.classList.remove('has-open');
@@ -538,6 +534,7 @@
         </div>
         <div class="btn-row" style="margin-bottom:8px;">
           <button class="btn" id="rosterHelpToggleBtn" type="button">❓ Hướng dẫn dùng bảng</button>
+          <button class="btn" id="refreshPresenceBtn" type="button">🔄 Làm mới online/offline</button>
           <button class="btn" id="cleanupDuplicatesBtn" type="button">🧹 Dọn bản ghi trùng do lỗi cũ (1 lần)</button>
         </div>
         <p class="hint" id="rosterHelpText" style="display:none;">👉 Bấm vào TÊN học sinh để xem thông tin (email, trường, lớp, địa chỉ, SĐT) và các nút thao tác. "💬 Zalo" mở thẳng khung chat nếu số đó có dùng Zalo. "🔑 Cấp mã thay thế" chỉ dành cho học sinh dùng tài khoản do giáo viên cấp (không phải Google) — tạo 1 mã đăng nhập MỚI khi các em quên mật khẩu, vẫn giữ nguyên nhóm/tiến độ/gói đã mua (không tạo thêm học sinh mới), chỉ riêng lịch sử làm bài kiểm tra CŨ (trước khi cấp lại mã) là không chuyển theo được. "🗑️ Xoá học sinh" xoá HẲN khỏi mọi nhóm — đây là nơi DUY NHẤT xoá HẲN được học sinh (xoá 1 nhóm không còn kéo theo xoá học sinh nữa). Muốn chỉ gỡ 1 học sinh khỏi 1 nhóm cụ thể (không xoá hẳn), dùng nút "🚪 Bỏ khỏi nhóm" ở trang "Nhóm học sinh".</p>
@@ -553,15 +550,20 @@
 
       renderTableBody();
       refreshPresence();
-      // Tăng từ 30s lên 5 PHÚT (giảm mạnh tốc độ đọc ngay cả khi đang xem) + BỎ QUA lượt làm mới nào
-      // rơi đúng lúc tab đang ẩn (chuyển sang tab khác/thu nhỏ) — dấu chấm online/offline không cần
-      // cập nhật khi không ai nhìn thấy nó. Bù lại: làm mới NGAY khi tab hiện lại (visibilitychange),
-      // để không phải chờ tới 5 phút tiếp theo mới thấy đúng trạng thái sau khi quay lại tab.
-      rosterPresenceInterval = setInterval(() => {
-        if (!document.hidden) refreshPresence();
-      }, 5 * 60 * 1000);
+      // Không còn hẹn giờ lặp lại — chỉ làm mới khi quay lại tab (đủ để bắt kịp trạng thái sau 1 lúc
+      // rời đi) hoặc khi giáo viên tự bấm nút "🔄 Làm mới" (wire ở dưới). Không lo tích luỹ nhiều
+      // listener nếu bảng được mở lại nhiều lần — stopRosterPresenceTracking() đã gỡ listener CŨ ngay
+      // trước khi vào đây (xem nhánh $$('.manage-sub-btn') phía trên).
       rosterVisibilityHandler = () => { if (!document.hidden) refreshPresence(); };
       document.addEventListener('visibilitychange', rosterVisibilityHandler);
+      $('#refreshPresenceBtn', assignedBody).addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.textContent = '⏳ Đang làm mới...';
+        await refreshPresence();
+        btn.disabled = false;
+        btn.textContent = '🔄 Làm mới online/offline';
+      });
 
       // Dọn 1 lần — xem cleanupOrphanedUnassignedDuplicates() (groups-data.js) để hiểu chính xác lỗi
       // cũ nó sửa (tính năng "chọn học sinh có sẵn" lúc tạo nhóm mới từng để sót bản ghi "Chưa xếp
