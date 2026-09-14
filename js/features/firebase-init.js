@@ -83,3 +83,53 @@ function ensureFirebase() {
 
   return { app: _fbApp, auth: _fbAuth, db: _fbDb, functions: _fbFunctions };
 }
+
+// ---------- Cache TẠM (sessionStorage) cho dữ liệu NỘI DUNG (bài giảng/câu hỏi/flashcard/giáo án) —
+// giảm lượt đọc Firestore khi TẢI LẠI cùng 1 trang nhiều lần trong CÙNG 1 tab (nguyên nhân chính gây
+// hết hạn mức đọc/ngày miễn phí — xem lịch sử sửa các file getCustomQuiz/getCustomLessons/...).
+//
+// CỐ Ý không dùng lại enablePersistence() của Firestore (đã tắt ở ensureFirebase() vì lỗi THẬT đã gặp:
+// cơ chế "bầu tab chính" IndexedDB có thể bị kẹt, treo mọi lượt đọc/ghi). sessionStorage đơn giản hơn
+// hẳn — mỗi TAB tự quản lý cache RIÊNG của mình, không có khái niệm "tab chính" cần bầu chọn giữa các
+// tab nên không lặp lại được lỗi cũ.
+//
+// Đúng dữ liệu ngay sau khi SỬA: mỗi loại nội dung có 1 "phiên bản" đếm riêng THEO TỪNG GIÁO VIÊN
+// (không theo từng chương — 1 số hàm ghi như updateCustomQuiz(id, patch)/deleteCustomQuiz(id) không có
+// sẵn chapterId để biết chính xác cache chương nào cần xoá). Mọi hàm GHI (add/sửa/xoá) đều tăng phiên
+// bản này lên — lần ĐỌC kế tiếp thấy phiên bản đã đổi thì coi cache cũ hết hạn, đọc lại Firestore rồi
+// lưu cache mới kèm phiên bản mới. Cách này xoá cache "hơi rộng" hơn cần thiết (sửa 1 chương làm mất
+// cache của CẢ CÁC chương khác cùng giáo viên) nhưng ĐẢM BẢO không bao giờ hiện dữ liệu cũ sau khi sửa
+// — ưu tiên ĐÚNG hơn tối ưu triệt để.
+const CONTENT_CACHE_TTL_MS = 10 * 60 * 1000; // dọn cache quá cũ — KHÔNG phải cơ chế chính (phiên bản mới hơn hẳn quan trọng hơn)
+
+function contentCacheVersion(type, uid) {
+  try { return parseInt(sessionStorage.getItem('ccv:' + type + ':' + uid), 10) || 0; } catch (e) { return 0; }
+}
+
+// Gọi trong MỌI hàm ghi (add/addBatch/update/delete/deleteAll) của 1 loại nội dung, ngay sau khi ghi
+// Firestore thành công — làm mọi cache ĐANG CÓ của loại đó (mọi chương) hết hiệu lực ngay lập tức.
+function contentCacheBump(type, uid) {
+  try { sessionStorage.setItem('ccv:' + type + ':' + uid, String(contentCacheVersion(type, uid) + 1)); } catch (e) { /* ignore */ }
+}
+
+function contentCacheGet(type, uid, subKey) {
+  try {
+    const raw = sessionStorage.getItem('cc:' + type + ':' + uid + ':' + subKey);
+    if (!raw) return null;
+    const { data, ver, ts } = JSON.parse(raw);
+    if (ver !== contentCacheVersion(type, uid)) return null;
+    if (Date.now() - ts > CONTENT_CACHE_TTL_MS) return null;
+    return data;
+  } catch (e) {
+    return null; // sessionStorage bị chặn (chế độ ẩn danh nghiêm ngặt...) hoặc dữ liệu hỏng — coi như cache rỗng
+  }
+}
+
+function contentCacheSet(type, uid, subKey, data) {
+  try {
+    sessionStorage.setItem('cc:' + type + ':' + uid + ':' + subKey, JSON.stringify({ data, ver: contentCacheVersion(type, uid), ts: Date.now() }));
+  } catch (e) {
+    // VD vượt hạn mức sessionStorage (~5-10MB, dễ gặp với bài giảng nhiều ảnh) — bỏ qua êm, chỉ mất
+    // phần tối ưu đọc cho lượt này, KHÔNG ảnh hưởng gì tới dữ liệu đã lưu Firestore.
+  }
+}

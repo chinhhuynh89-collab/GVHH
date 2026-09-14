@@ -13,6 +13,7 @@ async function addCustomQuiz(chapterId, question) {
   const ref = await db.collection('teachers').doc(teacher.uid).collection('customQuiz').add(
     Object.assign({ chapterId, addedAt: new Date().toISOString(), order: Date.now() }, question)
   );
+  if (typeof contentCacheBump === 'function') contentCacheBump('quiz', teacher.uid);
   return ref.id;
 }
 
@@ -57,6 +58,7 @@ async function addCustomQuizBatch(chapterId, questions) {
   });
   if (opCount > 0) commits.push(batch.commit());
   await Promise.all(commits);
+  if (typeof contentCacheBump === 'function') contentCacheBump('quiz', teacher.uid);
   return created;
 }
 
@@ -65,10 +67,15 @@ async function updateCustomQuiz(id, patch) {
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
   await db.collection('teachers').doc(teacher.uid).collection('customQuiz').doc(id).update(patch);
+  if (typeof contentCacheBump === 'function') contentCacheBump('quiz', teacher.uid);
 }
 
+// Cache theo chapterId (xem contentCacheGet/Set, firebase-init.js) — chỉ có hiệu lực trong CÙNG 1 tab,
+// tự động hết hạn ngay khi bất kỳ hàm ghi nào ở trên chạy (add/sửa/xoá), không cần lo dữ liệu cũ.
 async function getCustomQuiz(ownerUid, chapterId) {
   if (!ownerUid) return [];
+  const cached = typeof contentCacheGet === 'function' ? contentCacheGet('quiz', ownerUid, chapterId) : null;
+  if (cached) return cached;
   const { db } = ensureFirebase();
   const snap = await db.collection('teachers').doc(ownerUid).collection('customQuiz')
     .where('chapterId', '==', chapterId).get();
@@ -79,6 +86,7 @@ async function getCustomQuiz(ownerUid, chapterId) {
     if (ao !== bo) return ao - bo;
     return (a.addedAt || '').localeCompare(b.addedAt || '');
   });
+  if (typeof contentCacheSet === 'function') contentCacheSet('quiz', ownerUid, chapterId, items);
   return items;
 }
 
@@ -86,9 +94,15 @@ async function getCustomQuiz(ownerUid, chapterId) {
 // (question-bank.js), khác getCustomQuiz ở trên vốn chỉ lấy đúng 1 chương cho chapter-detail.js.
 async function getAllCustomQuizForTeacher(ownerUid) {
   if (!ownerUid) return [];
+  // subKey "all" riêng với key theo chapterId của getCustomQuiz — cùng chung "phiên bản" loại 'quiz'
+  // nên vẫn tự hết hạn đúng lúc khi có bất kỳ thay đổi nào (add/sửa/xoá ở chương bất kỳ).
+  const cached = typeof contentCacheGet === 'function' ? contentCacheGet('quiz', ownerUid, 'all') : null;
+  if (cached) return cached;
   const { db } = ensureFirebase();
   const snap = await db.collection('teachers').doc(ownerUid).collection('customQuiz').get();
-  return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+  const items = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+  if (typeof contentCacheSet === 'function') contentCacheSet('quiz', ownerUid, 'all', items);
+  return items;
 }
 
 async function deleteCustomQuiz(id) {
@@ -96,6 +110,7 @@ async function deleteCustomQuiz(id) {
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
   await db.collection('teachers').doc(teacher.uid).collection('customQuiz').doc(id).delete();
+  if (typeof contentCacheBump === 'function') contentCacheBump('quiz', teacher.uid);
 }
 
 // Xoá TOÀN BỘ câu hỏi tự thêm/nạp từ file trong 1 chương — giống hệt deleteAllCustomLessons (xem
@@ -114,5 +129,6 @@ async function deleteAllCustomQuiz(chapterId) {
     docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
     await batch.commit();
   }
+  if (typeof contentCacheBump === 'function') contentCacheBump('quiz', teacher.uid);
   return docs.length;
 }

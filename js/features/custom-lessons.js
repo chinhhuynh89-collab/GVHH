@@ -17,6 +17,7 @@ async function addCustomLesson(chapterId, lesson) {
   const ref = await db.collection('teachers').doc(teacher.uid).collection('customLessons').add(
     Object.assign({ chapterId, addedAt: new Date().toISOString(), order: Date.now() }, lesson)
   );
+  if (typeof contentCacheBump === 'function') contentCacheBump('lessons', teacher.uid);
   return ref.id;
 }
 
@@ -67,6 +68,7 @@ async function addCustomLessonBatch(chapterId, lessons) {
   });
   if (opCount > 0) commits.push(batch.commit());
   await Promise.all(commits);
+  if (typeof contentCacheBump === 'function') contentCacheBump('lessons', teacher.uid);
   return created;
 }
 
@@ -75,10 +77,15 @@ async function updateCustomLesson(id, patch) {
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
   await db.collection('teachers').doc(teacher.uid).collection('customLessons').doc(id).update(patch);
+  if (typeof contentCacheBump === 'function') contentCacheBump('lessons', teacher.uid);
 }
 
+// Cache theo chapterId (xem contentCacheGet/Set, firebase-init.js) — chỉ có hiệu lực trong CÙNG 1 tab,
+// tự động hết hạn ngay khi bất kỳ hàm ghi nào ở trên chạy (add/sửa/xoá), không cần lo dữ liệu cũ.
 async function getCustomLessons(ownerUid, chapterId) {
   if (!ownerUid) return [];
+  const cached = typeof contentCacheGet === 'function' ? contentCacheGet('lessons', ownerUid, chapterId) : null;
+  if (cached) return cached;
   const { db } = ensureFirebase();
   const snap = await db.collection('teachers').doc(ownerUid).collection('customLessons')
     .where('chapterId', '==', chapterId).get();
@@ -91,6 +98,7 @@ async function getCustomLessons(ownerUid, chapterId) {
     if (ao !== bo) return ao - bo;
     return (a.addedAt || '').localeCompare(b.addedAt || '');
   });
+  if (typeof contentCacheSet === 'function') contentCacheSet('lessons', ownerUid, chapterId, items);
   return items;
 }
 
@@ -99,6 +107,7 @@ async function deleteCustomLesson(id) {
   if (!teacher) throw new Error('Cần đăng nhập giáo viên.');
   const { db } = ensureFirebase();
   await db.collection('teachers').doc(teacher.uid).collection('customLessons').doc(id).delete();
+  if (typeof contentCacheBump === 'function') contentCacheBump('lessons', teacher.uid);
 }
 
 // Xoá TOÀN BỘ bài giảng tự thêm/nạp từ file trong 1 chương — cần khi 1 lần nạp file cũ đã lưu sai
@@ -117,5 +126,6 @@ async function deleteAllCustomLessons(chapterId) {
     docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
     await batch.commit();
   }
+  if (typeof contentCacheBump === 'function') contentCacheBump('lessons', teacher.uid);
   return docs.length;
 }
