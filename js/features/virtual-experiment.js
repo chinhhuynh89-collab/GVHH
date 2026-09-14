@@ -39,7 +39,12 @@
   // file âm thanh ngoài — giữ app hoạt động hoàn toàn offline, không tăng dung lượng tải về. Trình
   // duyệt chặn AudioContext tự phát tới khi có tương tác người dùng thật — không thành vấn đề ở đây vì
   // MỌI âm thanh đều phát ra ngay sau 1 lượt bấm (chọn chất/đoán/thử lại), luôn có sẵn "user gesture".
+  // Có thêm 1 "master gain" chung (0.9) — vẫn chừa chút đầu để nhiều âm chồng lên nhau (VD nhạc nền +
+  // hiệu ứng) không bị vỡ tiếng (clipping), dù mỗi âm riêng đã tăng âm lượng khá nhiều theo phản hồi
+  // "âm thanh còn nhỏ".
   let audioCtx = null;
+  let masterGain = null;
+  let ambienceHandle = null;
   function isSoundOn() {
     return localStorage.getItem(SOUND_KEY) !== '0';
   }
@@ -49,6 +54,9 @@
       const Ctor = window.AudioContext || window.webkitAudioContext;
       if (!Ctor) return null;
       audioCtx = new Ctor();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.9;
+      masterGain.connect(audioCtx.destination);
     }
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
     return audioCtx;
@@ -65,9 +73,9 @@
     osc.frequency.setValueAtTime(freq, t0);
     if (opts.sweepTo) osc.frequency.exponentialRampToValueAtTime(opts.sweepTo, t0 + duration);
     gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.linearRampToValueAtTime(opts.peak || 0.18, t0 + 0.02);
+    gain.gain.linearRampToValueAtTime(opts.peak || 0.3, t0 + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-    osc.connect(gain).connect(ctx.destination);
+    osc.connect(gain).connect(masterGain);
     osc.start(t0);
     osc.stop(t0 + duration + 0.05);
   }
@@ -89,33 +97,45 @@
     if (opts.filterSweepTo) filter.frequency.exponentialRampToValueAtTime(opts.filterSweepTo, t0 + duration);
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.linearRampToValueAtTime(opts.peak || 0.12, t0 + 0.06);
+    gain.gain.linearRampToValueAtTime(opts.peak || 0.2, t0 + 0.06);
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.connect(filter).connect(gain).connect(masterGain);
     noise.start(t0);
     noise.stop(t0 + duration + 0.05);
   }
 
-  // Tiếng rót nhẹ — nhiễu lọc dải hẹp, tần số hạ dần giả lập cảm giác chất lỏng chảy xuống.
+  // Tiếng rót — nhiễu lọc dải hẹp hạ dần giả lập chất lỏng chảy, RẢI THÊM vài tiếng "tong tong" nhỏ
+  // giọt ngẫu nhiên trong lúc rót cho sinh động hơn 1 tiếng nhiễu đơn điệu.
   function sfxPour() {
-    playNoise(POUR_MS / 1000, { filterType: 'bandpass', filterFreq: 2200, filterSweepTo: 700, peak: 0.06 });
+    playNoise(POUR_MS / 1000, { filterType: 'bandpass', filterFreq: 2400, filterSweepTo: 700, peak: 0.14 });
+    const dropCount = 4;
+    for (let i = 0; i < dropCount; i++) {
+      setTimeout(() => playTone(1200 + Math.random() * 400, 0.1, { type: 'sine', sweepTo: 700, peak: 0.1 }), 150 + i * (POUR_MS / dropCount));
+    }
   }
-  // Kết tủa: 1 tiếng "bụp" trầm dần — cảm giác vật rắn lắng xuống đáy.
+  // Kết tủa: tiếng "bụp" trầm dần RỒI 1 tiếng "tách" nhỏ ngay sau — cảm giác vật rắn rơi rồi lắng đáy.
   function sfxKetTua() {
-    playTone(320, 0.5, { type: 'sine', sweepTo: 90, peak: 0.16 });
+    playTone(320, 0.5, { type: 'sine', sweepTo: 80, peak: 0.32 });
+    setTimeout(() => playTone(500, 0.15, { type: 'triangle', sweepTo: 300, peak: 0.15 }), 380);
   }
-  // Khí thoát ra: tiếng sủi/rít cao — nhiễu lọc thông cao.
+  // Khí thoát ra: NHIỀU tiếng sủi ngắn dồn dập (thay vì 1 tiếng nhiễu trơn) — giống bọt khí lách tách
+  // thật sự thoát ra liên tục.
   function sfxKhi() {
-    playNoise(0.9, { filterType: 'highpass', filterFreq: 2200, peak: 0.1 });
+    const bursts = 6;
+    for (let i = 0; i < bursts; i++) {
+      setTimeout(() => playNoise(0.12, { filterType: 'highpass', filterFreq: 1800 + Math.random() * 1500, peak: 0.16 }), i * 130);
+    }
   }
-  // Đốt/ngọn lửa: tiếng "phụt" — nhiễu lọc thông thấp, tần số hạ nhanh giống lửa bùng lên rồi ổn định.
+  // Đốt/ngọn lửa: tiếng "phụt" chính + vài tiếng lách tách nhỏ mô phỏng lửa cháy lép bép.
   function sfxNgonLua() {
-    playNoise(0.55, { filterType: 'lowpass', filterFreq: 3200, filterSweepTo: 400, peak: 0.16 });
+    playNoise(0.6, { filterType: 'lowpass', filterFreq: 3600, filterSweepTo: 350, peak: 0.3 });
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => playNoise(0.06, { filterType: 'bandpass', filterFreq: 2500 + Math.random() * 2000, peak: 0.12 }), 150 + i * 140);
+    }
   }
-  // Đổi màu dung dịch: 2 nốt cao dần, giống tiếng "lấp lánh" biến hoá.
+  // Đổi màu dung dịch: 3 nốt cao dần kiểu "lấp lánh phép thuật" (thay vì 2 nốt trước).
   function sfxDoiMauDungDich() {
-    playTone(660, 0.3, { type: 'sine', peak: 0.11 });
-    setTimeout(() => playTone(880, 0.35, { type: 'sine', peak: 0.09 }), 130);
+    [523, 660, 880].forEach((f, i) => setTimeout(() => playTone(f, 0.3, { type: 'sine', peak: 0.22 }), i * 110));
   }
   function sfxReaction(type) {
     if (type === 'ketTua') sfxKetTua();
@@ -123,13 +143,30 @@
     else if (type === 'mauNgonLua') sfxNgonLua();
     else sfxDoiMauDungDich();
   }
-  // Đoán đúng: giai điệu 2 nốt đi lên vui tai. Đoán sai: 1 nốt trầm đi xuống, nhẹ nhàng không chói tai.
+  // Đoán đúng: giai điệu 3 nốt đi lên rộn ràng hơn (thêm nốt cao nhất). Đoán sai: 1 nốt trầm đi xuống.
   function sfxCorrect() {
-    playTone(523, 0.15, { type: 'sine', peak: 0.15 });
-    setTimeout(() => playTone(784, 0.3, { type: 'sine', peak: 0.15 }), 140);
+    [523, 659, 880].forEach((f, i) => setTimeout(() => playTone(f, 0.22, { type: 'sine', peak: 0.28 }), i * 130));
   }
   function sfxWrong() {
-    playTone(240, 0.4, { type: 'triangle', sweepTo: 150, peak: 0.12 });
+    playTone(260, 0.4, { type: 'triangle', sweepTo: 130, peak: 0.22 });
+  }
+
+  // ---------- Nhạc nền phòng thí nghiệm — vài tiếng "tí tách" nhỏ giọt ngẫu nhiên rất khẽ, lặp lại
+  // không đều (không phải nhạc lặp cứng nhắc) để tạo cảm giác "phòng lab đang hoạt động" xuyên suốt,
+  // âm lượng THẤP HƠN HẲN hiệu ứng chính để không át giọng. Chỉ bắt đầu sau cử chỉ người dùng ĐẦU TIÊN
+  // (mở khoá AudioContext) và tự dừng ngay khi tắt âm thanh.
+  function ambienceTick() {
+    if (!isSoundOn()) return;
+    const freq = 300 + Math.random() * 900;
+    playTone(freq, 0.18, { type: 'sine', sweepTo: freq * 0.6, peak: 0.035 });
+  }
+  function startAmbience() {
+    if (ambienceHandle || !isSoundOn()) return;
+    ambienceTick();
+    ambienceHandle = setInterval(ambienceTick, 1400 + Math.random() * 1200);
+  }
+  function stopAmbience() {
+    if (ambienceHandle) { clearInterval(ambienceHandle); ambienceHandle = null; }
   }
 
   function renderSoundToggle() {
@@ -143,6 +180,7 @@
       localStorage.setItem(SOUND_KEY, isSoundOn() ? '0' : '1');
       btn.textContent = isSoundOn() ? '🔊' : '🔇';
       btn.title = isSoundOn() ? 'Tắt âm thanh' : 'Bật âm thanh';
+      if (isSoundOn()) startAmbience(); else stopAmbience();
     });
   }
 
@@ -216,6 +254,7 @@
     `;
     wireSoundToggle();
     sfxPour();
+    startAmbience();
     setTimeout(beginReact, POUR_MS);
   }
 
