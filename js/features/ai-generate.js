@@ -518,14 +518,24 @@ function aiIsValidLevel(v) { return AI_LEVEL_KEYS.includes(v); }
 function aiNormalizeItems(mode, rawItems) {
   if (mode === 'quizrecognize') {
     return rawItems
-      .filter((it) => it && typeof it.q === 'string' && Array.isArray(it.options) && it.options.length === 4 && Number.isInteger(it.correct) && it.correct >= 0 && it.correct <= 3)
       .map((it) => {
-        const q = { q: it.q, type: 'abcd', options: it.options, correct: it.correct, explain: typeof it.explain === 'string' ? it.explain : '' };
+        if (!it || typeof it.q !== 'string' || !Array.isArray(it.options) || it.options.length !== 4) return null;
+        let correct = it.correct;
+        // Phòng trường hợp AI trả chữ cái ("C") hoặc chuỗi số ("2") thay vì đúng số nguyên cho field
+        // "correct" — từng nghi ngờ đây là lý do câu có đáp án tô sẵn bị lọc mất (không khớp
+        // Number.isInteger) trong khi câu AI tự giải (tự nhiên ra đúng số nguyên) vẫn qua được.
+        if (typeof correct === 'string') {
+          const letterIdx = 'ABCD'.indexOf(correct.trim().toUpperCase());
+          correct = letterIdx !== -1 ? letterIdx : parseInt(correct, 10);
+        }
+        if (!Number.isInteger(correct) || correct < 0 || correct > 3) return null;
+        const q = { q: it.q, type: 'abcd', options: it.options, correct, explain: typeof it.explain === 'string' ? it.explain : '' };
         // "solved" = AI tự giải để chọn đáp án (đề không có tô màu sẵn) — đánh dấu để giáo viên rà lại,
         // khác "highlight" (đọc đúng theo màu tô sẵn trong file gốc, tin cậy như cách cắt ảnh cũ).
         if (it.correctSource === 'solved') q.aiUnverifiedCorrect = true;
         return q;
-      });
+      })
+      .filter(Boolean);
   }
   if (mode === 'quiz') {
     return rawItems
@@ -780,5 +790,9 @@ async function recognizeQuizFromPdfClient(arrayBuffer, onProgress) {
 
   const items = aiNormalizeItems('quizrecognize', allItems);
   if (!items.length) throw new Error('AI trả về kết quả không đúng định dạng, thử lại.');
-  return { items, totalPages, usedPages, truncated: anyTruncated, quotaExceeded };
+  // rawCount > items.length nghĩa là AI CÓ trả về câu đó nhưng bị hàm chuẩn hoá LOẠI vì sai định dạng
+  // (VD field "correct" không hợp lệ) — khác với AI không trả về câu đó ngay từ đầu. Phân biệt 2
+  // trường hợp này giúp chẩn đoán đúng chỗ khi giáo viên báo "thiếu câu" mà không có lỗi/cảnh báo nào.
+  const droppedByFormat = allItems.length - items.length;
+  return { items, totalPages, usedPages, truncated: anyTruncated, quotaExceeded, rawCount: allItems.length, droppedByFormat };
 }

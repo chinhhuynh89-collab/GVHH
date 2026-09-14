@@ -2378,7 +2378,7 @@
           const onProgress = (chunkIndex, totalChunks) => {
             box.innerHTML = `<div class="result-box show">⏳ AI đang đọc trang... (nhóm ${chunkIndex}/${totalChunks})</div>`;
           };
-          const { items, totalPages, usedPages, truncated, quotaExceeded } = await recognizeQuizFromPdfClient(await file.arrayBuffer(), onProgress);
+          const { items, totalPages, usedPages, truncated, quotaExceeded, droppedByFormat } = await recognizeQuizFromPdfClient(await file.arrayBuffer(), onProgress);
           items.forEach((q) => { q.sourceFileName = file.name; if (activeUnitId) q.unitId = activeUnitId; });
           await addCustomQuizBatch(chapter.id, items);
           customQuizCache = await getCustomQuiz(owner.uid, chapter.id);
@@ -2392,6 +2392,11 @@
           const quotaExceededHtml = quotaExceeded
             ? `<div class="result-box show error" style="margin-bottom:8px;"><strong>⚠️ Đã hết lượt dùng AI giữa chừng</strong> — chỉ xử lý được 1 phần file này. Đã nạp phần đã xử lý, thử lại phần còn thiếu vào ngày/tháng sau (xem trần dùng ở Quản trị).</div>`
             : '';
+          // Chẩn đoán: AI trả về "rawCount" câu nhưng chỉ items.length câu qua được kiểm tra định dạng
+          // (VD field "correct" không hợp lệ) — khác hẳn AI không thấy/không trả câu đó ngay từ đầu.
+          const droppedByFormatHtml = droppedByFormat > 0
+            ? `<div class="result-box show error" style="margin-bottom:8px;">⚠️ AI có trả về thêm ${droppedByFormat} câu nhưng bị hệ thống loại vì sai định dạng dữ liệu — báo cho tôi (Claude) con số này để tôi tìm đúng nguyên nhân.</div>`
+            : '';
           // Đếm TRONG "items" (đúng lượt nạp này) — không lọc theo customQuizCache như dưới đây (cắt ảnh)
           // vì nạp lại CÙNG tên file (VD lượt trước bị cắt cụt, nạp lại để bổ sung) sẽ đếm dồn CẢ câu
           // của lượt TRƯỚC đó có cùng sourceFileName, ra tỉ lệ vô nghĩa kiểu "42/26".
@@ -2403,6 +2408,7 @@
             ${pageWarningHtml}
             ${quotaExceededHtml}
             ${truncatedHtml}
+            ${droppedByFormatHtml}
             ${unverifiedHtml}
             <div class="result-box show">✓ Đã nạp ${items.length} câu hỏi (chữ thật, không phải ảnh).</div>
             <button class="btn block" id="quizAiViewAllBtn" style="margin-top:8px;">👁️ Xem toàn bộ câu vừa nạp</button>
