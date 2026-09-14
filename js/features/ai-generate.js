@@ -631,18 +631,20 @@ async function aiGetActiveProviderAndKey() {
   return { provider, model, apiKey };
 }
 
-// Tự chờ + gọi lại khi gặp lỗi 429 (vượt trần TỐC ĐỘ gọi API, xem aiBuildHttpError) — tối đa 3 lần thử
-// (1 lần đầu + 2 lần lại), mỗi lần chờ đúng thời gian API gợi ý. Hết lượt thử vẫn lỗi thì để lỗi thật
-// bay lên cho nơi gọi tự xử lý (VD recognizeQuizFromPdfClient giữ lại phần đã xử lý được).
+// Tự chờ + gọi lại khi gặp lỗi 429 (vượt trần TỐC ĐỘ gọi API, xem aiBuildHttpError) — tối đa 4 lần thử
+// (1 lần đầu + 3 lần lại), mỗi lần chờ đúng thời gian API gợi ý (+ chút biên an toàn). Hết lượt thử vẫn
+// lỗi thì để lỗi thật bay lên cho nơi gọi tự xử lý (VD recognizeQuizFromPdfClient giữ lại phần đã xử lý
+// được thay vì mất trắng).
 async function aiCallProvider(provider, args) {
   const call = provider === 'claude' ? aiCallClaudeDirect : aiCallGeminiDirect;
-  const maxAttempts = 3;
+  const maxAttempts = 4;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await call(args);
     } catch (err) {
       if (!err.rateLimited || attempt === maxAttempts) throw err;
-      await new Promise((resolve) => setTimeout(resolve, err.retryAfterMs || 15000));
+      // +3s biên an toàn — thời gian API gợi ý đôi khi hơi lạc quan so với lúc quota THẬT SỰ mở lại.
+      await new Promise((resolve) => setTimeout(resolve, (err.retryAfterMs || 15000) + 3000));
     }
   }
 }
@@ -717,8 +719,11 @@ async function generateFromLessonClient(data) {
 // hơn vì tính phí THEO LƯỢT GỌI THẬT, không phải theo 1 lần bấm nút).
 const AI_QUIZRECOGNIZE_PAGES_PER_CALL = 3;
 // Nghỉ giữa 2 nhóm trang liên tiếp — tránh dồn dập nhiều lượt gọi trong cùng 1 phút, dễ chạm trần TỐC
-// ĐỘ gọi API miễn phí của Google (thường 15-20 lượt/phút cho model mới).
-const AI_QUIZRECOGNIZE_CHUNK_DELAY_MS = 4000;
+// ĐỘ gọi API miễn phí của Google (thực tế chỉ ~10-20 lượt/PHÚT cho model flash miễn phí — thấp hơn hẳn
+// so với ước tính ban đầu). 4s/nhóm vẫn sát mép giới hạn (~15 lượt/phút) nếu cộng dồn với các lượt test
+// khác trong CÙNG phút (VD "Kiểm tra kết nối" ở Quản trị, hoặc bấm thử lại liên tục) — tăng lên 8s để có
+// biên an toàn rộng hơn hẳn (~7-8 lượt/phút).
+const AI_QUIZRECOGNIZE_CHUNK_DELAY_MS = 8000;
 
 // ---------- Nhận diện câu hỏi trắc nghiệm từ ẢNH các trang PDF bằng AI — thay cho cách "cắt ảnh"
 // (doc-import.js: extractQuizFromPdf) khi giáo viên muốn có CHỮ THẬT thay vì ảnh: q/options là text

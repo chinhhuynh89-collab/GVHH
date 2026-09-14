@@ -2373,7 +2373,7 @@
         if (!file) return;
         if (!confirmIfDuplicateSourceFile(file.name)) return;
         const box = $('#quizAiResult');
-        box.innerHTML = `<div class="result-box show">⏳ AI đang đọc từng trang trong "${escapeHtml(file.name)}"...</div>`;
+        box.innerHTML = `<div class="result-box show">⏳ AI đang đọc từng trang trong "${escapeHtml(file.name)}"... (đề nhiều trang có thể mất vài phút, đừng thoát trang)</div>`;
         try {
           const onProgress = (chunkIndex, totalChunks) => {
             box.innerHTML = `<div class="result-box show">⏳ AI đang đọc trang... (nhóm ${chunkIndex}/${totalChunks})</div>`;
