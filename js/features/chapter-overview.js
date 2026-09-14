@@ -28,6 +28,21 @@
   // cần thấy ĐÚNG tên giáo viên đã đổi, chỉ giáo viên đó mới sửa được (xem firestore.rules).
   let gradeLabels = {};
   let gradeLabelsOwnerUid = null;
+  // Chương lớp 6-12 mặc định để TRỐNG (chưa biên soạn sẵn) nhưng giáo viên đã tự soạn ĐẦY ĐỦ nội dung
+  // riêng cho đúng chương đó — hasContent() (chapter-meta.js/curriculum.js) không biết gì về nội dung tự
+  // thêm, chỉ đọc TOÀN BỘ chapterMeta của giáo viên SỞ HỮU (gradeLabelsOwnerUid) TRONG 1 LƯỢT lúc tải
+  // trang (xem init() bên dưới) — không tốn 1 lượt đọc/chương, xem markChapterHasCustomContent/
+  // getAllChapterMetaForTeacher (chapter-meta.js).
+  let chapterMetaMap = {};
+
+  // Hàm CHUNG thay cho hasContent() thô ở mọi nơi cần biết "chương này có tính vào % / có khoá được
+  // không" — chương trình riêng (data.type==='program') luôn coi là có nội dung (100% tự thêm, không có
+  // khái niệm "lessons tĩnh"); chương lớp 6-12 mặc định thì hasContent() HOẶC cờ hasCustomContent vừa
+  // nạp ở trên.
+  function effectiveHasContentFor(data) {
+    if (data.type === 'program') return () => true;
+    return (c) => hasContent(c) || !!(chapterMetaMap[c.id] && chapterMetaMap[c.id].hasCustomContent);
+  }
 
   let tabs = [];
   let currentTabKey = null;
@@ -353,8 +368,9 @@
 
   function renderOverview(data) {
     const chapters = data.chapters;
-    const withContent = chapters.filter((c) => data.type === 'program' || hasContent(c));
-    const percent = overallPercent(chapters, data.type === 'program');
+    const checkHasContent = effectiveHasContentFor(data);
+    const withContent = chapters.filter(checkHasContent);
+    const percent = overallPercent(chapters, checkHasContent);
     const doneCount = chapters.filter((c) => isChapterComplete(c.id)).length;
     // Dùng ĐÚNG label của tab hiện tại (đã áp dụng gradeLabels nếu giáo viên đổi tên — xem buildTabs)
     // thay vì tự ghép "Hoá học lớp N" cứng — sửa lỗi thực tế: đổi tên "Lớp 7" -> "Lớp 77" ở tab nhưng
@@ -393,9 +409,10 @@
       $('#chapterList').innerHTML = `<div class="card"><p class="hint">${data.type === 'program' ? 'Chương trình này chưa có chương nào. Bấm "+ Thêm chương mới" ở trên để bắt đầu.' : 'Chưa có dữ liệu chương trình cho khối lớp này.'}</p></div>`;
       return;
     }
+    const checkHasContent = effectiveHasContentFor(data);
     $('#chapterList').innerHTML = chapters.map((c) => {
-      const withContent = data.type === 'program' ? true : hasContent(c);
-      const unlocked = isChapterUnlocked(chapters, c.id, data.type === 'program');
+      const withContent = checkHasContent(c);
+      const unlocked = isChapterUnlocked(chapters, c.id, checkHasContent);
       const percent = withContent ? chapterPercent(c.id) : 0;
       const complete = withContent && isChapterComplete(c.id);
       let badge = '';
@@ -512,6 +529,7 @@
     await initContext();
     if (viewerMode === 'guest' || viewerMode === 'no-firebase' || viewerMode === 'locked') { renderGate(); return; }
     try { gradeLabels = await getGradeLabels(gradeLabelsOwnerUid); } catch (e) { gradeLabels = {}; }
+    try { chapterMetaMap = await getAllChapterMetaForTeacher(gradeLabelsOwnerUid); } catch (e) { chapterMetaMap = {}; }
     applyHeaderTitle();
     $('#overviewWrap').style.display = 'block';
     buildTabs();

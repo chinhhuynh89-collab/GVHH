@@ -10,6 +10,7 @@ async function addCustomFlashcard(chapterId, card) {
     Object.assign({ chapterId, addedAt: new Date().toISOString() }, card)
   );
   if (typeof contentCacheBump === 'function') contentCacheBump('flashcards', teacher.uid);
+  if (typeof markChapterHasCustomContent === 'function') markChapterHasCustomContent(teacher.uid, chapterId);
   return ref.id;
 }
 

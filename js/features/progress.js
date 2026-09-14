@@ -132,31 +132,33 @@ function setFreeMode(enabled) {
   localStorage.setItem(FREE_MODE_KEY, enabled ? '1' : '0');
 }
 
-// isProgram=true (chương trình riêng do giáo viên tự tạo, xem programs-data.js): MỌI chương đều coi
-// như "có nội dung" bất kể hasContent() nói gì — chương trình riêng KHÔNG có mảng "lessons" tĩnh nào cả
-// (100% nội dung do giáo viên tự thêm qua Firestore), nên hasContent() (chỉ kiểm tra mảng lessons tĩnh
-// của chương trình lớp 6-12 mặc định) LUÔN trả về false cho MỌI chương của MỌI chương trình riêng — nếu
-// không có tham số này, isChapterUnlocked() sẽ hiểu nhầm "chương nào cũng chưa biên soạn" nên KHÔNG BAO
-// GIỜ khoá chương sau, học sinh có thể bỏ qua toàn bộ chương trình riêng mà không cần hoàn thành gì cả
-// (lỗi thực tế đã gặp — xem cùng cách xử lý "data.type === 'program' || hasContent(c)" đã có sẵn ở
-// chapter-overview.js, hàm này giờ khớp lại cho ĐÚNG Y HỆT).
-function isChapterUnlocked(chapters, chapterId, isProgram) {
+// effectiveHasContent: hàm (chapter) => boolean, THAY THẾ hasContent() thô — mặc định (không truyền)
+// dùng lại hasContent() y hệt trước đây. Cần tham số này vì hasContent() CHỈ kiểm tra mảng "lessons"
+// TĨNH có sẵn trong app, bỏ sót 2 trường hợp THẬT đã gặp: (1) "Chương trình riêng" do giáo viên tự tạo
+// — 100% nội dung qua Firestore, KHÔNG có mảng lessons tĩnh nào cả nên hasContent() luôn false cho MỌI
+// chương; (2) chương lớp 6-12 mặc định để TRỐNG sẵn (đang chờ biên soạn) nhưng giáo viên đã tự soạn ĐẦY
+// ĐỦ nội dung riêng cho đúng chương đó — hasContent() vẫn không biết, vẫn trả về false. Cả 2 trường hợp
+// nếu không sửa sẽ khiến isChapterUnlocked() hiểu nhầm "chương chưa biên soạn" nên KHÔNG BAO GIỜ khoá
+// chương sau, học sinh bỏ qua được cả trình tự học (lỗi thực tế đã gặp). Nơi gọi (chapter-overview.js)
+// tự dựng effectiveHasContent kết hợp hasContent() + cờ hasCustomContent (chapterMeta) + luôn true cho
+// chương trình riêng.
+function isChapterUnlocked(chapters, chapterId, effectiveHasContent) {
   if (isFreeMode()) return true;
   const idx = chapters.findIndex((c) => c.id === chapterId);
   if (idx <= 0) return true;
   const prev = chapters[idx - 1];
+  const checkFn = effectiveHasContent || hasContent;
   // Chương trước chưa có nội dung chi tiết (đang biên soạn) thì không thể "hoàn thành" -> không chặn chương sau.
-  if (!isProgram && !hasContent(prev)) return true;
+  if (!checkFn(prev)) return true;
   return isChapterComplete(prev.id);
 }
 
 // Chỉ tính % trên các chương đã có nội dung chi tiết, tránh việc thêm chương "đang biên soạn" kéo % xuống
-// sai lệch — TRỪ chương trình riêng (isProgram=true): coi MỌI chương là "có nội dung" (lý do y hệt
-// isChapterUnlocked ở trên) — thiếu tham số này khiến % tổng của MỌI chương trình riêng LUÔN hiện 0%
-// (mọi chương đều bị lọc bỏ khỏi "withContent" vì hasContent() không biết chương trình riêng không có
-// mảng "lessons" tĩnh) dù học sinh đã hoàn thành 100% — lỗi thực tế đã gặp.
-function overallPercent(chapters, isProgram) {
-  const withContent = isProgram ? chapters : chapters.filter(hasContent);
+// sai lệch. effectiveHasContent: xem giải thích đầy đủ ở isChapterUnlocked ngay trên — mặc định dùng
+// hasContent() thô như trước.
+function overallPercent(chapters, effectiveHasContent) {
+  const checkFn = effectiveHasContent || hasContent;
+  const withContent = chapters.filter(checkFn);
   if (!withContent.length) return 0;
   const sum = withContent.reduce((s, c) => s + chapterPercent(c.id), 0);
   return Math.round(sum / withContent.length);

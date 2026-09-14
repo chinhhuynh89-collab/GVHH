@@ -18,6 +18,7 @@ async function addCustomLesson(chapterId, lesson) {
     Object.assign({ chapterId, addedAt: new Date().toISOString(), order: Date.now() }, lesson)
   );
   if (typeof contentCacheBump === 'function') contentCacheBump('lessons', teacher.uid);
+  if (typeof markChapterHasCustomContent === 'function') markChapterHasCustomContent(teacher.uid, chapterId);
   return ref.id;
 }
 
@@ -69,6 +70,7 @@ async function addCustomLessonBatch(chapterId, lessons) {
   if (opCount > 0) commits.push(batch.commit());
   await Promise.all(commits);
   if (typeof contentCacheBump === 'function') contentCacheBump('lessons', teacher.uid);
+  if (typeof markChapterHasCustomContent === 'function') markChapterHasCustomContent(teacher.uid, chapterId);
   return created;
 }
 

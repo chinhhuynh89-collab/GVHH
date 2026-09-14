@@ -14,6 +14,7 @@ async function addCustomQuiz(chapterId, question) {
     Object.assign({ chapterId, addedAt: new Date().toISOString(), order: Date.now() }, question)
   );
   if (typeof contentCacheBump === 'function') contentCacheBump('quiz', teacher.uid);
+  if (typeof markChapterHasCustomContent === 'function') markChapterHasCustomContent(teacher.uid, chapterId);
   return ref.id;
 }
 
@@ -59,6 +60,7 @@ async function addCustomQuizBatch(chapterId, questions) {
   if (opCount > 0) commits.push(batch.commit());
   await Promise.all(commits);
   if (typeof contentCacheBump === 'function') contentCacheBump('quiz', teacher.uid);
+  if (typeof markChapterHasCustomContent === 'function') markChapterHasCustomContent(teacher.uid, chapterId);
   return created;
 }
 
