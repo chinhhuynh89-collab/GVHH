@@ -1123,6 +1123,9 @@ input.quiz-option { cursor: text; }
 .trivia-timer-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-bottom: 14px; }
 .trivia-timer-fill { height: 100%; background: var(--brand); width: 100%; transition: width 0.1s linear, background-color 0.3s; }
 .trivia-timer-fill.is-low { background: var(--danger); }
+/* Đồng hồ CẢ LƯỢT chơi (2 phút, #triviaGameTime) — đổi màu cảnh báo khi sắp hết giờ, khác hẳn màu chữ
+   thường của .trivia-topbar để dễ nhận ra ngay cả khi đang tập trung đọc câu hỏi. */
+#triviaGameTime.is-low { color: var(--danger); }
 .trivia-question { font-size: calc(17px * var(--font-scale)); font-weight: 700; margin: 0 0 16px; }
 .trivia-feedback { text-align: center; font-weight: 700; margin-top: 12px; padding: 10px; border-radius: 8px; }
 .trivia-feedback.ok { background: rgba(52, 211, 153, 0.15); color: var(--ok); }

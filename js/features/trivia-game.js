@@ -3,20 +3,28 @@
 // soạn thêm nội dung nào. Nội dung tĩnh, không cần Firebase/đăng nhập — chơi được ngay, điểm cao nhất
 // lưu localStorage (không đồng bộ máy chủ, không cần bảng xếp hạng ở bản đầu tiên này).
 (function () {
-  const TOTAL_QUESTIONS = 10;
-  const TIME_PER_QUESTION = 15; // giây
+  const TIME_PER_QUESTION = 15; // giây/câu — vẫn dùng làm mốc đo TỐC ĐỘ trả lời cho cả thưởng lẫn phạt
+  const GAME_DURATION_SEC = 120; // KHÔNG giới hạn số câu (khác bản trước: cố định 10 câu/lượt) — trả
+  // lời được bao nhiêu câu tuỳ tốc độ, tính điểm trong đúng 2 phút.
   const BASE_POINTS = 100; // điểm trả lời đúng, chưa tính thưởng tốc độ
   const SPEED_BONUS_MAX = 100; // thưởng thêm tối đa nếu trả lời NGAY LẬP TỨC, giảm dần về 0 khi hết giờ
+  // Trừ điểm khi chọn SAI (kể cả hết giờ không chọn) — CÙNG công thức đối xứng với thưởng: sai càng
+  // NHANH trừ càng nhiều (tối đa 100), gần hết giờ mới chọn sai thì trừ ít — để tránh kiểu chơi bấm bừa
+  // thật nhanh ăn may/bỏ qua câu hỏi cho lẹ thay vì thực sự đọc và suy nghĩ.
+  const PENALTY_MAX = 100;
   const HIGH_SCORE_KEY = 'hoahoc_trivia_highscore';
   const REVEAL_DELAY_MS = 1400; // dừng lại 1 chút cho học sinh thấy đáp án đúng trước khi sang câu tiếp
 
-  let round = [];
-  let currentIndex = 0;
+  let currentQuestion = null;
+  let questionCount = 0; // tổng số câu ĐÃ TRẢ LỜI (đúng/sai/hết giờ) trong lượt chơi hiện tại
   let score = 0;
   let correctCount = 0;
-  let timeLeft = TIME_PER_QUESTION;
-  let timerHandle = null;
+  let timeLeft = TIME_PER_QUESTION; // đếm ngược của riêng CÂU đang hiện
+  let gameTimeLeft = GAME_DURATION_SEC; // đếm ngược của CẢ LƯỢT chơi — chạy LIÊN TỤC, không dừng giữa các câu
+  let questionTimerHandle = null;
+  let gameTimerHandle = null;
   let answered = false;
+  let gameEnded = false;
 
   function shuffle(arr) {
     const a = arr.slice();
@@ -159,34 +167,64 @@
     if (finalScore > getHighScore()) localStorage.setItem(HIGH_SCORE_KEY, String(finalScore));
   }
 
+  function formatTime(sec) {
+    const s = Math.max(0, Math.ceil(sec));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
   // ---------- Vòng chơi ----------
+  function stopQuestionTimer() {
+    if (questionTimerHandle) { clearInterval(questionTimerHandle); questionTimerHandle = null; }
+  }
+  function stopGameTimer() {
+    if (gameTimerHandle) { clearInterval(gameTimerHandle); gameTimerHandle = null; }
+  }
+
   function startRound() {
-    round = Array.from({ length: TOTAL_QUESTIONS }, generateQuestion);
-    currentIndex = 0;
+    questionCount = 0;
     score = 0;
     correctCount = 0;
+    gameTimeLeft = GAME_DURATION_SEC;
+    gameEnded = false;
+    // Đồng hồ CẢ LƯỢT chơi chạy RIÊNG, LIÊN TỤC — không dừng giữa lúc chuyển câu/xem đáp án (khác đồng
+    // hồ từng câu), để đúng 2 phút chơi thật, không bị "cộng thêm giờ chết" mỗi lần dừng xem đáp án.
+    stopGameTimer();
+    gameTimerHandle = setInterval(() => {
+      gameTimeLeft -= 0.1;
+      const el = $('#triviaGameTime');
+      if (el) {
+        el.textContent = '⏱ ' + formatTime(gameTimeLeft);
+        el.classList.toggle('is-low', gameTimeLeft <= 10);
+      }
+      if (gameTimeLeft <= 0) endGame();
+    }, 100);
     renderQuestion();
   }
 
-  function stopTimer() {
-    if (timerHandle) { clearInterval(timerHandle); timerHandle = null; }
+  function endGame() {
+    if (gameEnded) return;
+    gameEnded = true;
+    stopGameTimer();
+    stopQuestionTimer();
+    renderResult();
   }
 
   function renderQuestion() {
     answered = false;
     timeLeft = TIME_PER_QUESTION;
-    const item = round[currentIndex];
+    currentQuestion = generateQuestion();
     const box = $('#triviaBox');
     box.innerHTML = `
       <div class="trivia-topbar">
-        <span>Câu ${currentIndex + 1}/${TOTAL_QUESTIONS}</span>
+        <span>Câu ${questionCount + 1}</span>
+        <span id="triviaGameTime" class="${gameTimeLeft <= 10 ? 'is-low' : ''}">⏱ ${formatTime(gameTimeLeft)}</span>
         <span>Điểm: <strong>${score}</strong></span>
       </div>
       <div class="trivia-timer-bar"><div class="trivia-timer-fill" id="triviaTimerFill"></div></div>
       <div class="card">
-        <p class="trivia-question">${item.q}</p>
+        <p class="trivia-question">${currentQuestion.q}</p>
         <div class="quiz-options" id="triviaOptions">
-          ${item.options.map((opt, i) => `
+          ${currentQuestion.options.map((opt, i) => `
             <button type="button" class="quiz-option" data-i="${i}">${escapeHtml(opt)}</button>
           `).join('')}
         </div>
@@ -195,12 +233,12 @@
     $$('.quiz-option', box).forEach((btn) => {
       btn.addEventListener('click', () => submitAnswer(parseInt(btn.dataset.i, 10)));
     });
-    stopTimer();
+    stopQuestionTimer();
     updateTimerBar();
-    timerHandle = setInterval(() => {
+    questionTimerHandle = setInterval(() => {
       timeLeft -= 0.1;
       updateTimerBar();
-      if (timeLeft <= 0) { stopTimer(); submitAnswer(-1); }
+      if (timeLeft <= 0) { stopQuestionTimer(); submitAnswer(-1); }
     }, 100);
   }
 
@@ -213,17 +251,23 @@
   }
 
   function submitAnswer(chosenIndex) {
-    if (answered) return;
+    if (answered || gameEnded) return;
     answered = true;
-    stopTimer();
-    const item = round[currentIndex];
+    stopQuestionTimer();
+    const item = currentQuestion;
     const isCorrect = chosenIndex === item.correctIndex;
-    let earned = 0;
+    // speedFrac: 1 = trả lời NGAY LẬP TỨC, 0 = gần/đúng lúc hết giờ — dùng CHUNG cho cả thưởng (đúng)
+    // lẫn phạt (sai), đối xứng nhau.
+    const speedFrac = Math.max(0, Math.min(1, timeLeft / TIME_PER_QUESTION));
+    let delta = 0;
+    questionCount++;
     if (isCorrect) {
       correctCount++;
-      const speedFrac = Math.max(0, timeLeft / TIME_PER_QUESTION);
-      earned = BASE_POINTS + Math.round(SPEED_BONUS_MAX * speedFrac);
-      score += earned;
+      delta = BASE_POINTS + Math.round(SPEED_BONUS_MAX * speedFrac);
+      score += delta;
+    } else {
+      delta = Math.round(PENALTY_MAX * speedFrac);
+      score -= delta;
     }
     $$('.quiz-option', $('#triviaOptions')).forEach((btn, i) => {
       btn.disabled = true;
@@ -233,24 +277,28 @@
     const box = $('#triviaBox');
     const feedback = document.createElement('div');
     feedback.className = 'trivia-feedback ' + (isCorrect ? 'ok' : 'no');
-    feedback.textContent = isCorrect ? `✓ Chính xác! +${earned} điểm` : (chosenIndex === -1 ? '⏱ Hết giờ!' : '✗ Chưa đúng');
+    if (isCorrect) feedback.textContent = `✓ Chính xác! +${delta} điểm`;
+    else if (chosenIndex === -1) feedback.textContent = delta > 0 ? `⏱ Hết giờ! −${delta} điểm` : '⏱ Hết giờ!';
+    else feedback.textContent = delta > 0 ? `✗ Chưa đúng! −${delta} điểm` : '✗ Chưa đúng!';
     box.appendChild(feedback);
+    const scoreEl = box.querySelector('.trivia-topbar strong');
+    if (scoreEl) scoreEl.textContent = score;
     setTimeout(() => {
-      currentIndex++;
-      if (currentIndex < TOTAL_QUESTIONS) renderQuestion();
-      else renderResult();
+      if (gameTimeLeft > 0) renderQuestion();
+      else endGame();
     }, REVEAL_DELAY_MS);
   }
 
   function renderResult() {
     const high = getHighScore();
     setHighScoreIfBetter(score);
-    const newHigh = score > high;
+    const newHigh = questionCount > 0 && score > high;
+    const ratio = questionCount ? correctCount / questionCount : 0;
     $('#triviaBox').innerHTML = `
       <div class="card" style="text-align:center;">
-        <div style="font-size:48px;">${correctCount === TOTAL_QUESTIONS ? '🏆' : correctCount >= TOTAL_QUESTIONS * 0.6 ? '🎉' : '💪'}</div>
+        <div style="font-size:48px;">${questionCount > 0 && ratio === 1 ? '🏆' : ratio >= 0.6 ? '🎉' : '💪'}</div>
         <h2 style="margin:8px 0;">${score} điểm</h2>
-        <p class="hint">Đúng ${correctCount}/${TOTAL_QUESTIONS} câu${newHigh ? ' — <strong>Kỷ lục mới!</strong> 🎊' : ''}</p>
+        <p class="hint">Đúng ${correctCount}/${questionCount} câu${newHigh ? ' — <strong>Kỷ lục mới!</strong> 🎊' : ''}</p>
         <p class="hint">Điểm cao nhất: ${Math.max(high, score)}</p>
         <button class="btn primary block" id="triviaReplayBtn" style="margin-top:12px;">🔄 Chơi lại</button>
       </div>
