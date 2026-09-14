@@ -84,6 +84,7 @@ const LOCKABLE_FEATURES = [
   { id: 'formulasLaws', label: 'Công thức, Định luật', audience: 'any' },
   { id: 'referenceTables', label: 'Bảng tra cứu', audience: 'any' },
   { id: 'organicNomenclature', label: 'Danh pháp hữu cơ', audience: 'any' },
+  { id: 'triviaGame', label: 'Đố vui Hoá học (trắc nghiệm tốc độ)', audience: 'any' },
   { id: 'customPrograms', label: 'Tạo chương trình giảng dạy riêng (ngoài lớp 6-12 mặc định)', audience: 'teacher' },
   { id: 'examCreator', label: 'Tạo đề kiểm tra tự động', audience: 'teacher' },
   { id: 'advancedStats', label: 'Thống kê điểm theo từng đợt kiểm tra', audience: 'teacher' },

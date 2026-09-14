@@ -1117,6 +1117,16 @@ input.quiz-option { cursor: text; }
    theo bề rộng nút bấm sẽ phóng to vượt xa kích thước gốc, vỡ nét/mờ. Chỉ giới hạn KHÔNG được TRÀN
    (max-width/max-height), còn lại hiện ĐÚNG kích thước gốc — nét thật thế nào giữ nguyên thế đó. */
 .quiz-option-image img { max-width: 100%; max-height: 120px; display: block; min-width: 0; }
+/* Trò chơi "Đố vui Hoá học" (trivia-game.js) — tái dùng nguyên .quiz-options/.quiz-option cho các nút
+   đáp án, chỉ cần thêm khung đếm giờ + dòng điểm/số câu + banner phản hồi đúng/sai riêng cho trò chơi. */
+.trivia-topbar { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 8px; color: var(--text-dim); }
+.trivia-timer-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-bottom: 14px; }
+.trivia-timer-fill { height: 100%; background: var(--brand); width: 100%; transition: width 0.1s linear, background-color 0.3s; }
+.trivia-timer-fill.is-low { background: var(--danger); }
+.trivia-question { font-size: calc(17px * var(--font-scale)); font-weight: 700; margin: 0 0 16px; }
+.trivia-feedback { text-align: center; font-weight: 700; margin-top: 12px; padding: 10px; border-radius: 8px; }
+.trivia-feedback.ok { background: rgba(52, 211, 153, 0.15); color: var(--ok); }
+.trivia-feedback.no { background: rgba(248, 113, 113, 0.15); color: var(--danger); }
 .quiz-explain {
   font-size: calc(13.5px * var(--font-scale));
   color: var(--text-dim);
