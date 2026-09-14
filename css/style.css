@@ -1139,7 +1139,10 @@ input.quiz-option { cursor: text; }
   animation: experimentFlameFlicker 0.9s ease-in-out infinite alternate;
 }
 @keyframes experimentFlameFlicker { from { transform: scale(1, 1); } to { transform: scale(0.92, 1.12); } }
-.bubble { position: absolute; bottom: 2px; width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.75); animation: experimentBubbleRise 1.8s ease-in infinite; }
+/* Viền tối + bóng đổ cho bong bóng/hạt kết tủa — nhiều chất lỏng hiện tượng có màu TRẮNG/nhạt (kết
+   tủa trắng rất phổ biến trong hoá học thật), nếu chấm tròn cũng trắng như trước sẽ LẶN MẤT vào chất
+   lỏng cùng màu, không thấy được hiệu ứng đang xảy ra. Viền tối đảm bảo luôn nổi bật dù nền là màu gì. */
+.bubble { position: absolute; bottom: 2px; width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); border: 1.5px solid rgba(15, 23, 42, 0.55); box-shadow: 0 0 4px rgba(0, 0, 0, 0.4); animation: experimentBubbleRise 1.8s ease-in infinite; }
 .bubble:nth-child(1) { left: 18%; animation-delay: 0s; }
 .bubble:nth-child(2) { left: 48%; animation-delay: 0.5s; }
 .bubble:nth-child(3) { left: 74%; animation-delay: 1s; }
@@ -1153,7 +1156,7 @@ input.quiz-option { cursor: text; }
 .experiment-drop { position: absolute; top: 30px; left: 50%; margin-left: 8px; width: 5px; height: 7px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: #7dd3fc; opacity: 0; }
 .experiment-stage.is-pouring .experiment-drop { animation: experimentDropFall 0.85s ease-in infinite; }
 @keyframes experimentDropFall { 0% { top: 30px; opacity: 0; } 15% { opacity: 1; } 90% { opacity: 1; } 100% { top: 92px; opacity: 0; } }
-.experiment-particle { position: absolute; top: 0; width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); opacity: 0; animation: experimentParticleSettle 1.6s ease-in forwards; }
+.experiment-particle { position: absolute; top: 0; width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.9); border: 1.5px solid rgba(15, 23, 42, 0.55); box-shadow: 0 0 4px rgba(0, 0, 0, 0.4); opacity: 0; animation: experimentParticleSettle 1.6s ease-in forwards; }
 @keyframes experimentParticleSettle { 0% { top: 0; opacity: 0; } 20% { opacity: 1; } 100% { top: 82%; opacity: 1; } }
 .trivia-question { font-size: calc(17px * var(--font-scale)); font-weight: 700; margin: 0 0 16px; }
 .trivia-feedback { text-align: center; font-weight: 700; margin-top: 12px; padding: 10px; border-radius: 8px; }
