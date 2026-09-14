@@ -95,14 +95,56 @@
     return { q: `Hậu tố dùng để gọi tên <strong>${escapeHtml(f.className)}</strong> là gì?`, options, correctIndex };
   }
 
-  // Trọng số: lặp lại các dạng phổ biến/dễ hơn để câu hỏi đa dạng nhưng không quá thiên lệch.
+  // ---------- Bộ sinh câu hỏi từ công thức/định luật (js/data/chemistry-formulas.js) ----------
+  // Nhiều mục ở đây là phát biểu ĐỊNH LUẬT bằng cả câu văn dài (VD "Định luật thành phần không đổi"),
+  // không phù hợp làm nút bấm trắc nghiệm (phải đọc/lướt nhanh) — chỉ giữ mục có CẢ tên lẫn công thức
+  // đủ ngắn gọn, súc tích.
+  const TRIVIA_FORMULAS = CHEMISTRY_FORMULAS.filter((f) => f.formula.length <= 30 && f.name.length <= 30);
+
+  function genFormulaFromName() {
+    const f = TRIVIA_FORMULAS[Math.floor(Math.random() * TRIVIA_FORMULAS.length)];
+    const distractors = pickDistractors(TRIVIA_FORMULAS, f.formula, (x) => x.formula, 3);
+    const { options, correctIndex } = buildOptions(f.formula, distractors);
+    // Vài mục có tên đã bắt đầu bằng "Công thức chung..." (Ankan/Anken/Ankin/Ankadien) — hỏi kiểu
+    // "Công thức tính Công thức chung X là gì?" nghe lặp từ, đổi cách hỏi cho tự nhiên hơn.
+    const q = /^Công thức/i.test(f.name)
+      ? `<strong>${escapeHtml(f.name)}</strong> là gì?`
+      : `Công thức tính <strong>${escapeHtml(f.name)}</strong> là gì?`;
+    return { q, options, correctIndex };
+  }
+
+  function genNameFromFormula() {
+    const f = TRIVIA_FORMULAS[Math.floor(Math.random() * TRIVIA_FORMULAS.length)];
+    const distractors = pickDistractors(TRIVIA_FORMULAS, f.name, (x) => x.name, 3);
+    const { options, correctIndex } = buildOptions(f.name, distractors);
+    return { q: `Công thức <strong>${escapeHtml(f.formula)}</strong> dùng để tính đại lượng nào?`, options, correctIndex };
+  }
+
+  // ---------- Bộ sinh câu hỏi từ câu chuyện Hoá học (js/data/chemistry-stories.js) ----------
+  // Nội dung ở đây là văn xuôi (không có field "nhân vật"/"đáp án" tách riêng) nên KHÔNG tự trích xuất
+  // được kiểu hỏi-đáp thông thường — dùng cách khác: cho tóm tắt (summary), đoán ĐÚNG tiêu đề (title)
+  // khớp với tóm tắt đó trong 4 lựa chọn — chỉ dùng 2 field đã có sẵn, tự động cập nhật nếu sau này
+  // thêm câu chuyện mới, không cần tự tay gắn thêm dữ liệu nào.
+  function genStoryTitleFromSummary() {
+    const s = CHEMISTRY_STORIES[Math.floor(Math.random() * CHEMISTRY_STORIES.length)];
+    const distractors = pickDistractors(CHEMISTRY_STORIES, s.title, (x) => x.title, 3);
+    const { options, correctIndex } = buildOptions(s.title, distractors);
+    return { q: `Câu chuyện nào khớp với tóm tắt sau: <em>"${escapeHtml(s.summary)}"</em>?`, options, correctIndex };
+  }
+
+  // Trọng số: lặp lại các dạng phổ biến/dễ hơn để câu hỏi đa dạng nhưng không quá thiên lệch — nguyên
+  // tố có kho dữ liệu lớn nhất (118 nguyên tố) nên vẫn chiếm tỉ trọng cao nhất, các dạng còn lại (công
+  // thức, câu chuyện, danh pháp) có kho nhỏ hơn nên xuất hiện thưa hơn để đỡ lặp lại trong 1 vòng chơi.
   const GENERATORS = [
     genElementSymbolFromName, genElementSymbolFromName,
     genElementNameFromSymbol, genElementNameFromSymbol,
     genElementCategory,
     genElementFromSummary,
     genCarbonPrefix,
-    genFunctionalSuffix
+    genFunctionalSuffix,
+    genFormulaFromName,
+    genNameFromFormula,
+    genStoryTitleFromSummary
   ];
 
   function generateQuestion() {
