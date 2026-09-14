@@ -67,12 +67,27 @@
     // Roster panel tự lập lịch làm mới trạng thái online/offline định kỳ (xem renderRosterPanel) —
     // phải dọn lịch này mỗi khi chuyển sang mục khác/đóng lại, nếu không nó cứ chạy ngầm mãi dù
     // khung danh sách đã bị thay bằng nội dung khác (rò rỉ interval, tốn đọc Firestore vô ích).
+    // rosterVisibilityHandler dọn CHUNG 1 lượt với interval — thiếu bước này, mỗi lần mở lại "Danh
+    // sách" sẽ CHỒNG THÊM 1 listener "visibilitychange" mới (rò rỉ listener, không rò rỉ interval
+    // nhưng vẫn gọi refreshPresence() nhiều lần thừa mỗi lần đổi tab). Đã gặp thật: để 1 tab "Quản lý
+    // học sinh" mở nền (không tắt máy, chỉ chuyển tab khác) NHIỀU GIỜ liền vẫn cứ 30s gọi lại 1 lượt
+    // đọc presence cho MỖI học sinh (getPresenceForUids đọc riêng từng doc, không gộp được) — dù
+    // không ai nhìn tab đó, dẫn tới tốn hàng chục nghìn lượt đọc Firestore chỉ trong vài giờ.
     let rosterPresenceInterval = null;
+    let rosterVisibilityHandler = null;
+    function stopRosterPresencePolling() {
+      clearInterval(rosterPresenceInterval);
+      rosterPresenceInterval = null;
+      if (rosterVisibilityHandler) {
+        document.removeEventListener('visibilitychange', rosterVisibilityHandler);
+        rosterVisibilityHandler = null;
+      }
+    }
     $$('.manage-sub-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const key = btn.dataset.sub;
         const panel = $('#manageSubPanel');
-        clearInterval(rosterPresenceInterval);
+        stopRosterPresencePolling();
         if (openSub === key) {
           panel.innerHTML = '';
           btn.classList.remove('has-open');
@@ -538,7 +553,15 @@
 
       renderTableBody();
       refreshPresence();
-      rosterPresenceInterval = setInterval(refreshPresence, 30000);
+      // Tăng từ 30s lên 60s (giảm nửa tốc độ đọc ngay cả khi đang xem) + BỎ QUA lượt làm mới nào rơi
+      // đúng lúc tab đang ẩn (chuyển sang tab khác/thu nhỏ) — dấu chấm online/offline không cần cập
+      // nhật khi không ai nhìn thấy nó. Bù lại: làm mới NGAY khi tab hiện lại (visibilitychange), để
+      // không phải chờ tới 60s tiếp theo mới thấy đúng trạng thái sau khi quay lại tab.
+      rosterPresenceInterval = setInterval(() => {
+        if (!document.hidden) refreshPresence();
+      }, 60000);
+      rosterVisibilityHandler = () => { if (!document.hidden) refreshPresence(); };
+      document.addEventListener('visibilitychange', rosterVisibilityHandler);
 
       // Dọn 1 lần — xem cleanupOrphanedUnassignedDuplicates() (groups-data.js) để hiểu chính xác lỗi
       // cũ nó sửa (tính năng "chọn học sinh có sẵn" lúc tạo nhóm mới từng để sót bản ghi "Chưa xếp
