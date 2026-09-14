@@ -752,7 +752,6 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .dict-row-vi { font-weight: 700; font-size: 14.5px; }
 .dict-row-en { color: var(--brand-dark); font-size: 13.5px; margin-top: 2px; }
 .dict-row-cat { color: var(--text-faint); font-size: 11px; margin-top: 4px; }
-.dict-row-more { color: #38bdf8; font-weight: 700; }
 
 /* ---------- Bảng tra cứu (tính tan / dãy hoạt động / điện hoá / nhận biết ion) ---------- */
 .solub-table th, .solub-table td { text-align: center; }

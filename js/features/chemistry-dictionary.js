@@ -65,7 +65,7 @@
             <a class="dict-row" href="${wikiSearchUrl(d.vi)}" target="_blank" rel="noopener">
               <div class="dict-row-vi">${escapeHtml(d.vi)}</div>
               <div class="dict-row-en">${escapeHtml(d.en)}</div>
-              ${cat ? `<div class="dict-row-cat">${cat.icon} ${escapeHtml(cat.label)} · <span class="dict-row-more">Tìm hiểu thêm ↗</span></div>` : ''}
+              ${cat ? `<div class="dict-row-cat">${cat.icon} ${escapeHtml(cat.label)}</div>` : ''}
             </a>
           `;
         }).join('')}
