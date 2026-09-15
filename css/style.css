@@ -710,16 +710,18 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   flex-direction: column;
   justify-content: center;
   cursor: pointer;
-  border: 1px solid rgba(15, 23, 42, 0.15);
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
   overflow: hidden;
-  transition: transform 0.1s ease, outline 0.1s ease;
+  transition: transform 0.1s ease, outline 0.1s ease, box-shadow 0.1s ease;
 }
 .pt-cell:active { transform: scale(0.93); }
-.pt-cell .z { font-size: 8px; opacity: 0.85; line-height: 1; }
+.pt-cell:hover { box-shadow: 0 2px 6px rgba(15, 23, 42, 0.3); }
+.pt-cell .z { font-size: 8px; opacity: 0.75; line-height: 1; }
 .pt-cell .sym { font-size: 14px; font-weight: 800; line-height: 1.15; }
 .pt-cell.placeholder { visibility: hidden; pointer-events: none; }
 .pt-cell.spacer { visibility: hidden; pointer-events: none; }
-.pt-cell.highlight { outline: 2px solid var(--brand); z-index: 2; }
+.pt-cell.highlight { outline: 3px solid var(--brand); z-index: 2; box-shadow: 0 0 0 2px rgba(255,255,255,0.8), 0 2px 8px rgba(15,23,42,0.35); }
 
 .pt-search {
   margin-bottom: 14px;
