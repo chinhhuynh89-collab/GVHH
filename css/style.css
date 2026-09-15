@@ -86,6 +86,73 @@ button { font-family: inherit; }
   display: block;
 }
 
+/* ---------- Menu điều hướng dạng ngăn kéo (xem js/features/nav-drawer.js) ----------
+   Trước đây mỗi trang chỉ có 1 nút "← Quay lại" — muốn sang mục khác phải lùi về trang chủ trước. Bấm
+   ☰ mở 1 bảng trượt từ phải, học theo cách tổ chức của app Azota (nhóm mục có nhãn, mục đang đứng tô
+   sáng, "Đăng xuất" ghim riêng cuối bảng). Dùng CHUNG 1 kiểu ngăn kéo cho cả điện thoại lẫn máy tính ở
+   đợt này (không làm sidebar cố định luôn hiện trên máy tính — xem lý do trong plan/memory). */
+.app-header .nav-drawer-toggle { margin-left: auto; font-size: 20px; }
+.nav-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 900;
+  display: none;
+}
+.nav-drawer-backdrop.open { display: block; }
+.nav-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(300px, 82vw);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  padding: 18px 12px;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+.nav-drawer-backdrop.open .nav-drawer { transform: translateX(0); }
+.nav-drawer-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 18px 10px 6px;
+}
+.nav-drawer-section-label:first-of-type { margin-top: 10px; }
+.nav-drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.nav-drawer-item:active { background: var(--surface-2); }
+.nav-drawer-item.active { background: rgba(20, 184, 166, 0.14); color: var(--brand); }
+.nav-drawer-item-icon { font-size: 18px; flex-shrink: 0; width: 22px; text-align: center; }
+.nav-drawer-spacer { flex: 1; min-height: 12px; }
+.nav-drawer-logout { color: var(--danger); background: rgba(248, 113, 113, 0.1); }
+.nav-drawer-logout:active { background: rgba(248, 113, 113, 0.2); }
+@media (min-width: 700px) {
+  .nav-drawer { width: 280px; }
+}
+
 main {
   max-width: 980px;
   margin: 0 auto;
