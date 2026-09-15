@@ -149,8 +149,34 @@ button { font-family: inherit; }
 .nav-drawer-spacer { flex: 1; min-height: 12px; }
 .nav-drawer-logout { color: var(--danger); background: rgba(248, 113, 113, 0.1); }
 .nav-drawer-logout:active { background: rgba(248, 113, 113, 0.2); }
+/* Đợt 2 — máy tính: sidebar CỐ ĐỊNH luôn hiện bên trái thay vì ngăn kéo ẩn/hiện (giống desktop
+   Azota) — điện thoại (<700px) giữ NGUYÊN hành vi ngăn kéo trượt của đợt 1, không đổi gì.
+   Dùng "padding-left" trên "body" (KHÔNG phải "margin-left" trên "main") để nhường chỗ cho sidebar —
+   "main" vẫn giữ nguyên "margin:0 auto" sẵn có, nhờ đó tự căn giữa ĐÚNG trong phần còn lại sau khi đã
+   trừ sidebar (margin auto luôn tính theo khối chứa nó, thu hẹp khối chứa bằng padding thay vì đá
+   thẳng vào margin của "main" là cách không xung đột). */
 @media (min-width: 700px) {
-  .nav-drawer { width: 280px; }
+  body { padding-left: 280px; }
+  .app-header .nav-drawer-toggle { display: none; }
+  .nav-drawer-backdrop {
+    display: block;
+    position: static;
+    background: none;
+    z-index: auto;
+  }
+  .nav-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: auto;
+    bottom: 0;
+    width: 280px;
+    border-left: none;
+    border-right: 1px solid var(--border);
+    transform: none;
+    transition: none;
+  }
+  #toastContainer, #updateAvailableBanner, #inAppBrowserWarning { left: 280px; }
 }
 
 main {
