@@ -1134,6 +1134,11 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .quiz-question-image.multiline { overflow-x: auto; overflow-y: hidden; }
 .quiz-question-image.multiline img { width: auto; max-width: none; height: auto; }
 .quiz-question { font-size: calc(16.5px * var(--font-scale)); font-weight: 700; margin-bottom: 14px; line-height: 1.5; }
+/* Phân số công thức hoá học (VD hằng số cân bằng Kc = tử/mẫu) — xem quiz-common.js: renderChemNotation().
+   2 dòng xếp chồng + gạch ngang ở giữa, giống cách sách giáo khoa trình bày, thay vì viết liền "A/B". */
+.chem-frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 3px; font-size: 0.92em; line-height: 1.3; }
+.chem-frac-num { border-bottom: 1.5px solid currentColor; padding: 0 3px 1px; }
+.chem-frac-den { padding: 1px 3px 0; }
 .quiz-options { display: flex; flex-direction: column; gap: 9px; margin-bottom: 16px; }
 .quiz-option {
   padding: 12px 14px;
