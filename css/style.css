@@ -1,22 +1,30 @@
+/* Đổi sang giao diện SÁNG (2026-09-15, theo yêu cầu) — trước đây tối hoàn toàn (nền xanh than đậm).
+   --brand đổi từ #14b8a6 (chỉ 2.49:1 so với nền trắng, KHÔNG đạt chuẩn tương phản WCAG AA khi dùng làm
+   MÀU CHỮ — chữ/icon màu này sẽ mờ khó đọc trên nền sáng dù rất đẹp trên nền tối cũ) sang #0f766e (đậm
+   hơn, 5.47:1, đạt chuẩn AA cho chữ thường) — CHỈ đổi mỗi biến này, mọi nơi đang dùng var(--brand) làm
+   MÀU CHỮ (rất nhiều: mục đang chọn, liên kết, số liệu nổi bật...) tự động dễ đọc hơn mà không cần sửa
+   từng chỗ. --brand-2/--brand-dark GIỮ NGUYÊN (dùng cho nền nút/gradient có sẵn chữ tối riêng, không
+   cần tự làm chữ nên không bị ảnh hưởng tương phản). --danger/--ok cũng đổi đậm hơn cùng lý do (nhiều
+   chỗ vốn đã tự dùng #dc2626 thay vì var(--danger) vì lý do y hệt — nay khớp lại đồng bộ luôn). */
 :root {
-  --bg: #0b1220;
-  --bg-soft: #111a2e;
-  --surface: #16213a;
-  --surface-2: #1c2941;
-  --border: #263452;
-  --text: #eef2f8;
-  --text-dim: #9fb0c9;
-  --text-faint: #6b7a99;
-  --brand: #14b8a6;
+  --bg: #f5f7fa;
+  --bg-soft: #eef1f6;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --border: #dde3ec;
+  --text: #1a2233;
+  --text-dim: #5b6b85;
+  --text-faint: #8a96ab;
+  --brand: #0f766e;
   --brand-2: #10b981;
   --brand-dark: #0d9488;
   --accent: #f59e0b;
-  --danger: #f87171;
-  --ok: #34d399;
+  --danger: #dc2626;
+  --ok: #059669;
   --radius-lg: 20px;
   --radius-md: 14px;
   --radius-sm: 9px;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.10);
   --header-h: 60px;
   --font-scale: 1;
   font-size: 16px;
@@ -50,7 +58,7 @@ button { font-family: inherit; }
   gap: 12px;
   height: var(--header-h);
   padding: 0 16px;
-  background: rgba(11, 18, 32, 0.85);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
 }
@@ -538,7 +546,7 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .result-box.error {
   background: rgba(248, 113, 113, 0.10);
   border-color: rgba(248, 113, 113, 0.35);
-  color: #fecaca;
+  color: #991b1b;
 }
 
 /* ---------- Toast (thông báo nổi, thay cho alert()) ---------- */
@@ -573,7 +581,7 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .toast.error {
   background: rgba(248, 113, 113, 0.16);
   border-color: rgba(248, 113, 113, 0.45);
-  color: #fecaca;
+  color: #991b1b;
 }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
@@ -647,7 +655,7 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   height: 6px;
   border-radius: 50%;
   margin-left: 5px;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(15, 23, 42, 0.18);
   vertical-align: middle;
 }
 .tab-btn .dot.done { background: var(--ok); }
@@ -698,7 +706,7 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   flex-direction: column;
   justify-content: center;
   cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(15, 23, 42, 0.15);
   overflow: hidden;
   transition: transform 0.1s ease, outline 0.1s ease;
 }
@@ -707,7 +715,7 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .pt-cell .sym { font-size: 14px; font-weight: 800; line-height: 1.15; }
 .pt-cell.placeholder { visibility: hidden; pointer-events: none; }
 .pt-cell.spacer { visibility: hidden; pointer-events: none; }
-.pt-cell.highlight { outline: 2px solid #fff; z-index: 2; }
+.pt-cell.highlight { outline: 2px solid var(--brand); z-index: 2; }
 
 .pt-search {
   margin-bottom: 14px;
@@ -1249,7 +1257,7 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .quiz-option:active { background: var(--surface-2); }
 .quiz-option.selected { border-color: var(--brand); background: rgba(20, 184, 166, 0.12); }
 .quiz-option.correct { border-color: var(--ok); background: rgba(52, 211, 153, 0.15); color: var(--ok); }
-.quiz-option.wrong { border-color: var(--danger); background: rgba(248, 113, 113, 0.15); color: #fecaca; }
+.quiz-option.wrong { border-color: var(--danger); background: rgba(248, 113, 113, 0.15); color: #991b1b; }
 .quiz-option:disabled { cursor: default; }
 /* Câu "Nhập đáp án" — tái dùng nguyên style .quiz-option/.selected/.correct/.wrong cho <input> thay
    vì viết CSS riêng, chỉ cần đổi con trỏ chuột cho đúng ngữ cảnh gõ chữ. */
@@ -1453,7 +1461,7 @@ sub { font-size: 0.72em; }
 .roster-table th, .roster-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .roster-table th { background: var(--surface-2); color: var(--text-dim); font-weight: 700; font-size: calc(12px * var(--font-scale)); text-transform: uppercase; letter-spacing: 0.03em; }
 .roster-table tbody tr:last-child td { border-bottom: none; }
-.roster-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+.roster-table tbody tr:nth-child(even) { background: rgba(15, 23, 42, 0.03); }
 /* Các nút hành động trong bảng danh sách (Zalo/Cấp mã thay thế/Xếp vào nhóm/Xoá học sinh) — dùng
    .btn thường (to, dễ bấm) sẽ chiếm quá nhiều chỗ khi xếp chồng nhiều nút trong 1 ô hẹp, trông nặng
    nề so với 1 bảng dữ liệu dày đặc. Thu gọn riêng cho đúng ngữ cảnh này. */
