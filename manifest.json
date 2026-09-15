@@ -1,7 +1,7 @@
 {
   "name": "Trợ Lý Giáo Viên Hoá Học",
   "short_name": "TL Hoá Học",
-  "description": "Bảng tuần hoàn tương tác, công cụ tính toán hoá học và cân bằng phương trình tự động — học và dạy Hoá offline.",
+  "description": "Bảng tuần hoàn tương tác, công cụ tính toán hoá học và cân bằng phương trình tự động — công cụ học và dạy Hoá học toàn diện.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

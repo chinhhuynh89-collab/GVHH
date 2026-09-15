@@ -18,6 +18,15 @@
 </header>
 
 <main id="joinBody">
+  <!-- Bật thông báo đẩy (FCM) để biết ngay khi có bài kiểm tra mới, kể cả khi không mở app — xem
+       js/features/notifications.js + service-worker.js (onBackgroundMessage). Ẩn mặc định, JS tự hiện
+       nếu trình duyệt hỗ trợ (xem join-group.js: renderExamNotifyCard). -->
+  <div class="card" id="examNotifyCard" style="display:none;margin-bottom:14px;">
+    <h2><span class="icon">🔔</span>Thông báo bài kiểm tra mới</h2>
+    <p class="hint" id="examNotifyHint" style="margin-top:-4px;"></p>
+    <button class="btn primary" id="enableExamNotifyBtn"></button>
+  </div>
+
   <!-- Danh sách nhóm ĐÃ tham gia (đã được duyệt) — chỉ để XEM. Chuyển "nhóm đang học" (khi ở nhiều
        nhóm) làm ở trang "Chương trình học tập" (xem renderGroupPicker, chapter-overview.js), đúng nơi
        học sinh bấm vào để bắt đầu học, thay vì ở đây. -->
@@ -96,10 +105,12 @@
 <script src="../js/vendor/firebase/firebase-app-compat.js"></script>
 <script src="../js/vendor/firebase/firebase-auth-compat.js"></script>
 <script src="../js/vendor/firebase/firebase-firestore-compat.js"></script>
+<script src="../js/vendor/firebase/firebase-messaging-compat.js"></script>
 <script src="../js/features/firebase-init.js"></script>
 <script src="../js/features/role.js"></script>
 <script src="../js/features/auth.js"></script>
 <script src="../js/features/teacher-student-accounts.js"></script>
+<script src="../js/features/notifications.js"></script>
 <script src="../js/features/join-group.js"></script>
 <script>initJoinGroupPage();</script>
 </body>
