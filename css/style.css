@@ -31,7 +31,17 @@
 }
 
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+/* ĐÃ SỬA (2026-09-16) — "html, body { height: 100% }" (cố định CỨNG, không phải min-height) khoá
+   chiều cao body/html ĐÚNG BẰNG khung nhìn (viewport), bất kể nội dung thật cao hơn bao nhiêu — kết hợp
+   với "overflow-x: hidden" (buộc trình duyệt tự suy ra overflow-y: auto theo đặc tả CSS Overflow, xem
+   https://www.w3.org/TR/css-overflow-3/#overflow-properties — 1 trục không phải "visible" thì trục kia
+   tự thành "auto" nếu đang là "visible") khiến CHÍNH <body> trở thành 1 khung cuộn RIÊNG, TÁCH KHỎI
+   cuộn trang bình thường của trình duyệt — lỗi thật đã gặp: cuộn trang có bài giảng dài (ảnh nạp từ
+   PDF) không mượt/không đúng như cuộn trang thông thường, nút/tab phía trên có lúc như "không phản
+   hồi" theo cuộn. Xác nhận qua test trực tiếp: window.scrollTo() không dịch chuyển được gì khi còn
+   "height:100%" (body bị khoá cứng đúng bằng viewport dù nội dung cao hơn), hoạt động đúng ngay sau khi
+   bỏ dòng này — "body" bên dưới đã tự có "min-height: 100%" (không khoá cứng, chỉ đảm bảo TỐI THIỂU
+   phủ đủ nền tới hết khung nhìn) nên không cần dòng "height: 100%" ở đây nữa. */
 html { overflow-x: hidden; }
 body {
   margin: 0;
