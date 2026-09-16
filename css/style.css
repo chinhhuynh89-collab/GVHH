@@ -565,6 +565,28 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
 .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
 
+/* Khung kéo-thả file (nạp danh sách học sinh) — cả bấm chọn tệp (label bọc input file ẩn) lẫn kéo-thả
+   đều dùng chung 1 khung này, xem js/features/manage-students.js: renderImportPanel. */
+.import-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 14px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 14.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.import-dropzone.drag-over { border-color: var(--brand); background: rgba(20, 184, 166, 0.08); color: var(--brand); }
+
+/* Bảng xem trước "Nạp danh sách học sinh" — input gọn hơn input thường (padding mặc định 11px làm
+   bảng nhiều dòng quá cao) để soát nhanh nhiều học sinh cùng lúc. */
+.import-preview-row input[type="text"] { padding: 7px 8px; font-size: 14px; min-width: 110px; }
+
 .result-box {
   margin-top: 14px;
   padding: 14px;
