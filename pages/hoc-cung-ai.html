@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Bài kiểm tra — Trợ Lý Giáo Viên Hoá Học</title>
+<title>Học cùng AI — Trợ Lý Giáo Viên Hoá Học</title>
 <meta name="theme-color" content="#0d9488" />
 <link rel="manifest" href="../manifest.json" />
 <link rel="icon" href="../icons/icon-192.png" />
@@ -14,30 +14,39 @@
 
 <header class="app-header">
   <a class="back-btn" href="../index.html" aria-label="Quay lại">←</a>
-  <h1>Bài kiểm tra</h1>
+  <h1>Học cùng AI</h1>
 </header>
 
-<main>
-  <div id="examHistoryBody"></div>
-  <div id="examTakerBody"></div>
+<main id="profileMain">
+  <div class="action-grid">
+    <button class="btn profile-menu-btn" type="button" data-section="practice">🎯 Luyện thêm theo lỗi sai</button>
+    <button class="btn profile-menu-btn" type="button" data-section="flashcards">🃏 Flashcard của tôi</button>
+  </div>
+
+  <div id="profileSectionPanel" style="display:none;margin-top:12px;"></div>
 </main>
 
 <script src="../js/app.js"></script>
+<script src="../js/data/chapters-6.js"></script>
+<script src="../js/data/chapters-7.js"></script>
+<script src="../js/data/chapters-8.js"></script>
+<script src="../js/data/chapters-9.js"></script>
+<script src="../js/data/chapters-10.js"></script>
+<script src="../js/data/chapters-11.js"></script>
+<script src="../js/data/chapters-12.js"></script>
+<script src="../js/data/curriculum.js"></script>
+<script src="../js/features/role.js"></script>
 <script src="../js/vendor/firebase/firebase-app-compat.js"></script>
 <script src="../js/vendor/firebase/firebase-auth-compat.js"></script>
 <script src="../js/vendor/firebase/firebase-firestore-compat.js"></script>
 <script src="../js/vendor/firebase/firebase-messaging-compat.js"></script>
 <script src="../js/features/firebase-init.js"></script>
-<script src="../js/features/notifications.js"></script>
-<script src="../js/features/role.js"></script>
 <script src="../js/features/auth.js"></script>
 <script src="../js/features/monetization.js"></script>
-<script src="../js/features/teacher-student-accounts.js"></script>
-<script src="../js/features/join-group.js"></script>
-<script src="../js/features/groups-data.js"></script>
+<script src="../js/features/notifications.js"></script>
 <script src="../js/features/quiz-common.js"></script>
 <script src="../js/features/ai-generate.js"></script>
-<script src="../js/features/exam-taker.js"></script>
+<script src="../js/features/student-ai-hub.js"></script>
 <script src="../js/features/nav-drawer.js"></script>
 </body>
 </html>
