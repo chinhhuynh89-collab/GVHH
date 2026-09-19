@@ -110,6 +110,31 @@ button { font-family: inherit; }
    sáng, "Đăng xuất" ghim riêng cuối bảng). Dùng CHUNG 1 kiểu ngăn kéo cho cả điện thoại lẫn máy tính ở
    đợt này (không làm sidebar cố định luôn hiện trên máy tính — xem lý do trong plan/memory). */
 .app-header .nav-drawer-toggle { margin-left: auto; font-size: 20px; }
+/* Nút "Chia sẻ" luôn hiện sẵn trên thanh đầu trang (KHÔNG ẩn trong ngăn kéo ☰) — để cả giáo viên lẫn
+   học sinh mời thêm người vào ĐÚNG lớp/giáo viên của mình chỉ 1 chạm, không phải mở menu rồi tìm đúng
+   mục. Màu --accent (cam) CỐ Ý khác hẳn dải màu xanh lá cây thương hiệu còn lại của app — nổi bật để
+   dễ nhận ra ngay, đúng tinh thần 1 nút "kêu gọi hành động" (call-to-action) thay vì 1 mục điều hướng
+   thường. Ẩn sẵn (display:none) tới khi navDrawerLoadUserInfo() (nav-drawer.js) xác định được đúng mã
+   giáo viên cần chia sẻ — trang không có vai trò (10 trang công cụ công khai) sẽ không có nút này.
+   Dùng margin-left:auto RIÊNG (không dựa vào toggle phía sau) để vẫn tự đẩy sang phải kể cả khi nút
+   ☰ vì lý do gì bị ẩn. */
+.app-header .nav-drawer-share-btn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 0 14px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.app-header .nav-drawer-share-btn:active { background: #d97e0a; }
 .nav-drawer-backdrop {
   position: fixed;
   inset: 0;
