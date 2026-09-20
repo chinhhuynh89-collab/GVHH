@@ -61,6 +61,7 @@
     <button class="tab-btn active" data-tab="tabLesson">Bài giảng <span class="dot" id="dotLesson"></span></button>
     <button class="tab-btn" data-tab="tabFlash">Flashcard <span class="dot" id="dotFlash"></span></button>
     <button class="tab-btn" data-tab="tabQuiz">Trắc nghiệm <span class="dot" id="dotQuiz"></span></button>
+    <button class="tab-btn" data-tab="tabPlan" id="chPlanTab">Giáo án</button>
     <button class="btn primary" id="chapterSummarizeBtn" type="button" style="display:none;flex-shrink:0;">🤖 Tóm tắt bài giảng bằng AI</button>
   </div>
   <div class="result-box" id="chapterSummarizeResult" style="margin-bottom:12px;"></div>
@@ -335,6 +336,14 @@
     <div id="quizReviewSection" style="display:none;">
       <div class="section-label">Ôn tập (làm hết câu hỏi, xem đáp án ngay)</div>
       <div class="card" id="quizWrap"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tabPlan">
+    <div class="card">
+      <h2 style="margin-top:0;"><span class="icon">📋</span>Giáo án của chương</h2>
+      <p class="hint" style="margin-top:-4px;">Giáo án AI bạn đã tạo và lưu vào chương này — xem, in, xuất PowerPoint hoặc xoá ngay tại đây.</p>
+      <div id="lessonPlanList"></div>
     </div>
   </div>
 </main>
